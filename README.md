@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="Stato" src="https://img.shields.io/badge/stato-BETA-orange">
+  <img alt="Stato" src="https://img.shields.io/badge/stato-BETA%20v0.1-orange">
   <img alt="Piattaforme" src="https://img.shields.io/badge/piattaforme-PC%20%7C%20Android%20%7C%20iPhone-2ea44f">
   <img alt="Motore" src="https://img.shields.io/badge/three.js-r128-black">
 </p>
@@ -24,7 +24,9 @@
 
 ## Gioca subito
 
-**▶ [Apri Dust & Motors](https://github.com/KarmaTV80/DUST-MOTORS_Racing-beta-v0.1)**
+**▶ [Apri Dust & Motors](https://karmatv80.github.io/DUST-MOTORS_Racing-beta-v0.1/)**
+
+Codice e versioni: [github.com/KarmaTV80/DUST-MOTORS_Racing-beta-v0.1](https://github.com/KarmaTV80/DUST-MOTORS_Racing-beta-v0.1)
 
 Non serve installare nulla: si apre nel browser. Sul telefono si può anche installare
 come app (vedi [Installarlo sul telefono](#installarlo-sul-telefono)).
@@ -241,7 +243,7 @@ Il gioco è un'unica pagina HTML autonoma: grafica, fisica, audio e texture sono
 generati dal codice, senza immagini o suoni esterni.
 
 ```
-dust-motors/
+DUST-MOTORS_Racing-beta-v0.1/
 ├── index.html              # il gioco completo
 ├── manifest.webmanifest    # nome, icona, schermo intero e orientamento dell'app
 ├── sw.js                   # service worker: gioco offline e aggiornamenti
@@ -259,7 +261,8 @@ per il 3D, Web Audio API per tutti i suoni, Gamepad API per i joypad, Touch Even
 Il gioco è pubblicato con **GitHub Pages**:
 
 1. *Settings* → *Pages* → *Branch*: `main`, cartella `/ (root)` → *Save*.
-2. Dopo un paio di minuti il gioco è online su `https://TUO-NOME-UTENTE.github.io/dust-motors/`.
+2. Dopo un paio di minuti il gioco è online su
+   [karmatv80.github.io/DUST-MOTORS_Racing-beta-v0.1](https://karmatv80.github.io/DUST-MOTORS_Racing-beta-v0.1/).
 
 Per aggiornarlo basta caricare il nuovo `index.html` al posto del vecchio. Chi ha l'app
 installata riceve l'aggiornamento alla prima apertura con internet.
@@ -276,7 +279,7 @@ poi si apre `http://localhost:8000` nel browser.
 ## Segnalare un problema
 
 Essendo una beta, ogni segnalazione aiuta. Apri una
-[Issue](../../issues) indicando:
+[segnalazione (Issue)](https://github.com/KarmaTV80/DUST-MOTORS_Racing-beta-v0.1/issues/new) indicando:
 
 - dispositivo e browser (es. *Android 14, Chrome* oppure *Windows 11, Edge*);
 - stage e auto usati;
@@ -289,4 +292,4 @@ Essendo una beta, ogni segnalazione aiuta. Apri una
 
 ---
 
-<p align="center"><sub>Dust & Motors – Racers · versione beta · tutti i diritti riservati</sub></p>
+<p align="center"><sub>Dust & Motors – Racers · beta v0.1 · © KarmaTV80 · tutti i diritti riservati</sub></p>
