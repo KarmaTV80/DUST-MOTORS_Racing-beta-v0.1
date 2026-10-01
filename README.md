@@ -24,7 +24,7 @@
 
 ## Gioca subito
 
-**▶ [Apri Dust & Motors](https://TUO-NOME-UTENTE.github.io/dust-motors/)**
+**▶ [Apri Dust & Motors](https://github.com/KarmaTV80/DUST-MOTORS_Racing-beta-v0.1)**
 
 Non serve installare nulla: si apre nel browser. Sul telefono si può anche installare
 come app (vedi [Installarlo sul telefono](#installarlo-sul-telefono)).
