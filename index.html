@@ -4468,24 +4468,51 @@ function resolveHit(cp,obst,rad,bounce,keep){
   car.x+=nx*pen;car.y+=ny*pen;
   const lx=cp[0]-car.x,ly=cp[1]-car.y,rbefore=car.r;
   const vn=collide(nx,ny,bounce,keep);
-  // rotazione dall'impulso applicato fuori dal baricentro (solo se c'è stato davvero un urto)
-  if(vn>0) car.r=rbefore*0.6+Math.max(-1.6,Math.min(1.6,(lx*ny-ly*nx)*vn*0.0012));
-  else car.r=rbefore;
-  // urto di striscio: l'impatto raddrizza l'auto lungo l'ostacolo (come farebbe la carrozzeria che
-  // scivola sulla lama), così continua a strisciare invece di restare "piantata" col muso contro
-  if(vn>0){
-    const c=Math.cos(car.angle),s=Math.sin(car.angle);
-    const wx=car.speed*c-car.vy*s,wy=car.speed*s+car.vy*c;
-    let tx=-ny,ty=nx;if(tx*c+ty*s<0){tx=-tx;ty=-ty;}
-    const err=Math.atan2(c*ty-s*tx,c*tx+s*ty);
-    if(Math.abs(err)<1.05&&Math.hypot(wx,wy)>8){
-      car.angle+=err*0.5;
-      const c2=Math.cos(car.angle),s2=Math.sin(car.angle);
-      car.speed=wx*c2+wy*s2;car.vy=-wx*s2+wy*c2;       // stessa velocità nel mondo, auto ruotata
-      car.r*=0.5;phys.laF*=0.5;phys.laR*=0.5;
-    }
+  if(vn<=0){car.r=rbefore;return vn;}
+  const c=Math.cos(car.angle),s=Math.sin(car.angle);
+  const wx=car.speed*c-car.vy*s,wy=car.speed*s+car.vy*c;
+  let tx=-ny,ty=nx;if(tx*c+ty*s<0){tx=-tx;ty=-ty;}
+  const err=Math.atan2(c*ty-s*tx,c*tx+s*ty);
+  if(Math.abs(err)<1.05&&Math.hypot(wx,wy)>8){
+    // urto di striscio: l'impatto raddrizza l'auto lungo l'ostacolo (la carrozzeria scivola sulla lama),
+    // così continua a strisciare invece di restare piantata. La rotazione è tutta qui: niente colpo
+    // d'imbardata in più (sommati, facevano girare l'auto oltre la barriera e poi scodare). Lo
+    // strisciamento si mangia anche buona parte della deriva laterale rimasta.
+    // (tutto in proporzione alla violenza del contatto: appoggiandosi appena alla barriera si sterza liberamente)
+    const sev=Math.max(0,Math.min(1,(vn-3)/30));
+    car.angle+=err*0.5*(1-Math.abs(err)/1.6)*sev;
+    const c2=Math.cos(car.angle),s2=Math.sin(car.angle);
+    car.speed=wx*c2+wy*s2;car.vy=(-wx*s2+wy*c2)*(1-0.45*sev);
+    car.r=rbefore*(1-0.65*sev);phys.laF*=1-0.6*sev;phys.laR*=1-0.6*sev;
+  }else if(Math.hypot(wx,wy)<=8){
+    // quasi fermi e premuti contro l'ostacolo: niente colpi d'imbardata, la carrozzeria scivola e gira
+    car.r=rbefore;wallNudge(nx,ny,1/60);
+  }else{
+    // urto d'angolo o frontale: rotazione dall'impulso applicato fuori dal baricentro, limitata e una
+    // sola volta per urto (toccando più pezzi di barriera insieme non si sommano più colpi)
+    const kick=hitKickT>0?0:Math.max(-1.1,Math.min(1.1,(lx*ny-ly*nx)*vn*0.0009));
+    car.r=rbefore*0.5+kick;
+    if(kick) hitKickT=0.15;
   }
+  // dopo un urto vero l'auto si ricompone in fretta (gomme e sospensioni assorbono): niente pendolo
+  if(vn>6) postHitT=Math.max(postHitT,0.25+Math.min(0.45,vn/300));
   return vn;
+}
+let hitKickT=0,postHitT=0;
+// muso premuto contro una parete o una barriera a bassa velocità: la carrozzeria scivola sull'ostacolo e
+// l'auto si gira gradualmente lungo di esso (dalla parte verso cui è già più rivolta), così accelerando o
+// sterzando si riesce sempre a ripartire invece di restare piantati. (nx,ny) = normale verso l'esterno.
+function wallNudge(nx,ny,dt){
+  const v=Math.hypot(car.speed,car.vy);
+  if(v>25||ctl.thr<0.1||ctl.brk>0.1) return;          // solo dando gas (in retromarcia ci si stacca e basta)
+  const c=Math.cos(car.angle),s=Math.sin(car.angle);
+  if(c*nx+s*ny>-0.12) return;                         // il muso non punta contro l'ostacolo
+  let tx=-ny,ty=nx;if(tx*c+ty*s<0){tx=-tx;ty=-ty;}
+  const err=Math.atan2(c*ty-s*tx,c*tx+s*ty);
+  const step=Math.min(Math.abs(err),1.4*dt)*Math.sign(err);
+  car.angle+=step;
+  const c2=Math.cos(car.angle),s2=Math.sin(car.angle),wx=car.speed*c-car.vy*s,wy=car.speed*s+car.vy*c;
+  car.speed=wx*c2+wy*s2;car.vy=-wx*s2+wy*c2;
 }
 let railSegs=[],railGrid=new Map();
 const RG=32;
@@ -4911,6 +4938,8 @@ function physicsStep(h,P,mu,drive,brake,hb,airborne){
     // un piccolo aiuto di stabilità (come un differenziale autobloccante), ridotto: l'auto va tenuta
     // con lo sterzo che torna al centro lo smorzamento cresce: l'auto si ricompone in uscita senza pendolare
     r-=r*P.stab*(0.55+3.4*centred)*h;
+    // subito dopo un urto: imbardata e deriva si smorzano di più (l'auto non pendola dopo il colpo)
+    if(postHitT>0){const k=Math.min(1,postHitT/0.3);r-=r*4.5*k*h;vy-=vy*2.2*k*h;}
     if(Math.abs(vx)<5&&drive===0){vy*=1-6*h;r*=1-6*h;}
     // i freni fermano l'auto ma non la fanno ripartire all'indietro
     if((brake>0||hb)&&drive===0&&vx0!==0&&Math.sign(vx)!==Math.sign(vx0)) vx=0;
@@ -4937,12 +4966,13 @@ function collide(nx,ny,bounce,keep){
   const tx=-ny,ty=nx,vt=wx*tx+wy*ty,fr=(1-keep)*4;
   const dvt=Math.min(Math.abs(vt),fr*(-vn))*Math.sign(vt);
   wx-=dvt*tx;wy-=dvt*ty;
-  car.speed=wx*c+wy*s;car.vy=-wx*s+wy*c;car.r*=0.6;
+  car.speed=wx*c+wy*s;car.vy=-wx*s+wy*c;
+  car.r*=1-0.4*Math.max(0,Math.min(1,(-vn-3)/30));   // un urto vero smorza l'imbardata, un appoggio leggero no
   return -vn;
 }
 
 function update(dt){
-  hitCd-=dt;
+  hitCd-=dt;hitKickT-=dt;postHitT=Math.max(0,postHitT-dt);
   const P=CAR_PHYS[curCarId]||CAR_PHYS.hatch;
   // aderenza: superficie, auto, erba fuori pista, pozzanghere
   const OR=offroad();
@@ -4977,7 +5007,9 @@ function update(dt){
   const revA=ACCEL*(offTrack?0.78:0.55);
   if(countdownT>0||finishing){drive=0;brake=inBrk;}
   else if(vx>2){drive=inThr*driveAccel();brake=inBrk;}
-  else if(vx<-2){drive=-inBrk*revA;brake=inThr;}
+  // in retromarcia il gas spinge in avanti (prima frenava: su un pendio troppo ripido l'auto restava
+  // frenata mentre scivolava indietro e non ripartiva più)
+  else if(vx<-2){drive=-inBrk*revA+inThr*driveAccel();brake=0;}
   else drive=inThr*driveAccel()-inBrk*revA;
   // sotto-passi da ~4 ms: le forze delle gomme sono rigide e servono passi piccoli per restare stabili
   // Ad ogni sotto-passo: forze delle gomme (scalate dal carico reale sulle sospensioni) e poi
@@ -4990,7 +5022,6 @@ function update(dt){
   }
   wheelSpin=phys.spin;
   const airborne=VB.contacts===0;
-
   // alberi: si urta il tronco, non la chioma
   {const cap=carCapsule();
   for(const t of treesList){
@@ -5009,11 +5040,16 @@ function update(dt){
       const nx=-gx/gm,ny=-gy/gm;                       // verso valle
       const [wvx,wvy]=[car.speed*Math.cos(car.angle)-car.vy*Math.sin(car.angle),car.speed*Math.sin(car.angle)+car.vy*Math.cos(car.angle)];
       if(wvx*nx+wvy*ny<0){
-        car.x+=nx*1.5;car.y+=ny*1.5;
-        const vn=collide(nx,ny,0.15,0.6);
+        // la roccia ferma la componente contro la parete ma fa scivolare lungo di essa (prima "inchiodava":
+        // con il muso contro la parete ogni accelerazione veniva annullata e non si riusciva più a uscire)
+        // (niente spinta di posizione verso valle: spostava l'auto più in fretta di quanto potesse ricadere e
+        // la teneva sollevata, senza aderenza né sterzo; basta togliere la velocità contro la roccia)
+        const vn=collide(nx,ny,0.1,0.92);
+        wallNudge(nx,ny,dt);
         if(hitCd<=0&&vn>10){const s=Math.min(1,vn/150);sfxImpact(s,'stone');rumble(0.4+0.6*s,0.5,240);hitCd=0.35;}
         camShake=Math.max(camShake,Math.min(0.6,vn/120));
-      }
+      }else wallNudge(nx,ny,dt);   // fermi col muso in salita (la pendenza vince il motore): l'auto si gira lungo il pendio
+
     }
   }
   // elementi di contorno: massi ed edifici fermano l'auto, balle di fieno e gomme assorbono l'urto
@@ -5211,6 +5247,10 @@ function verticalStep(h,ax,ay){
   if(VB.contacts===0&&contacts>0) VB.land=Math.min(VB.land,VB.vy-gvSum/m.wheels.length);
   VB.vy+=(F-GRAV_Y)*h;VB.vp+=Mp/SUS.Ip*h;VB.vr+=Mr/SUS.Ir*h;
   if(contacts===0){VB.vp*=1-0.3*h;VB.vr*=1-0.8*h;}  // in volo solo un minimo smorzamento
+  // fuori strada (dove non ci sono rampe di salto): salendo con le ruote su una roccia ripida il tampone di
+  // fine corsa faceva da trampolino e lanciava l'auto in aria, di continuo se si insisteva col gas. La scocca
+  // ora sale al massimo poco più in fretta di quanto salga davvero il suolo sotto le ruote.
+  if(offTrack&&contacts>0) VB.vy=Math.min(VB.vy,Math.max(0,gvSum/m.wheels.length)+1.5);
   VB.y+=VB.vy*h;VB.p+=VB.vp*h;VB.r+=VB.vr*h;
   // suolo molto più alto della ruota (salto di quota improvviso): la scocca viene sollevata, non catapultata
   if(maxX>0.5){VB.y+=maxX-0.5;VB.vy=Math.min(VB.vy,4);}
