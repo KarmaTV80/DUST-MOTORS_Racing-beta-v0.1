@@ -75,11 +75,20 @@ Lungo il percorso si incontrano:
 | **Carriera** | I 12 stage in sequenza. Conta il tempo totale e viene salvato il record migliore. |
 | **Time Attack** | Si sceglie un singolo stage e si prova a battere il record di quella pista. Ogni pista ha il suo record. |
 
-A fine stage il riquadro del risultato permette di passare allo stage successivo, riprovare,
-rivedere la prova nel **replay** o scegliere un'altra pista.
+Dopo aver scelto la modalità (e, nel Time Attack, la pista) si sceglie l'**auto**, con la sua
+scheda delle caratteristiche. La prima volta il gioco chiede il **nome del pilota**, che compare
+in classifica e si può cambiare dalle Opzioni.
 
-Dal **Garage** si sceglie l'auto. Dalle **Opzioni** si regolano musica, effetti sonori,
-risoluzione, schermo intero e comandi, e si possono azzerare i record.
+A fine stage il riquadro del risultato mostra la **classifica** della pista (con la propria
+posizione), e permette di passare allo stage successivo, riprovare, rivedere la prova nel
+**replay** o scegliere un'altra pista.
+
+Dalla schermata iniziale:
+
+- **Showroom**: le quattro auto da vicino, con trazione, motore e caratteristiche a confronto.
+- **Classifica**: i 10 migliori tempi di ogni pista e della carriera completa, con pilota e auto.
+- **Opzioni**: nome del pilota, volume di musica ed effetti (a barre, fino al muto), comandi,
+  risoluzione, schermo intero e azzeramento dei record.
 
 ## Gli stage
 

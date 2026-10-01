@@ -122,6 +122,52 @@
   #padDiag{font-family:Consolas,monospace;font-size:11px;white-space:pre-wrap;margin-top:6px;opacity:.9;line-height:1.45;}
   .setActions{display:flex;justify-content:space-between;gap:10px;margin-top:14px;flex-wrap:wrap;}
   .setActions button{padding:10px 18px;font-size:13px;}
+  /* ---- menu: titolo del sottomenu, showroom, volume, nome pilota, classifica ---- */
+  .titleHead{font-family:'Saira Semi Condensed','Segoe UI',sans-serif;font-weight:800;font-size:15px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--accent);margin:-8px 0 10px;text-shadow:0 2px 6px rgba(0,0,0,.6);}
+  .title.wide .titleMenu{width:min(360px,100%);}
+  .title{overflow-y:auto;justify-content:safe center;}
+  .title>*{flex-shrink:0;}   /* se non c'è posto la colonna scorre, gli elenchi non si schiacciano */
+  .title.wide .tagline,.title.wide .checker{display:none;}
+  .title.wide .logoImg{max-height:20vh;}
+  .carCard{width:min(360px,100%);margin-top:10px;padding:12px 14px 10px;background:rgba(10,12,16,.78);border-left:4px solid var(--accent);border-radius:4px 12px 12px 4px;
+    color:var(--text);backdrop-filter:blur(3px);font-family:'Saira Semi Condensed','Segoe UI',sans-serif;}
+  .ccName{font-family:'Russo One','Segoe UI',sans-serif;font-size:20px;color:var(--accent);}
+  .ccDesc{font-size:13px;opacity:.85;line-height:1.35;margin:4px 0 8px;}
+  .ccSpec{display:flex;gap:18px;margin-bottom:8px;font-weight:700;font-size:13.5px;}
+  .ccSpec small{display:block;font-size:10px;letter-spacing:.14em;text-transform:uppercase;opacity:.6;font-weight:700;}
+  .ccRow{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12.5px;font-weight:600;margin:3px 0;}
+  .ccBar{display:flex;gap:3px;}
+  .ccBar i{width:12px;height:8px;background:rgba(255,255,255,.12);transform:skewX(-14deg);}
+  .ccBar i.on{background:var(--accent);}
+  .ccNote{font-size:11.5px;opacity:.7;margin-top:6px;}
+  /* schermi grandi: la scheda sta in basso a destra, accanto all'auto inquadrata */
+  @media (min-width:900px) and (min-height:540px){.carCard{position:absolute;right:4vw;bottom:10vh;width:350px;margin:0;}}
+  .volRow{display:flex !important;align-items:center;gap:10px;}
+  .volRow .vLbl{flex:0 0 auto;min-width:96px;}
+  .volRow .vBar{position:relative;flex:1;height:10px;background:rgba(255,255,255,.14);border-radius:5px;cursor:pointer;touch-action:none;}
+  .volRow .vBar i{position:absolute;left:0;top:0;bottom:0;width:100%;background:var(--accent);border-radius:5px;}
+  .volRow .vPct{min-width:44px;text-align:right;font-variant-numeric:tabular-nums;}
+  .volRow.muted .vPct{color:#ff6b78;}
+  .menuList button.sel.volRow .vBar{background:rgba(27,36,24,.25);}
+  .menuList button.sel.volRow .vBar i{background:#1b2418;}
+  .boardSel{text-align:center !important;}
+  .boardTable{width:min(460px,100%);margin-top:10px;max-height:44vh;overflow-y:auto;}
+  .bTable{width:100%;border-collapse:collapse;color:var(--text);font-family:'Saira Semi Condensed','Segoe UI',sans-serif;font-size:14px;}
+  .bTable td{padding:5px 8px;background:rgba(10,12,16,.72);border-bottom:1px solid rgba(255,255,255,.07);}
+  .bTable .bPos{width:28px;text-align:center;font-weight:800;color:var(--accent);}
+  .bTable .bName{font-weight:700;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .bTable .bCar{opacity:.7;font-size:12.5px;}
+  .bTable .bTime{text-align:right;font-family:'Teko','Saira Semi Condensed',sans-serif;font-size:19px;font-weight:600;white-space:nowrap;}
+  .bTable tr.first .bTime{color:#b768ff;}
+  .bTable tr.me td{background:rgba(255,207,92,.22);}
+  .bEmpty{color:var(--text);opacity:.75;font-size:13.5px;background:rgba(10,12,16,.72);padding:10px 12px;border-radius:8px;}
+  .pilotInput{font:700 17px 'Saira Semi Condensed','Segoe UI',sans-serif;padding:12px 14px;border-radius:10px;border:2px solid var(--accent);
+    background:rgba(10,12,16,.85);color:var(--text);outline:none;width:100%;}
+  .pilotInput:focus{box-shadow:0 0 0 4px rgba(255,207,92,.25);}
+  .oBoard{margin:0 0 14px;text-align:left;}
+  .oBoardHead{font-weight:700;font-size:13px;color:var(--accent);margin-bottom:6px;}
+  .oBoard .bTable{font-size:13px;}.oBoard .bTable td{padding:3px 6px;}.oBoard .bTable .bTime{font-size:17px;}
   /* ---- HUD di gara ---- */
   /* stile da gioco di corse: pannelli scuri "a vetro" tagliati in diagonale, numeri Teko, scritte
      Saira condensato; giallo del gioco per il tempo, viola (come il giro più veloce in TV) per il record */
@@ -150,9 +196,41 @@
   body.titleMode .hudTime,body.titleMode .hudRec,body.titleMode .hudGauge,body.titleMode .hudTyres{display:none !important;}
   /* telefono: in basso ci sono i comandi touch, quindi contagiri al centro e gomme sotto il cronometro;
      il record si sposta a sinistra dei tasti telecamera e pausa */
-  body.touch .hudGauge{right:auto;left:50%;transform:translateX(-50%);width:140px;bottom:max(4px,env(safe-area-inset-bottom));}
+  /* (contagiri in alto a destra, sotto il record e a sinistra dei tasti telecamera/pausa: la strada resta libera
+     e non tocca il tasto del freno a mano, che sta sotto i tasti) */
+  body.touch .hudGauge{bottom:auto;top:calc(max(10px,env(safe-area-inset-top)) + 50px);right:calc(max(14px,env(safe-area-inset-right)) + 112px);width:122px;}
   body.touch .hudTyres{bottom:auto;top:calc(max(10px,env(safe-area-inset-top)) + 76px);width:50px;}
   body.touch .hudRec{right:calc(max(14px,env(safe-area-inset-right)) + 112px);}
+  /* tutte le informazioni nel riquadro in alto a sinistra (la vecchia barra in alto non si usa più) */
+  .hud{display:none !important;}
+  .htTop{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  #padIcon{font-size:13px;margin:0;}
+  .htInfo{margin-top:6px;padding-top:6px;border-top:1px solid var(--hudLine);display:flex;flex-direction:column;gap:3px;min-width:172px;}
+  .htCourse{font-family:var(--hudTxt);font-weight:700;font-size:13px;white-space:nowrap;}
+  .htSurf{font-family:var(--hudTxt);font-weight:600;font-size:11px;opacity:.75;white-space:nowrap;}
+  .htProg{display:flex;align-items:center;gap:8px;margin-top:3px;}
+  .htBar{position:relative;flex:1;min-width:112px;height:5px;background:rgba(255,255,255,.14);border-radius:3px;}
+  .htBar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--accent);border-radius:3px;}
+  .htBar b{position:absolute;top:-3px;width:2px;height:11px;margin-left:-1px;background:var(--hudPurple);}
+  .htBar b.done{background:#fff;}
+  #htPct{font-family:var(--hudNum);font-size:17px;line-height:1;min-width:36px;text-align:right;}
+  .htSplits{display:grid;grid-template-columns:repeat(2,auto);justify-content:start;gap:3px 14px;margin-top:3px;font-family:var(--hudNum);font-size:16px;line-height:1;}
+  .htSplits span{white-space:nowrap;opacity:.45;}
+  .htSplits span.done{opacity:1;}
+  .htSplits small{font-family:var(--hudTxt);font-size:9px;font-weight:700;opacity:.7;margin-right:4px;letter-spacing:.06em;}
+  .c-faster{color:#3ddc84;}.c-slower{color:#ff6b78;}.c-best{color:var(--hudPurple);}.c-first{color:#fff;}
+  /* distacco agli intermedi, in alto al centro */
+  .hudDelta{position:fixed;top:max(10px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:6;pointer-events:none;text-align:center;
+    padding:5px 30px 7px;background:linear-gradient(180deg,var(--hudBg),var(--hudBg2));clip-path:polygon(0 0,100% 0,calc(100% - 16px) 100%,16px 100%);
+    border-top:3px solid var(--accent);color:var(--text);text-shadow:0 2px 6px rgba(0,0,0,.5);}
+  .hudDelta[hidden]{display:none !important;}
+  .hdLbl{font-family:var(--hudTxt);font-weight:700;font-size:11px;letter-spacing:.2em;text-transform:uppercase;opacity:.85;}
+  .hdVal{font-family:var(--hudNum);font-weight:600;font-size:clamp(36px,3.3vw,48px);line-height:.9;margin-top:4px;}
+  .hdSub{font-family:var(--hudNum);font-size:17px;opacity:.8;line-height:1.1;}
+  .hudDelta.faster{border-top-color:#3ddc84;}.hudDelta.faster .hdVal{color:#3ddc84;}
+  .hudDelta.slower{border-top-color:#ff4757;}.hudDelta.slower .hdVal{color:#ff6b78;}
+  .hudDelta.best{border-top-color:var(--hudPurple);}.hudDelta.best .hdVal{color:var(--hudPurple);}
+  body.titleMode .hudDelta{display:none !important;}
   /* ---- comandi touch (telefono/tablet) ---- */
   body{touch-action:manipulation;}
   #touchUI{position:fixed;inset:0;z-index:8;display:none;pointer-events:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;}
@@ -192,6 +270,15 @@
     .htSub{font-size:10px;}
     .hudGauge{width:156px;}
     .hudTyres{width:58px;}
+    .htInfo{margin-top:3px;padding-top:3px;gap:2px;min-width:130px;}
+    .htSurf,.htSplits{display:none;}
+    .htCourse{font-size:10.5px;}
+    .htBar{min-width:80px;}
+    #htPct{font-size:14px;}
+    .hudDelta{padding:3px 22px 4px;}
+    .hdLbl{font-size:9px;}
+    .hdVal{font-size:28px;}
+    .hdSub{font-size:13px;}
     .hud .hSurf,.hud .hBest{display:none;}
     .warn{top:44px;font-size:14px;}
     .title{padding:3vh max(16px,5vw);}
@@ -204,6 +291,14 @@
     #titleTA{max-height:56vh;}
     .titleRecord{margin-top:8px;font-size:12px;}
     .titleFoot{display:none;}
+    .titleHead{font-size:12px;margin:-4px 0 6px;}
+    .title.wide .logo,.title.wide .logoImg{display:none !important;}
+    .title.wide .menuList{gap:4px;}
+    .title.wide .menuList button{padding:6px 14px;font-size:13px;}
+    .carCard{padding:8px 10px 6px;margin-top:6px;}
+    .ccDesc{display:none;}
+    .ccRow{margin:1px 0;font-size:11.5px;}
+    .boardTable{max-height:40vh;}
     .card{padding:16px 20px;max-height:94vh;overflow-y:auto;}
     .card h2{font-size:19px;}
     .legend{display:none;}
@@ -222,10 +317,19 @@
     <span class="hOld">Tempo: <b id="time">0.0s</b></span>
     <span id="hudTotal" class="hOld">Totale: <b id="totalTime">0.0s</b></span>
     <span class="hBest"><span id="bestLbl">Record</span>: <b id="best">--</b></span>
-    <span id="padIcon" title="Joypad collegato" style="display:none;">🎮</span>
   </div>
   <!-- HUD di gara: cronometro in alto a sinistra, contagiri circolare in basso a destra, gomme in basso a sinistra -->
-  <div class="hudTime" id="hudTimeBox"><div class="htLbl" id="htLbl">Stage 1/12</div><div class="htVal" id="htVal">0:00.00</div><div class="htSub" id="htSub"></div></div>
+  <div class="hudTime" id="hudTimeBox">
+    <div class="htTop"><span class="htLbl" id="htLbl">Stage 1/12</span><span id="padIcon" title="Joypad collegato" style="display:none;">🎮</span></div>
+    <div class="htVal" id="htVal">0:00.00</div><div class="htSub" id="htSub"></div>
+    <div class="htInfo">
+      <div class="htCourse" id="htCourse"></div>
+      <div class="htSurf" id="htSurf"></div>
+      <div class="htProg"><div class="htBar"><i id="htBarFill"></i><b style="left:20%"></b><b style="left:40%"></b><b style="left:60%"></b><b style="left:80%"></b></div><span id="htPct">0%</span></div>
+      <div class="htSplits" id="htSplits"></div>
+    </div>
+  </div>
+  <div class="hudDelta" id="hudDelta" hidden><div class="hdLbl" id="hdLbl"></div><div class="hdVal" id="hdVal"></div><div class="hdSub" id="hdSub"></div></div>
   <div class="hudRec" id="hudRecBox" hidden><div class="htLbl" id="hrLbl">Record</div><div class="htVal" id="hrVal">0:00.00</div></div>
   <canvas class="hudGauge" id="hudGauge" width="240" height="240" aria-label="Contagiri, marcia, velocità, acceleratore e freno"></canvas>
   <canvas class="hudTyres" id="hudTyres" width="100" height="150" aria-label="Aderenza delle quattro gomme"></canvas>
@@ -245,17 +349,31 @@
   <div class="logo" id="logoText"><span class="logoTop">DUST &amp;</span><span class="logoMain">MOTORS</span><span class="logoSub">RACERS</span></div>
   <div class="checker"></div>
   <p class="tagline">12 stage · ponti, tunnel e tornanti · dall'alba alla notte</p>
+  <div class="titleHead" id="titleHead" style="display:none;"></div>
   <div class="menuList titleMenu" id="titleMain">
-    <button data-act="play">▶ Inizia partita</button>
+    <button data-act="play">🏁 Carriera</button>
     <button data-act="ta">⏱ Time Attack</button>
-    <button data-act="garage">🚗 Garage</button>
+    <button data-act="showroom">🚗 Showroom</button>
+    <button data-act="board">🏆 Classifica</button>
     <button data-act="options">⚙ Opzioni</button>
   </div>
   <div class="menuList titleMenu" id="titleGarage" style="display:none;"></div>
+  <div class="carCard" id="carCard" style="display:none;"></div>
   <div class="menuList titleMenu" id="titleTA" style="display:none;"></div>
+  <div class="menuList titleMenu" id="titleBoard" style="display:none;">
+    <button data-act="boardSel" id="boardSel" class="boardSel">◀ Carriera ▶</button>
+    <button data-act="back">← Indietro</button>
+  </div>
+  <div class="boardTable" id="boardTable" style="display:none;"></div>
+  <div class="menuList titleMenu" id="titleName" style="display:none;">
+    <input id="pilotInput" class="pilotInput" type="text" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Il tuo nome" aria-label="Nome del pilota">
+    <button data-act="nameOk">✓ Conferma</button>
+    <button data-act="back">← Indietro</button>
+  </div>
   <div class="menuList titleMenu" id="titleOptions" style="display:none;">
-    <button data-act="music">🎵 Musica: attiva</button>
-    <button data-act="sfx">🔊 Effetti: attivi</button>
+    <button data-act="pilot" id="pilotBtn">👤 Pilota: —</button>
+    <button data-act="vol" data-k="music" class="volRow"><span class="vLbl">🎵 Musica</span><span class="vBar"><i></i></span><span class="vPct">100%</span></button>
+    <button data-act="vol" data-k="sfx" class="volRow"><span class="vLbl">🔊 Effetti</span><span class="vBar"><i></i></span><span class="vPct">100%</span></button>
     <button data-act="controls">🎮 Comandi</button>
     <button data-act="res">🖥 Risoluzione: Nativa</button>
     <button data-act="fs">⛶ Schermo intero: no</button>
@@ -263,7 +381,7 @@
     <button data-act="back">← Indietro</button>
   </div>
   <p class="titleRecord">🏆 Record: <b id="titleBest">--</b></p>
-  <p class="titleFoot">▲▼ scegli · Invio / A conferma · Esc / B indietro</p>
+  <p class="titleFoot" id="titleFoot">▲▼ scegli · ◀▶ regola · Invio / A conferma · Esc / B indietro</p>
 </div>
 <div class="overlay hide" id="overlay">
   <div class="card">
@@ -271,6 +389,7 @@
     <p id="oP">12 stage a difficoltà crescente: strettoie, dossi, pozzanghere e superfici diverse da sentire alla guida.</p>
     <ul class="legend" id="legend"></ul>
     <ul class="stagelist" id="oList" style="display:none;"></ul>
+    <div class="oBoard" id="oBoard" style="display:none;"></div>
     <button id="oB">Inizia</button><br>
     <button id="oReplay" style="display:none;">🎬 Replay</button>
     <button class="secondary" id="oMenu" style="display:none;">⏱ Scegli un'altra pista (Esc / B)</button>
@@ -287,8 +406,8 @@
       <button data-act="controls">⚙ Comandi</button>
       <button data-act="res">🖥 Risoluzione: Nativa</button>
       <button data-act="fs">⛶ Schermo intero: no</button>
-      <button data-act="music" id="musicBtn">🎵 Musica: attiva</button>
-      <button data-act="sfx" id="sfxBtn">🔊 Effetti: attivi</button>
+      <button data-act="vol" data-k="music" class="volRow"><span class="vLbl">🎵 Musica</span><span class="vBar"><i></i></span><span class="vPct">100%</span></button>
+      <button data-act="vol" data-k="sfx" class="volRow"><span class="vLbl">🔊 Effetti</span><span class="vBar"><i></i></span><span class="vPct">100%</span></button>
       <button data-act="quit">⏏ Menu principale</button>
     </div>
     <p class="pauseHint" id="kbHint"></p>
@@ -1528,12 +1647,18 @@ function groundTexture(scene,trackBase){
 const groundUniforms={uAlt:{value:null},uRock:{value:null},uCap:{value:new THREE.Color(0xf2f5fa)}};
 function patchGroundMat(m){
   m.onBeforeCompile=sh=>{
-    Object.assign(sh.uniforms,groundUniforms);
+    Object.assign(sh.uniforms,groundUniforms,SURF_U);
     sh.vertexShader=sh.vertexShader
       .replace('#include <common>','#include <common>\nattribute vec3 aSplat;\nvarying vec3 vSplat;\nvarying vec3 vWP;\nvarying vec3 vWN;')
       .replace('#include <begin_vertex>','#include <begin_vertex>\nvSplat=aSplat;vWP=(modelMatrix*vec4(transformed,1.0)).xyz;vWN=normalize(mat3(modelMatrix)*objectNormal);');
     sh.fragmentShader=sh.fragmentShader
-      .replace('#include <common>','#include <common>\nuniform sampler2D uAlt;\nuniform sampler2D uRock;\nuniform vec3 uCap;\nvarying vec3 vSplat;\nvarying vec3 vWP;\nvarying vec3 vWN;')
+      .replace('#include <common>','#include <common>\nuniform sampler2D uAlt;\nuniform sampler2D uRock;\nuniform vec3 uCap;\nvarying vec3 vSplat;\nvarying vec3 vWP;\nvarying vec3 vWN;\n'+SURF_GLSL)
+      // neve (campi negli stage innevati, cime in quota): cristalli che scintillano al sole e ai fari
+      .replace('#include <envmap_fragment>',`{
+        float sw=vSplat.z+(uGroundSparkle>0.8?(1.0-vSplat.x)*(1.0-vSplat.y):0.0);
+        if(sw>0.02) outgoingLight+=sparkleAt(vWP,normalize(cameraPosition-vWP),uGroundSparkle*min(sw,1.0)*0.8);
+      }
+      #include <envmap_fragment>`)
       .replace('#include <map_fragment>',`
         #ifdef USE_MAP
         vec4 cB=texture2D(map,vUv);
@@ -1787,6 +1912,98 @@ function buildGround(wps,surface){
 
 let skirtMesh=null;
 const ROAD_SUB=4; // suddivisioni per tratto: la quota segue il profilo esatto dei dossi (creste morbide)
+// ================= LUCE E RIFLESSI DEL FONDO =================
+// Ogni fondo ha il suo modo di riflettere: l'asfalto ha le corsie lucidate dalle gomme, il bagnato fa da
+// specchio al cielo e ai fari, il fango ha chiazze lucide nei solchi, neve, sabbia e ghiaia scintillano
+// (cristalli e granelli di quarzo) al sole e ai fari. La lucentezza cambia pixel per pixel: decide quanto
+// sono stretti e forti i riflessi di sole, fari e lampade (luce Phong per pixel) e quanto cielo si specchia
+// sulla strada, di più guardandola di taglio (Fresnel), come succede davvero.
+const SURF_U={
+  uSunDir:{value:new THREE.Vector3(0,1,0)},uSunCol:{value:new THREE.Color(1,1,1)},uSunVis:{value:1},
+  uSkyTop:{value:new THREE.Color(0x6aa0d8)},uSkyHor:{value:new THREE.Color(0xcfe0f0)},
+  uHeadPos:{value:new THREE.Vector3()},uHeadI:{value:0},uTime:{value:0},uTunnel:{value:0},
+  uGloss:{value:0.2},uRut:{value:0.2},uWet:{value:0},uWetPatch:{value:0},uReflI:{value:0.5},uSpecMax:{value:0.3},
+  uSparkle:{value:0},uSparkleScale:{value:12},uGroundSparkle:{value:0}
+};
+// gloss: lucentezza di base; rut: corsie lisciate dal passaggio delle gomme; wet/wetPatch: bagnato ovunque /
+// a chiazze; refl: quanto cielo si specchia; spec: forza dei riflessi delle luci; sparkle/scale: scintillii e loro fittezza
+const SURF_LOOK={
+  asphalt:{gloss:0.22,rut:0.3, wet:0,   wetPatch:0,   refl:0.55,spec:0.3, sparkle:0.05,scale:22},
+  wet:    {gloss:0.5, rut:0.15,wet:0.72,wetPatch:0.28,refl:1.15,spec:0.45,sparkle:0,   scale:12},
+  dirt:   {gloss:0.06,rut:0.12,wet:0,   wetPatch:0.18,refl:0.35,spec:0.12,sparkle:0,   scale:12},
+  hard:   {gloss:0.1, rut:0.2, wet:0,   wetPatch:0.08,refl:0.4, spec:0.15,sparkle:0.05,scale:16},
+  gravel: {gloss:0.08,rut:0.1, wet:0,   wetPatch:0.05,refl:0.3, spec:0.15,sparkle:0.35,scale:9},
+  fine:   {gloss:0.08,rut:0.12,wet:0,   wetPatch:0.05,refl:0.3, spec:0.15,sparkle:0.28,scale:13},
+  sand:   {gloss:0.04,rut:0.06,wet:0,   wetPatch:0,   refl:0.2, spec:0.1, sparkle:0.5, scale:18},
+  mud:    {gloss:0.32,rut:0.35,wet:0.22,wetPatch:0.55,refl:0.85,spec:0.35,sparkle:0,   scale:12},
+  snow:   {gloss:0.25,rut:0.45,wet:0,   wetPatch:0,   refl:0.6, spec:0.3, sparkle:0.9, scale:12},
+  mixed:  {gloss:0.1, rut:0.15,wet:0,   wetPatch:0.25,refl:0.4, spec:0.18,sparkle:0.12,scale:11}
+};
+function applySurfaceLook(surface,L){
+  let s=SURF_LOOK[surface.fx]||SURF_LOOK.dirt;
+  // centro storico al crepuscolo: lastricato appena lavato, con qualche chiazza bagnata
+  if(surface.town) s=Object.assign({},s,{gloss:0.3,wetPatch:0.2,refl:0.75});
+  const U=SURF_U;
+  U.uGloss.value=s.gloss;U.uRut.value=s.rut;U.uWet.value=s.wet;U.uWetPatch.value=s.wetPatch;
+  U.uReflI.value=s.refl;U.uSpecMax.value=s.spec;U.uSparkle.value=s.sparkle;U.uSparkleScale.value=s.scale;
+  U.uGroundSparkle.value=surface.scene==='snow'?0.9:0.5;   // neve dei campi e cime innevate delle montagne
+  if(L&&L.sky){U.uSkyTop.value.set(L.sky[0]);U.uSkyHor.value.set(L.sky[2]);}
+}
+const SURF_GLSL=`
+uniform vec3 uSunDir;uniform vec3 uSunCol;uniform float uSunVis;uniform vec3 uSkyTop;uniform vec3 uSkyHor;
+uniform vec3 uHeadPos;uniform float uHeadI;uniform float uTime;uniform float uTunnel;
+uniform float uSparkle;uniform float uSparkleScale;uniform float uGroundSparkle;
+float sHash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+float sNoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);
+  return mix(mix(sHash(i),sHash(i+vec2(1.0,0.0)),f.x),mix(sHash(i+vec2(0.0,1.0)),sHash(i+vec2(1.0,1.0)),f.x),f.y);}
+// scintillio: una faccetta su ~10 per cella, inclinata a caso, riflette il sole o i fari verso la camera
+vec3 sparkleAt(vec3 wp,vec3 V,float amount){
+  if(amount<=0.001) return vec3(0.0);
+  float fade=smoothstep(45.0,8.0,length(cameraPosition-wp));
+  if(fade<=0.0) return vec3(0.0);
+  vec2 q=wp.xz*uSparkleScale,cell=floor(q);
+  float h=sHash(cell);
+  if(h<0.9) return vec3(0.0);
+  vec3 gN=normalize(vec3(sHash(cell+7.13)-0.5,1.2,sHash(cell+3.71)-0.5));
+  float dotm=smoothstep(0.34,0.05,length(fract(q)-0.5));
+  float tw=0.55+0.45*sin(uTime*6.0+h*80.0);
+  float g1=pow(max(dot(reflect(-uSunDir,gN),V),0.0),48.0)*uSunVis;
+  vec3 hp=uHeadPos-wp;
+  float g2=pow(max(dot(reflect(-normalize(hp),gN),V),0.0),32.0)*uHeadI*30.0/(30.0+dot(hp,hp));
+  return (uSunCol*g1+vec3(1.0,0.94,0.82)*g2)*dotm*tw*fade*amount*4.0;
+}`;
+function patchRoadMat(m){
+  m.onBeforeCompile=sh=>{
+    Object.assign(sh.uniforms,SURF_U);
+    sh.vertexShader=sh.vertexShader
+      .replace('#include <common>','#include <common>\nvarying vec3 vSWP;')
+      .replace('#include <begin_vertex>','#include <begin_vertex>\nvSWP=(modelMatrix*vec4(transformed,1.0)).xyz;');
+    sh.fragmentShader=sh.fragmentShader
+      .replace('#include <common>','#include <common>\nvarying vec3 vSWP;\nuniform float uGloss;uniform float uRut;uniform float uWet;uniform float uWetPatch;uniform float uReflI;uniform float uSpecMax;\n'+SURF_GLSL)
+      .replace('#include <map_fragment>',`#include <map_fragment>
+        // chiazze grandi (umido, fango lucido) e grana fine; corsie consumate dalle gomme a ±22% della carreggiata
+        float sN1=sNoise(vSWP.xz*0.35),sN2=sNoise(vSWP.xz*2.7);
+        float sTr=smoothstep(0.1,0.0,abs(abs(vUv.x-0.5)-0.22));
+        float sWet=clamp(uWet+uWetPatch*smoothstep(0.55,0.8,sN1+0.12*sN2),0.0,1.0);
+        float sGl=clamp(uGloss*(0.7+0.6*sN2)+sTr*uRut+sWet*0.6,0.0,1.0);
+        diffuseColor.rgb*=1.0-0.4*sWet;                       // il bagnato scurisce il fondo`)
+      .replace('#include <lights_phong_fragment>',`#include <lights_phong_fragment>
+        // più lucido = riflessi di sole, fari e lampade più stretti e intensi
+        material.specularShininess=mix(5.0,160.0,sGl*sGl);
+        // (il modello Phong normalizzato rende il picco del riflesso tanto più forte quanto più è stretto:
+        // sul lucido lo si riporta a un livello fisso, così il riflesso si stringe senza diventare accecante)
+        material.specularColor=vec3(uSpecMax*(0.08+0.92*sGl))*mix(1.0,7.0/(material.specularShininess*0.5+1.0),sGl);`)
+      .replace('#include <envmap_fragment>',`{
+        vec3 V=normalize(cameraPosition-vSWP);
+        float fr=0.04+0.96*pow(1.0-clamp(V.y,0.0,1.0),5.0);   // Fresnel: di taglio la strada specchia di più
+        vec3 Rv=reflect(-V,vec3(0.0,1.0,0.0));
+        vec3 sky=mix(uSkyHor,uSkyTop,pow(clamp(Rv.y,0.0,1.0),0.5));
+        outgoingLight+=sky*fr*sGl*sGl*uReflI*(1.0-0.8*uTunnel);
+        outgoingLight+=sparkleAt(vSWP,V,uSparkle*(1.0-sWet));
+      }
+      #include <envmap_fragment>`);
+  };
+}
 function buildTrackMesh(wps,surface){
   disposeMesh(trackMesh);
   const positions=[],uvs=[];
@@ -1815,7 +2032,9 @@ function buildTrackMesh(wps,surface){
   // polygonOffset: l'asfalto vince sempre il confronto di profondità col terreno
   // luce per pixel: i vertici della strada stanno solo sui bordi, con la luce per vertice il cono dei fari
   // (più stretto della carreggiata vicino all'auto) sparirebbe
-  const mat=new THREE.MeshPhongMaterial({map:dirtTexture(surface),shininess:6,specular:surface.fx==='wet'?0x333333:0x0c0c0c,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-4});
+  // (lucentezza, riflessi e scintillii per tipo di fondo: vedi patchRoadMat e SURF_LOOK)
+  const mat=new THREE.MeshPhongMaterial({map:dirtTexture(surface),shininess:6,specular:0x0c0c0c,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-4});
+  patchRoadMat(mat);
   trackMesh=new THREE.Mesh(geo,mat);
   trackMesh.receiveShadow=true;
   scene.add(trackMesh);
@@ -4397,34 +4616,57 @@ function initAudio(){
   nextNoteT=audioCtx.currentTime+0.1;
   setInterval(musicScheduler,25);
 }
-const musicBtn=document.getElementById('musicBtn'),sfxBtn=document.getElementById('sfxBtn');
+// volumi di musica ed effetti: 0 = muto … 1 = pieno, regolabili a barre (opzioni e pausa).
+// (la vecchia impostazione "attiva/disattivata" diventa 100% / muto)
+let musicVol=musicMuted?0:1,sfxVol=sfxMuted?0:1;
+try{const v=JSON.parse(localStorage.getItem('rallyDriftVol')||'null');if(v&&isFinite(v.m)&&isFinite(v.s)){musicVol=+v.m;sfxVol=+v.s;}}catch(e){}
+let lastMusicVol=musicVol||0.8,lastSfxVol=sfxVol||0.8;     // per tornare al volume di prima dopo il muto
+const volGain=v=>v*v;                                      // curva più naturale all'orecchio (50% = metà percepita)
+function syncMuteFlags(){musicMuted=musicVol<=0.001;sfxMuted=sfxVol<=0.001;}
+syncMuteFlags();
 function updateMuteLabel(){
-  // stesse voci nel menu pausa e nelle opzioni della schermata iniziale
-  for(const b of document.querySelectorAll('[data-act="music"]')) b.textContent=musicMuted?'🎵 Musica: disattivata':'🎵 Musica: attiva';
-  for(const b of document.querySelectorAll('[data-act="sfx"]')) b.textContent=sfxMuted?'🔇 Effetti: disattivati':'🔊 Effetti: attivi';
+  // stesse barre nel menu pausa e nelle opzioni della schermata iniziale
+  for(const b of document.querySelectorAll('.volRow')){
+    const v=b.dataset.k==='music'?musicVol:sfxVol;
+    b.querySelector('.vBar i').style.width=(v*100).toFixed(0)+'%';
+    b.querySelector('.vPct').textContent=v>0.001?Math.round(v*100)+'%':'Muto';
+    b.classList.toggle('muted',v<=0.001);
+  }
 }
 function applyAudioMutes(){
   if(!audioCtx) return;
   const t=audioCtx.currentTime;
-  musicGain.gain.setTargetAtTime(musicMuted?0:MUSIC_VOL,t,0.03);
-  reverbSend.gain.setTargetAtTime(musicMuted?0:MUSIC_VERB,t,0.03); // anche la coda di riverbero della musica
+  musicGain.gain.setTargetAtTime(MUSIC_VOL*volGain(musicVol),t,0.03);
+  reverbSend.gain.setTargetAtTime(MUSIC_VERB*volGain(musicVol),t,0.03); // anche la coda di riverbero della musica
   // motore, gomme, urti (e il loro riverbero): solo durante la gara, mai in pausa o nei menu
-  sfxBus.gain.setTargetAtTime(sfxAudible()?1:0,t,0.05);
+  sfxBus.gain.setTargetAtTime(sfxAudible()?volGain(sfxVol):0,t,0.05);
   lastSfxAudible=sfxAudible();
 }
 const sfxAudible=()=>!sfxMuted&&(running||replayMode)&&!paused;
 let lastSfxAudible=null;// chiamata a ogni fotogramma: aggiorna gli effetti solo quando cambia lo stato (pausa, menu, gara)
 function syncSfxState(){if(audioCtx&&sfxAudible()!==lastSfxAudible) applyAudioMutes();}
-function toggleMusic(){
-  musicMuted=!musicMuted;
-  try{localStorage.setItem('rallyDriftMusicMuted',musicMuted?'1':'0');}catch(e){}
+function setVolume(k,v){
+  v=Math.round(Math.max(0,Math.min(1,v))*20)/20;
+  if(k==='music'){musicVol=v;if(v>0) lastMusicVol=v;}else{sfxVol=v;if(v>0) lastSfxVol=v;}
+  syncMuteFlags();
+  try{localStorage.setItem('rallyDriftVol',JSON.stringify({m:musicVol,s:sfxVol}));}catch(e){}
   updateMuteLabel();applyAudioMutes();
 }
-function toggleSfx(){
-  sfxMuted=!sfxMuted;
-  try{localStorage.setItem('rallyDriftSfxMuted',sfxMuted?'1':'0');}catch(e){}
-  updateMuteLabel();applyAudioMutes();
+function toggleMusic(){setVolume('music',musicVol>0?0:lastMusicVol);}
+function toggleSfx(){setVolume('sfx',sfxVol>0?0:lastSfxVol);}
+const volOf=k=>k==='music'?musicVol:sfxVol;
+// trascinando o toccando la barra si sceglie il volume (il clic sulla barra non vale come "muto")
+let volDrag=null;
+function volFromPointer(e){
+  const bar=volDrag.querySelector('.vBar').getBoundingClientRect();
+  setVolume(volDrag.dataset.k,(e.clientX-bar.left)/Math.max(1,bar.width));
 }
+window.addEventListener('pointerdown',e=>{
+  const bar=e.target.closest&&e.target.closest('.vBar');if(!bar) return;
+  initAudio();volDrag=bar.closest('.volRow');volFromPointer(e);e.preventDefault();
+},true);
+window.addEventListener('pointermove',e=>{if(volDrag) volFromPointer(e);});
+window.addEventListener('pointerup',()=>{volDrag=null;});
 updateMuteLabel();
 // se la partita è partita dal joypad il browser può tenere l'audio sospeso: riprende al primo tasto/click
 for(const ev of ['pointerdown','keydown']) window.addEventListener(ev,()=>{
@@ -4587,6 +4829,7 @@ function loadStage(n,c){
   wps=built.wps;puddles=built.puddles;treesList=built.trees;railsList=built.railPoints;surface=built.surface;
   trackBumps=built.bumps;
   applyLighting(LIGHTS[STAGE_LIGHT[(course-1)%STAGE_LIGHT.length]],surface.scene);
+  applySurfaceLook(surface,curLight);
   const pre=10,post=10,visWps=[];
   const first=wps[0],last=wps[wps.length-1];
   for(let i=pre;i>=1;i--) visWps.push({x:first.x-Math.cos(first.heading)*STEP*i,y:first.y-Math.sin(first.heading)*STEP*i,heading:first.heading,dist:first.dist-STEP*i,half:first.half,elev:first.elev});
@@ -4614,7 +4857,8 @@ function loadStage(n,c){
   startGate.position.set(wps[1].x*S3,wps[0].elev,wps[1].y*S3);
   scene.add(startGate);
   buildSpectators();
-  buildRailSegs();   // (dopo le tribune, che aggiungono anch'esse punti di barriera)
+  setupCheckpoints();
+  buildRailSegs();   // (dopo le tribune e i cartelli degli intermedi, che aggiungono anch'essi punti di barriera)
   keys={};
   car.x=wps[0].x;car.y=wps[0].y;car.angle=wps[0].heading;car.speed=0;
   car.vy=0;car.r=0;steerAng=0;wheelSpin=0;
@@ -4631,9 +4875,83 @@ function startGame(){if(overlay.classList.contains('hide')&&!titleOpen())return;
 // ---- Time Attack: una pista a scelta, per battere il suo record ----
 const TA_KEY='rallyDriftTA_v1';
 let taBest={};try{taBest=JSON.parse(localStorage.getItem(TA_KEY)||'{}')||{};}catch(e){taBest={};}
+// ================= INTERMEDI =================
+// 4 rilevamenti lungo la tappa (20, 40, 60, 80% del percorso, mai dentro gallerie o su ponti), segnalati da
+// cartelli viola ai lati e da una linea a scacchi sull'asfalto. Per ogni pista si conservano i tempi
+// intermedi del miglior tempo assoluto (carriera o Time Attack): al passaggio si mostra il distacco.
+const CP_FRACS=[0.2,0.4,0.6,0.8],SPLIT_KEY='rallyDriftSplits_v1';
+let bestSplits={};try{bestSplits=JSON.parse(localStorage.getItem(SPLIT_KEY)||'{}')||{};}catch(e){bestSplits={};}
+function saveSplits(){try{localStorage.setItem(SPLIT_KEY,JSON.stringify(bestSplits));}catch(e){}}
+let cpIdx=[],curSplits=[],curDeltas=[],splitGroup=null;   // (curDeltas: distacco al passaggio, null se non c'era riferimento)
+const deltaShow={t:0,lbl:'',val:'',sub:'',cls:''};
+function splitBoardTex(k){
+  const c=document.createElement('canvas');c.width=256;c.height=96;const g=c.getContext('2d');
+  g.fillStyle='#2a1440';g.fillRect(0,0,256,96);g.fillStyle='#b768ff';g.fillRect(0,0,256,10);g.fillRect(0,86,256,10);
+  g.fillStyle='#fff';g.font='bold 30px Segoe UI, sans-serif';g.textAlign='center';g.textBaseline='middle';
+  g.fillText('INTERMEDIO',112,50);g.fillStyle='#d4a6ff';g.font='bold 54px Segoe UI, sans-serif';g.fillText(k,222,52);
+  return new THREE.CanvasTexture(c);
+}
+const splitLineTex=(()=>{const c=document.createElement('canvas');c.width=64;c.height=8;const g=c.getContext('2d');
+  for(let i=0;i<16;i++) for(let j=0;j<2;j++){g.fillStyle=(i+j)%2?'#f4f4f4':'#1b1b1b';g.fillRect(i*4,j*4,4,4);}
+  const t=new THREE.CanvasTexture(c);t.wrapS=THREE.RepeatWrapping;t.magFilter=THREE.NearestFilter;return t;})();
+sharedRes.add(splitLineTex);
+function setupCheckpoints(){
+  disposeObject(splitGroup);splitGroup=new THREE.Group();
+  cpIdx=[];curSplits=[];curDeltas=[];deltaShow.t=0;
+  const nearStructAt=i=>{for(let j=Math.max(0,i-4);j<=Math.min(wps.length-1,i+4);j++) if(wps[j].struct) return true;return false;};
+  for(let k=0;k<CP_FRACS.length;k++){
+    let i=Math.round(finishIdx*CP_FRACS[k]);
+    while(i<finishIdx-8&&nearStructAt(i)) i++;
+    cpIdx.push(i);
+    const w=wps[i],n=w.heading+Math.PI/2,nx=Math.cos(n),nz=Math.sin(n);
+    // linea a scacchi sulla carreggiata
+    const L=w.half*2*S3,lt=splitLineTex.clone();lt.needsUpdate=true;lt.repeat.set(Math.max(4,Math.round(L/0.6)),1);
+    const line=new THREE.Mesh(new THREE.PlaneGeometry(L,0.32),new THREE.MeshBasicMaterial({map:lt,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-8}));
+    line.rotation.x=-Math.PI/2;line.rotation.z=-Math.atan2(nz,nx);line.position.set(w.x*S3,w.elev+0.035,w.y*S3);
+    splitGroup.add(line);
+    // cartelli ai due lati, rivolti verso chi arriva
+    const tex=splitBoardTex(k+1),board=new THREE.MeshLambertMaterial({map:tex}),dark=new THREE.MeshLambertMaterial({color:0x2a1440});
+    for(const side of [-1,1]){
+      const o=(w.half+6)*side,px=(w.x+nx*o)*S3,pz=(w.y+nz*o)*S3;
+      const pole=new THREE.Mesh(poleGeo,poleMat);pole.scale.set(0.5,0.42,0.5);pole.position.set(px,w.elev+1.1,pz);pole.castShadow=true;splitGroup.add(pole);
+      const b=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.56,0.06),[dark,dark,dark,dark,board,dark]);
+      b.position.set(px,w.elev+2.1,pz);b.rotation.y=Math.atan2(-Math.cos(w.heading),-Math.sin(w.heading));b.castShadow=true;splitGroup.add(b);
+      railsList.push({x:w.x+nx*o,y:w.y+nz*o,k:'metal',brk:true});   // il palo si urta come quello di un cartello
+    }
+  }
+  scene.add(splitGroup);
+}
+function showDelta(lbl,delta,time,final){
+  deltaShow.lbl=lbl;deltaShow.t=final?6:4;
+  if(delta===null){deltaShow.val=fmtClock(time);deltaShow.sub=final?'Primo tempo sulla tappa':'Primo passaggio';deltaShow.cls='first';}
+  else{
+    deltaShow.val=(delta<0?'−':'+')+Math.abs(delta).toFixed(2);
+    deltaShow.sub=fmtClock(time);
+    deltaShow.cls=delta<0?(final?'best':'faster'):'slower';
+    if(final&&delta<0) deltaShow.lbl='Nuovo miglior tempo';
+  }
+}
+// passaggio agli intermedi (chiamata a ogni fotogramma di gara)
+function checkpointFrame(){
+  if(!running||stageDone||countdownT>0||replayMode) return;
+  const k=curSplits.length;
+  if(k>=cpIdx.length||lastIdx<cpIdx[k]) return;
+  curSplits.push(elapsed);
+  const ref=bestSplits[course],d=ref&&ref.s&&ref.s[k]!=null?elapsed-ref.s[k]:null;
+  curDeltas.push(d);
+  showDelta('Intermedio '+(k+1),d,elapsed,false);
+}
+// all'arrivo: distacco finale dal miglior tempo assoluto della tappa; se è il nuovo migliore se ne salvano gli intermedi
+function finishSplits(total){
+  const ref=bestSplits[course];
+  let refT=ref?ref.t:null;
+  if(taBest[course]&&(refT===null||taBest[course]<refT)) refT=taBest[course];
+  showDelta('Arrivo',refT!==null?total-refT:null,total,true);
+  if(curSplits.length===cpIdx.length&&(!ref||total<ref.t)){bestSplits[course]={t:total,s:curSplits.slice()};saveSplits();}
+}
 function saveTA(){try{localStorage.setItem(TA_KEY,JSON.stringify(taBest));}catch(e){}}
 const hudStage=document.getElementById('hudStage'),hudTA=document.getElementById('hudTA'),hudTotal=document.getElementById('hudTotal'),bestLbl=document.getElementById('bestLbl');
-const oMenu=document.getElementById('oMenu');
+const oMenu=document.getElementById('oMenu'),oBoard=document.getElementById('oBoard');
 const oReplay=document.getElementById('oReplay');
 oReplay.addEventListener('click',()=>startReplay());
 function updateHudMode(){
@@ -4702,6 +5020,8 @@ function updateCountdown(dt){
 function beginFinish(){
   finishing=true;finishT=0;stageDone=true;   // il traguardo di questa tappa vale una volta sola
   stageTimes.push(elapsed);
+  finishSplits(elapsed);
+  lastStagePos=addStageResult(course,elapsed);lastStageTime=elapsed;lastStageEntry=lastEntryId;   // classifica della pista
   if(gameMode==='ta'){
     const prev=taBest[course];
     document.getElementById('fbStage').textContent=COURSES[course].name;
@@ -4732,9 +5052,16 @@ function endFinish(){
   showStageResult();
 }
 
+let lastStagePos=0,lastStageTime=0,lastStageEntry=null;
+// classifica nel riquadro del risultato: i primi 5, con la propria riga evidenziata (anche se è più in basso)
+function showResultBoard(title,list,entry,pos,time){
+  oBoard.innerHTML='<div class="oBoardHead">🏆 '+title+(pos&&pos<=10?' · '+pos+'° posto':'')+'</div>'+boardHTML(list,5,entry,pos,time);
+  oBoard.style.display='';
+}
 function showStageResult(){
   running=false;
   oReplay.style.display=rec.length>10?'':'none';
+  showResultBoard('Classifica · '+COURSES[course].name,board.stages[course],lastStageEntry,lastStagePos,lastStageTime);
   if(gameMode==='ta'){
     const prev=taBest[course],rec=!prev||elapsed<prev;
     if(rec){taBest[course]=elapsed;saveTA();}
@@ -4763,6 +5090,8 @@ function showStageResult(){
     oP.textContent='Tempo totale: '+total.toFixed(2)+'s';
     oList.innerHTML=stageTimes.map((t,i)=>'<li><span>Stage '+(i+1)+'</span><span>'+t.toFixed(2)+'s</span></li>').join('');
     oList.style.display='block';
+    const pos=addCareerResult(total);
+    showResultBoard('Classifica carriera',board.career,lastEntryId,pos,total);
     oB.textContent='Nuova gara';
     oB.onclick=startGame;
     overlay.classList.remove('hide');
@@ -4879,7 +5208,8 @@ function frictionCircle(fx,fy,cap){
   return [fx*k,fy*k,(m-cap)/cap];
 }
 // sterzo: angolo massimo che si riduce con la velocità, e ruote che ci arrivano progressivamente
-const maxSteer=v=>0.5/(1+Math.abs(v)/125);
+// (ridotto: ~24,6° da fermi per i tornanti, ~12° a 80 km/h, ~9° a 145 km/h)
+const maxSteer=v=>0.43/(1+Math.abs(v)/110);
 function physicsStep(h,P,mu,drive,brake,hb,airborne){
   if(!(h>0)) return;
   if(!isFinite(car.speed+car.vy+car.r)){car.speed=car.vy=car.r=0;phys.laF=phys.laR=0;}   // valori corrotti: auto ferma
@@ -5150,6 +5480,7 @@ function update(dt){
   const drift=Math.max(0,(Math.max(Math.abs(phys.alphaF),Math.abs(phys.alphaR))-0.12)/0.3);
   slipAmt=airborne?0:Math.min(1,drift*Math.min(1,spd/60)+phys.spin*0.8+phys.lock*Math.min(1,spd/50)*0.8);
 
+  checkpointFrame();
   if(running&&!stageDone&&countdownT<=0&&lastIdx>=finishIdx) beginFinish();
 }
 
@@ -5614,8 +5945,132 @@ function updateScene(){
   skyMesh.position.copy(camera.position);
   sunDisc.position.copy(camera.position).addScaledVector(sunDir,360);
   applyTunnelLight();
+  lightFxFrame();
 
   renderer.render(scene,camera);
+  renderFlare();
+}
+
+// ================= EFFETTI DI LUCE =================
+// riflesso del sole nell'obiettivo (lens flare) quando lo si inquadra, alone dei fari e dei fanalini di notte,
+// al crepuscolo e in galleria (gli stop si accendono di più in frenata), e luce per i riflessi del fondo
+const _fxV=new THREE.Vector3(),_fxW=new THREE.Vector3();
+let fxLastT=performance.now(),flareVis=0;
+function glowTexture(kind){
+  const c=document.createElement('canvas');c.width=c.height=128;const g=c.getContext('2d');
+  if(kind==='ring'){
+    const gr=g.createRadialGradient(64,64,30,64,64,62);
+    gr.addColorStop(0,'rgba(255,255,255,0)');gr.addColorStop(0.7,'rgba(255,255,255,0.5)');gr.addColorStop(0.82,'rgba(255,255,255,0.15)');gr.addColorStop(1,'rgba(255,255,255,0)');
+    g.fillStyle=gr;g.fillRect(0,0,128,128);
+  }else if(kind==='hex'){
+    // diaframma esagonale dell'obiettivo, bordo un po' più chiaro
+    g.beginPath();for(let i=0;i<6;i++){const a=i/6*Math.PI*2+Math.PI/6;g.lineTo(64+Math.cos(a)*58,64+Math.sin(a)*58);}g.closePath();
+    g.fillStyle='rgba(255,255,255,0.35)';g.fill();g.lineWidth=4;g.strokeStyle='rgba(255,255,255,0.55)';g.stroke();
+  }else if(kind==='streak'){
+    const gr=g.createLinearGradient(0,0,128,0);
+    gr.addColorStop(0,'rgba(255,255,255,0)');gr.addColorStop(0.5,'rgba(255,255,255,1)');gr.addColorStop(1,'rgba(255,255,255,0)');
+    g.fillStyle=gr;g.fillRect(0,58,128,12);
+    const v=g.createRadialGradient(64,64,0,64,64,64);v.addColorStop(0,'rgba(255,255,255,1)');v.addColorStop(1,'rgba(255,255,255,0)');
+    g.globalCompositeOperation='destination-in';g.fillStyle=v;g.fillRect(0,0,128,128);
+  }else{
+    const gr=g.createRadialGradient(64,64,0,64,64,64);
+    gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(0.18,'rgba(255,255,255,0.55)');gr.addColorStop(0.5,'rgba(255,255,255,0.12)');gr.addColorStop(1,'rgba(255,255,255,0)');
+    g.fillStyle=gr;g.fillRect(0,0,128,128);
+  }
+  return new THREE.CanvasTexture(c);
+}
+const FX_TEX={glow:glowTexture('glow'),ring:glowTexture('ring'),hex:glowTexture('hex'),streak:glowTexture('streak')};
+// --- lens flare: scena sovrapposta con camera ortografica (coordinate dello schermo) ---
+const flareScene=new THREE.Scene(),flareCam=new THREE.OrthographicCamera(-1,1,1,-1,-1,1);
+// t: posizione sulla linea sole→centro schermo (0 = sul sole, 1 = centro, oltre = dalla parte opposta)
+const FLARE_EL=[
+  {t:0,   s:0.9, tex:'glow',  c:0xfff2d8,a:0.55},
+  {t:0,   s:1.6, tex:'streak',c:0xffe6c0,a:0.35},
+  {t:0.32,s:0.07,tex:'hex',   c:0xffd27a,a:0.5},
+  {t:0.55,s:0.13,tex:'hex',   c:0x9fd0ff,a:0.32},
+  {t:0.78,s:0.05,tex:'glow',  c:0xb4ffb4,a:0.45},
+  {t:1.12,s:0.24,tex:'ring',  c:0xffb070,a:0.26},
+  {t:1.45,s:0.1, tex:'hex',   c:0xc0a0ff,a:0.35},
+  {t:1.85,s:0.36,tex:'ring',  c:0x80c8ff,a:0.18}
+].map(e=>{const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:FX_TEX[e.tex],color:e.c,transparent:true,opacity:0,
+  blending:THREE.AdditiveBlending,depthTest:false,depthWrite:false}));flareScene.add(sp);return Object.assign(e,{sp});});
+function sunOccluded(){
+  // il sole è coperto dal terreno (colline, montagne, pareti) lungo la direzione da cui arriva?
+  const cp=camera.position;
+  for(const d of [5,12,26,50,90,150,240]){
+    _fxW.copy(cp).addScaledVector(sunDir,d);
+    if(terrainAt(_fxW.x/S3,_fxW.z/S3)>_fxW.y) return true;
+  }
+  return false;
+}
+let flareCheckT=0,flareOcc=false;
+function updateFlare(dt){
+  const aspect=camera.aspect||1;
+  flareCam.left=-aspect;flareCam.right=aspect;flareCam.updateProjectionMatrix();
+  _fxV.copy(camera.position).addScaledVector(sunDir,500).project(camera);
+  camera.getWorldDirection(_fxW);
+  const front=_fxW.dot(sunDir)>0.05&&_fxV.z<1;
+  const edge=Math.max(Math.abs(_fxV.x),Math.abs(_fxV.y));
+  flareCheckT-=dt;if(flareCheckT<=0){flareCheckT=0.1;flareOcc=front&&sunOccluded();}   // (controllo 10 volte al secondo)
+  const lowSun=1-Math.min(1,Math.max(0,sunDir.y)/0.8);       // più forte con il sole basso (alba, tramonto)
+  let target=front&&!flareOcc?Math.max(0,Math.min(1,(1.3-edge)/0.5)):0;
+  target*=(curLight&&curLight.moon?0.25:0.6+0.4*lowSun)*(1-tunnelT)*Math.min(1,sun.intensity/0.8);
+  flareVis+=(target-flareVis)*Math.min(1,dt*(target>flareVis?6:3));
+  const sx=_fxV.x*aspect,sy=_fxV.y;
+  for(const e of FLARE_EL){
+    e.sp.position.set(sx+(0-sx)*e.t,sy+(0-sy)*e.t,0);
+    const k=e.tex==='streak'?1:1;e.sp.scale.set(e.s*(e.tex==='streak'?2.2:1)*k,e.s*k,1);
+    e.sp.material.opacity=e.a*flareVis;
+  }
+}
+function renderFlare(){
+  if(flareVis<0.01) return;
+  renderer.autoClear=false;renderer.render(flareScene,flareCam);renderer.autoClear=true;
+}
+// --- aloni dei fari e dei fanalini ---
+const TAIL_POS={hatch:{x:0.38,y:0.47,z:-1.155},classic:{x:0.36,y:0.43,z:-1.18},raid:{x:0.5,y:0.6,z:-1.2},buggy:{x:0.18,y:0.45,z:-0.97}};
+const lampGlows=[];
+for(const kind of ['head','tail']) for(const side of [-1,1]){
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:FX_TEX.glow,color:kind==='head'?0xfff0d0:0xff2a1a,transparent:true,opacity:0,
+    blending:THREE.AdditiveBlending,depthWrite:false}));
+  sp.renderOrder=4;carGroup.add(sp);lampGlows.push({sp,kind,side});
+}
+function placeLampGlows(id){
+  const h=HEAD_POS[id]||HEAD_POS.hatch,t=TAIL_POS[id]||TAIL_POS.hatch;
+  for(const l of lampGlows){
+    if(l.kind==='head') l.sp.position.set(l.side*h.x,h.y+MODEL_Y,h.z+0.06);
+    else l.sp.position.set(l.side*t.x,t.y+MODEL_Y,t.z-0.06);
+  }
+}
+let glowCar='';
+function updateLampGlows(){
+  if(glowCar!==curCarId){glowCar=curCarId;placeLampGlows(curCarId);}
+  const night=curLight&&curLight.headlights?(curLight.night?1:0.65):0;
+  const on=Math.max(night,tunnelT);
+  // si vedono di più guardando i fari di fronte (o i fanalini da dietro)
+  _fxW.set(Math.sin(carGroup.rotation.y),0,Math.cos(carGroup.rotation.y));
+  _fxV.copy(camera.position).sub(carGroup.position).normalize();
+  const facing=_fxW.dot(_fxV);
+  const brake=(replayMode?HUD.brk:ctl.brk)>0.1;
+  for(const l of lampGlows){
+    let a,s;
+    if(l.kind==='head'){a=on*Math.max(0,facing)*0.9;s=0.55+0.95*Math.max(0,facing);}
+    else{const k=Math.max(0,-facing);a=(on*0.55+(brake?0.45:0))*(0.35+0.65*k);s=brake?0.75:0.5;}
+    l.sp.material.opacity=Math.min(1,a);l.sp.scale.set(s,s,1);l.sp.visible=a>0.01;
+  }
+}
+// luce per i riflessi del fondo (sole, fari) e per gli scintillii
+function lightFxFrame(){
+  const now=performance.now(),dt=Math.min(0.1,(now-fxLastT)/1000);fxLastT=now;
+  const U=SURF_U;
+  U.uSunDir.value.copy(sunDir);
+  U.uSunCol.value.copy(sun.color).multiplyScalar(sun.intensity);
+  U.uSunVis.value=(curLight&&curLight.moon?0.35:1)*(1-tunnelT);
+  headlight.getWorldPosition(U.uHeadPos.value);
+  U.uHeadI.value=headlight.intensity/3;
+  U.uTime.value=now/1000;U.uTunnel.value=tunnelT;
+  updateFlare(dt);
+  updateLampGlows();
 }
 
 // --- sfondo della schermata iniziale: l'auto percorre da sola uno stage, con inquadrature cinematografiche ---
@@ -5625,7 +6080,7 @@ function demoUpdate(dt){
   demoTime+=dt;
   // nel garage l'auto si ferma (fuori da ponti e tunnel) per essere guardata da vicino
   const idx=Math.min(wps.length-2,Math.floor(demoDist/STEP));
-  const parked=titleOpen()&&titleSub==='garage'&&!wps[idx].struct;
+  const parked=titleOpen()&&titleSub==='car'&&!wps[idx].struct;   // showroom e scelta dell'auto
   demoDist+=parked?0:DEMO_SPEED*dt;
   const first=20,last=wps.length-12;
   let f=demoDist/STEP;
@@ -5644,7 +6099,7 @@ function demoUpdate(dt){
 function demoCamera(cx,cz,dirX,dirZ){
   const w=wps[lastIdx],y=carVisElev;
   // dentro tunnel e sui ponti solo inseguimento; altrove un'inquadratura diversa ogni 7 secondi
-  const garage=titleOpen()&&titleSub==='garage';
+  const garage=titleOpen()&&titleSub==='car';
   const mode=garage&&!w.struct?'showroom':(tunCamS>0.02||w.tunnel||w.bridgeF>0)?'chase':DEMO_CAMS[Math.floor(demoTime/7)%DEMO_CAMS.length];
   const nx=-dirZ,nz=dirX;
   if(mode==='showroom'){ // garage: orbita ravvicinata per guardare bene l'auto
@@ -5968,13 +6423,51 @@ function hudFrame(dt){
   const sub=gameMode==='ta'?'':'Totale '+fmtClock(stageDone||replayMode?sumTimes():sumTimes()+elapsed);
   const tt=fmtClock(t),txt=lbl+'|'+tt+'|'+sub;
   if(txt!==hudTxt){hudTxt=txt;htLbl.textContent=lbl;htVal.innerHTML=clockHTML(t);htSub.textContent=sub;}
-  const rv=gameMode==='ta'?taBest[course]:bestTotal;
-  const rtxt=rv?(gameMode==='ta'?'Record pista':'Record carriera')+'|'+fmtClock(rv):'';
+  // record della tappa (miglior tempo assoluto su questa pista, carriera o Time Attack): lo stesso riferimento dei distacchi
+  const rv=stageBest(course);
+  const rtxt=rv?'Record tappa|'+fmtClock(rv):'';
   if(rtxt!==hudRecTxt){
     hudRecTxt=rtxt;hudRecBox.hidden=!rv;
-    if(rv){hrLbl.textContent=gameMode==='ta'?'Record pista':'Record carriera';hrVal.innerHTML=clockHTML(rv);}
+    if(rv){hrLbl.textContent='Record tappa';hrVal.innerHTML=clockHTML(rv);}
   }
+  hudInfoFrame(dt);
   drawGauge();drawTyres();
+}
+const stageBest=c=>{const a=taBest[c],b=bestSplits[c]&&bestSplits[c].t;return a&&b?Math.min(a,b):(a||b||null);};
+// riquadro informazioni: pista, fondo e ora del giorno, avanzamento con i 4 intermedi, tempi intermedi
+const htCourse=document.getElementById('htCourse'),htSurf=document.getElementById('htSurf'),htBarFill=document.getElementById('htBarFill'),
+  htPct=document.getElementById('htPct'),htSplits=document.getElementById('htSplits'),htMarks=[...document.querySelectorAll('.htBar b')];
+const hudDelta=document.getElementById('hudDelta'),hdLbl=document.getElementById('hdLbl'),hdVal=document.getElementById('hdVal'),hdSub=document.getElementById('hdSub');
+let infoTxt='',splitTxt='',deltaTxt='',tyreFitT=0;
+function hudInfoFrame(dt){
+  const it=course+'|'+surface.name+'|'+(curLight?curLight.label:'');
+  if(it!==infoTxt){infoTxt=it;htCourse.textContent=COURSES[course].name;htSurf.textContent=surface.name+' · '+(curLight?curLight.label:'');}
+  const p=finishIdx>0?Math.min(1,lastIdx/finishIdx):0,pt=Math.floor(p*100)+'%';
+  if(htPct.textContent!==pt){htPct.textContent=pt;htBarFill.style.width=(p*100).toFixed(1)+'%';}
+  // tempi intermedi: verde se più veloce del miglior tempo della tappa, rosso se più lento
+  const parts=CP_FRACS.map((f,k)=>{
+    const s=curSplits[k];
+    if(s==null) return '<span><small>INT '+(k+1)+'</small>—</span>';
+    const d=curDeltas[k];
+    if(d==null) return '<span class="done c-first"><small>INT '+(k+1)+'</small>'+fmtClock(s)+'</span>';
+    return '<span class="done '+(d<0?'c-faster':'c-slower')+'"><small>INT '+(k+1)+'</small>'+(d<0?'−':'+')+Math.abs(d).toFixed(2)+'</span>';
+  });
+  const st=parts.join('');
+  if(st!==splitTxt){splitTxt=st;htSplits.innerHTML=st;htMarks.forEach((m,k)=>m.classList.toggle('done',curSplits[k]!=null));}
+  // distacco in alto al centro (qualche secondo dopo ogni intermedio e all'arrivo; non nel replay)
+  if(deltaShow.t>0) deltaShow.t-=dt;
+  const show=deltaShow.t>0&&!replayMode;
+  const dtx=show?deltaShow.lbl+'|'+deltaShow.val+'|'+deltaShow.sub+'|'+deltaShow.cls:'';
+  if(dtx!==deltaTxt){
+    deltaTxt=dtx;hudDelta.hidden=!show;
+    if(show){hdLbl.textContent=deltaShow.lbl;hdVal.textContent=deltaShow.val;hdSub.textContent=deltaShow.sub;hudDelta.className='hudDelta '+deltaShow.cls;}
+  }
+  // telefono: le gomme stanno subito sotto il riquadro (che cambia altezza)
+  tyreFitT-=dt;
+  if(tyreFitT<=0){tyreFitT=0.5;
+    if(document.body.classList.contains('touch')) tyreCv.style.top=Math.round(hudTimeBox.getBoundingClientRect().bottom+8)+'px';
+    else if(tyreCv.style.top) tyreCv.style.top='';
+  }
 }
 
 let lastT=performance.now(),paused=false;
@@ -6092,6 +6585,8 @@ window.addEventListener('keydown',e=>{
     else if(e.code==='Backspace'||e.code==='Delete'){e.preventDefault();assignPad(null);}
     return;
   }
+  // mentre si scrive il nome del pilota i tasti scrivono (niente scorciatoie), tranne Esc e Invio
+  if(e.target&&e.target.tagName==='INPUT'&&e.code!=='Escape'){if(titleOpen()) titleKey(e);return;}
   // replay: Invio, Spazio o Esc tornano al riquadro del risultato
   if(replayMode){
     if(['Escape','Enter','NumpadEnter','Space','Backspace'].includes(e.code)&&!e.repeat){e.preventDefault();exitReplay();}
@@ -6150,7 +6645,7 @@ function closePause(){
 }
 function showMainMenu(){
   oT.textContent=INTRO_TITLE;oP.textContent=INTRO_TEXT;
-  legend.style.display='';oList.style.display='none';oReplay.style.display='none';
+  legend.style.display='';oList.style.display='none';oReplay.style.display='none';oBoard.style.display='none';
   oB.textContent='Inizia';oB.onclick=startGame;
   warn.classList.remove('show');
   overlay.classList.remove('hide');
@@ -6165,22 +6660,53 @@ function pauseAction(act){
   else if(act==='controls') openSettings();
   else if(act==='res') cycleResolution(1);
   else if(act==='fs') toggleFullscreen();
-  else if(act==='music') toggleMusic();
-  else if(act==='sfx') toggleSfx();
+  else if(act==='vol'){const b=pauseBtns()[pauseSel];if(b) b.dataset.k==='music'?toggleMusic():toggleSfx();}
   else if(act==='quit'){closePause();running=false;showTitle();}
 }
+// ◀▶ su una barra del volume: ±10%
+function adjustVolRow(b,d){if(b&&b.dataset.act==='vol'){initAudio();setVolume(b.dataset.k,volOf(b.dataset.k)+d*0.1);return true;}return false;}
 function movePause(d){const n=pauseBtns().length;pauseSel=(pauseSel+d+n)%n;renderPauseSel();}
 function pauseKey(e){
   if(['ArrowUp','KeyW'].includes(e.code)){e.preventDefault();movePause(-1);}
   else if(['ArrowDown','KeyS'].includes(e.code)){e.preventDefault();movePause(1);}
+  else if(['ArrowLeft','KeyA','ArrowRight','KeyD'].includes(e.code)){if(adjustVolRow(pauseBtns()[pauseSel],/Right|KeyD/.test(e.code)?1:-1)) e.preventDefault();}
   else if(['Enter','Space','NumpadEnter'].includes(e.code)){e.preventDefault();if(!e.repeat) pauseAction(pauseBtns()[pauseSel].dataset.act);}
 }
-pauseList.addEventListener('click',e=>{const b=e.target.closest('button');if(b){b.blur();pauseAction(b.dataset.act);}});
+pauseList.addEventListener('click',e=>{if(e.target.closest('.vBar')) return;const b=e.target.closest('button');if(b){b.blur();pauseSel=pauseBtns().indexOf(b);pauseAction(b.dataset.act);}});
 pauseList.addEventListener('mouseover',e=>{const b=e.target.closest('button');if(b){pauseSel=pauseBtns().indexOf(b);renderPauseSel();}});
 // --- schermata iniziale a tutto schermo ---
 const titleEl=document.getElementById('title'),titleMain=document.getElementById('titleMain'),titleOpts=document.getElementById('titleOptions');
 const titleGarage=document.getElementById('titleGarage');
 titleGarage.innerHTML=CARS.map(c=>'<button data-act="car" data-car="'+c.id+'">'+c.name+'</button>').join('')+'<button data-act="back">← Indietro</button>';
+const carCard=document.getElementById('carCard'),titleHead=document.getElementById('titleHead');
+const titleBoard=document.getElementById('titleBoard'),boardTable=document.getElementById('boardTable'),boardSelBtn=document.getElementById('boardSel');
+const titleName=document.getElementById('titleName'),pilotInput=document.getElementById('pilotInput'),pilotBtn=document.getElementById('pilotBtn');
+const titleRecordEl=document.querySelector('.titleRecord');
+// ---- showroom: scheda con le caratteristiche di ogni auto ----
+const CAR_INFO={
+  hatch:  {desc:'Compatta da rally moderna: precisa e facile da tenere in traiettoria, va forte su ogni fondo.'},
+  classic:{desc:'Coupé da rally anni \'70: leggera di coda, si guida di traverso e va dosata con il gas.'},
+  raid:   {desc:'Fuoristrada da raid: alta e robusta, digerisce salti e buche ma è più pigra nei cambi di direzione.'},
+  buggy:  {desc:'Buggy leggero con carreggiata larghissima: agilissimo e reattivo, nervoso sullo sterrato veloce.'}
+};
+// valori da 1 a 10 ricavati dalla fisica vera di ogni auto (confronto tra le quattro)
+const CAR_STATS=(()=>{
+  const ids=CARS.map(c=>c.id),P=id=>CAR_PHYS[id];
+  const defs=[['Tenuta',id=>P(id).grip],['Agilità',id=>1/P(id).iz],['Stabilità',id=>P(id).stab],['Baricentro basso',id=>-P(id).hL],['Carreggiata',id=>P(id).track]];
+  const out={};ids.forEach(id=>out[id]=[]);
+  for(const [name,f] of defs){
+    const vals=ids.map(f),mn=Math.min(...vals),mx=Math.max(...vals);
+    ids.forEach((id,i)=>out[id].push([name,Math.round(4+6*(mx>mn?(vals[i]-mn)/(mx-mn):0.5))]));
+  }
+  return out;
+})();
+function renderCarCard(id){
+  const c=CARS.find(x=>x.id===id),ph=CAR_PHYS[id],eng=ENGINE_SND[id];
+  const bars=CAR_STATS[id].map(([n,v])=>'<div class="ccRow"><span>'+n+'</span><span class="ccBar">'+'<i class="on"></i>'.repeat(v)+'<i></i>'.repeat(10-v)+'</span></div>').join('');
+  carCard.innerHTML='<div class="ccName">'+c.name+'</div><div class="ccDesc">'+CAR_INFO[id].desc+'</div>'+
+    '<div class="ccSpec"><span><small>Trazione</small>'+(ph.drive==='integrale'?'Integrale 4x4':'Posteriore')+'</span><span><small>Motore</small>'+(eng?eng.name:'—')+'</span></div>'+bars+
+    (id===savedCarId&&carCtx.mode==='show'?'<div class="ccNote">✓ Ultima auto usata</div>':'');
+}
 const titleOpen=()=>!titleEl.classList.contains('hide');
 // ---- logo: dust-motors-logo.png nella stessa cartella del gioco; se manca resta la scritta ----
 // Molte immagini "trasparenti" hanno in realtà la scacchiera disegnata: la si toglie partendo dai bordi
@@ -6211,7 +6737,67 @@ const titleOpen=()=>!titleEl.classList.contains('hide');
 const TITLE_STAGES=[5,2,8,9]; // tramonto, mattino, crepuscolo, alba: gli sfondi più scenografici
 let titleSub='main',titleSel=0,savedCarId=curCarId;
 const titleTA=document.getElementById('titleTA');
-const TITLE_LISTS={main:titleMain,options:titleOpts,garage:titleGarage,ta:titleTA};
+const TITLE_LISTS={main:titleMain,options:titleOpts,car:titleGarage,ta:titleTA,board:titleBoard,name:titleName};
+let carCtx={mode:'show'},afterName=null;
+// ---- nome del pilota (chiesto la prima volta che si sceglie una modalità; si cambia dalle opzioni) ----
+let pilotName='';try{pilotName=localStorage.getItem('rallyDriftPilot')||'';}catch(e){}
+function updatePilotLabel(){pilotBtn.textContent='👤 Pilota: '+(pilotName||'—');}
+updatePilotLabel();
+function openName(next){
+  afterName=next;titleSub='name';titleSel=0;pilotInput.value=pilotName||'';renderTitleSel();
+  if(!document.body.classList.contains('touch')) setTimeout(()=>{pilotInput.focus();pilotInput.select();},60);
+}
+function confirmName(){
+  pilotName=(pilotInput.value||'').trim().replace(/\s+/g,' ').slice(0,16)||'Pilota';
+  try{localStorage.setItem('rallyDriftPilot',pilotName);}catch(e){}
+  pilotInput.blur();updatePilotLabel();
+  if(afterName){const n=afterName;afterName=null;openCars(n);}
+  else{titleSub='options';titleSel=0;renderTitleSel();}
+}
+// ---- flusso: modalità → (pista) → auto → via ----
+function beginFlow(ctx){if(!pilotName) openName(ctx);else openCars(ctx);}
+function openCars(ctx){
+  carCtx=ctx;titleSub='car';titleSel=Math.max(0,CARS.findIndex(c=>c.id===savedCarId));demoTime=0;renderTitleSel();
+}
+function startWithCar(){
+  if(carCtx.mode==='ta') startTimeAttack(carCtx.course);
+  else{overlay.classList.add('hide');startGame();}
+}
+// ---- classifica: i 10 migliori tempi per ogni pista e per la carriera completa, con pilota e auto ----
+const BOARD_KEY='rallyDriftBoard_v1';
+let board={stages:{},career:[]};
+try{const b=JSON.parse(localStorage.getItem(BOARD_KEY)||'null');if(b&&b.stages&&Array.isArray(b.career)) board=b;}catch(e){}
+function saveBoard(){try{localStorage.setItem(BOARD_KEY,JSON.stringify(board));}catch(e){}}
+let lastEntryId=null;
+function addBoardEntry(list,time){
+  const e={n:pilotName||'Pilota',car:curCarId,t:+time.toFixed(3),d:Date.now(),id:Date.now()+'-'+Math.floor(Math.random()*1e6)};
+  list.push(e);list.sort((a,b)=>a.t-b.t);
+  const pos=list.indexOf(e)+1;
+  if(list.length>10) list.length=10;
+  saveBoard();lastEntryId=e.id;
+  return pos;   // posizione in classifica (oltre 10 = fuori dai primi 10)
+}
+const addStageResult=(c,t)=>addBoardEntry(board.stages[c]||(board.stages[c]=[]),t);
+const addCareerResult=t=>addBoardEntry(board.career,t);
+function boardHTML(list,max,hiId,hiPos,hiTime){
+  if(!list||!list.length) return '<p class="bEmpty">Nessun tempo ancora: finisci la tappa per entrare in classifica.</p>';
+  const carName=id=>(CARS.find(c=>c.id===id)||{name:'—'}).name;
+  let h='<table class="bTable"><tbody>';
+  list.slice(0,max).forEach((e,i)=>{
+    h+='<tr class="'+(e.id===hiId?'me':'')+(i===0?' first':'')+'"><td class="bPos">'+(i+1)+'</td><td class="bName">'+escapeHTML(e.n)+'</td><td class="bCar">'+carName(e.car)+'</td><td class="bTime">'+fmtClock(e.t)+'</td></tr>';
+  });
+  if(hiPos&&hiPos>max) h+='<tr class="me"><td class="bPos">'+(hiPos>10?'—':hiPos)+'</td><td class="bName">'+escapeHTML(pilotName||'Pilota')+'</td><td class="bCar">'+carName(curCarId)+'</td><td class="bTime">'+fmtClock(hiTime)+'</td></tr>';
+  return h+'</tbody></table>';
+}
+const escapeHTML=s=>String(s).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+let boardIdx=0;   // 0 = carriera completa, poi le piste nell'ordine della carriera
+function renderBoard(){
+  const c=boardIdx?COURSE_ORDER[boardIdx-1]:0;
+  boardSelBtn.textContent='◀  '+(c?COURSES[c].name:'Carriera completa')+'  ▶';
+  boardTable.innerHTML=boardHTML(c?board.stages[c]:board.career,10,lastEntryId);
+}
+function cycleBoard(d){boardIdx=(boardIdx+d+COURSE_ORDER.length+1)%(COURSE_ORDER.length+1);renderBoard();}
+const TITLE_HEAD={options:'Opzioni',ta:'Time Attack · scegli la pista',board:'Classifica',name:'Nome del pilota'};
 // Time Attack: elenco delle piste con fondo, ora del giorno e record; la pista evidenziata compare sullo sfondo
 function renderTAList(){
   let h='';
@@ -6236,21 +6822,32 @@ const titleList=()=>TITLE_LISTS[titleSub];
 const titleBtns=()=>[...titleList().querySelectorAll('button')];
 function renderTitleSel(){
   for(const k in TITLE_LISTS) TITLE_LISTS[k].style.display=titleSub===k?'':'none';
+  carCard.style.display=titleSub==='car'?'':'none';
+  boardTable.style.display=titleSub==='board'?'':'none';
+  titleRecordEl.style.display=titleSub==='main'?'':'none';
+  const head=titleSub==='car'?(carCtx.mode==='show'?'Showroom':'Scegli l\'auto · '+(carCtx.mode==='ta'?COURSES[carCtx.course].name:'Carriera')):TITLE_HEAD[titleSub];
+  titleHead.style.display=head?'':'none';titleHead.textContent=head||'';
+  titleEl.classList.toggle('wide',titleSub==='car'||titleSub==='board');
   titleBtns().forEach((b,i)=>b.classList.toggle('sel',i===titleSel));
-  // nel garage l'auto evidenziata si vede subito sullo sfondo; ✓ segna quella scelta
-  for(const b of titleGarage.querySelectorAll('[data-car]')){
-    const c=CARS.find(x=>x.id===b.dataset.car);
-    const ph=CAR_PHYS[c.id];
-    b.textContent=(b.dataset.car===savedCarId?'✓ ':'')+c.name+(ph?' · '+(ph.drive==='integrale'?'4x4':'trazione post.'):'');
+  // auto: quella evidenziata si vede subito sullo sfondo, con la sua scheda; ✓ = l'ultima usata
+  if(titleSub==='car'){
+    for(const b of titleGarage.querySelectorAll('[data-car]')){
+      const c=CARS.find(x=>x.id===b.dataset.car);
+      b.textContent=(b.dataset.car===savedCarId?'✓ ':'')+c.name;
+    }
+    const b=titleBtns()[titleSel],id=b&&b.dataset.car?b.dataset.car:savedCarId;
+    setCar(id);renderCarCard(id);
   }
-  if(titleSub==='garage'){const b=titleBtns()[titleSel];setCar(b&&b.dataset.car?b.dataset.car:savedCarId);}
   if(titleSub==='ta'){const b=titleBtns()[titleSel];if(b){b.scrollIntoView({block:'nearest'});previewCourse(b.dataset.c?+b.dataset.c:0);}}
 }
 const mainIndex=act=>[...titleMain.querySelectorAll('button')].findIndex(b=>b.dataset.act===act);
+// da quale voce del menu principale si arriva in ogni sottomenu (per tornarci con "Indietro")
+const subAct=()=>titleSub==='car'?(carCtx.mode==='show'?'showroom':carCtx.mode==='ta'?'ta':'play'):titleSub==='name'?(afterName?(afterName.mode==='ta'?'ta':'play'):'options'):titleSub;
 function titleGoMain(from){
-  if(titleSub==='garage') setCar(savedCarId);
+  if(titleSub==='car') setCar(savedCarId);
   if(titleSub==='options'&&resetPending){resetPending=false;clearTimeout(resetTimer);resetRecordLabel('🏆 Azzera record');}
-  titleSub='main';titleSel=mainIndex(from);renderTitleSel();
+  if(titleSub==='name') pilotInput.blur();
+  titleSub='main';titleSel=Math.max(0,mainIndex(from));renderTitleSel();
 }
 // ---------- schermo intero e risoluzione ----------
 // La scena occupa sempre tutta la finestra; la risoluzione scelta è quella a cui viene disegnata
@@ -6343,15 +6940,21 @@ window.addEventListener('keydown',e=>{
   if(e.code==='Escape'&&!e.repeat&&!e.defaultPrevented&&!overlay.classList.contains('hide')&&oMenu.style.display!=='none'&&!settingsOpen()){e.preventDefault();oMenu.click();}
 });
 function titleAction(act){
-  if(act==='play'){overlay.classList.add('hide');startGame();}
+  if(act==='play') beginFlow({mode:'career'});
   else if(act==='options'){titleSub='options';titleSel=0;renderTitleSel();}
   else if(act==='ta'){titleSub='ta';titleSel=0;taPreviewC=0;renderTAList();renderTitleSel();}
-  else if(act==='course'){const b=titleBtns()[titleSel];clearTimeout(taPreviewT);startTimeAttack(+b.dataset.c);}
-  else if(act==='garage'){titleSub='garage';titleSel=Math.max(0,CARS.findIndex(c=>c.id===savedCarId));demoTime=0;renderTitleSel();}
-  else if(act==='car'){const b=titleBtns()[titleSel];savedCarId=b.dataset.car;setCar(savedCarId,true);titleGoMain('garage');}
-  else if(act==='back') titleGoMain(titleSub);
-  else if(act==='music'){initAudio();toggleMusic();}
-  else if(act==='sfx'){initAudio();toggleSfx();}
+  else if(act==='course'){const b=titleBtns()[titleSel];clearTimeout(taPreviewT);beginFlow({mode:'ta',course:+b.dataset.c});}
+  else if(act==='showroom') openCars({mode:'show'});
+  else if(act==='car'){
+    if(carCtx.mode==='show') return;                           // nello showroom si guarda soltanto
+    const b=titleBtns()[titleSel];savedCarId=b.dataset.car;setCar(savedCarId,true);startWithCar();
+  }
+  else if(act==='board'){titleSub='board';titleSel=0;boardIdx=0;renderBoard();renderTitleSel();}
+  else if(act==='boardSel') cycleBoard(1);
+  else if(act==='pilot') openName(null);
+  else if(act==='nameOk') confirmName();
+  else if(act==='back') titleBack();
+  else if(act==='vol'){initAudio();const b=titleBtns()[titleSel];if(b) b.dataset.k==='music'?toggleMusic():toggleSfx();}
   else if(act==='controls') openSettings();
   else if(act==='resetrec') resetRecord();
   else if(act==='res') cycleResolution(1);
@@ -6362,29 +6965,55 @@ const resetRecBtn=document.getElementById('resetRecBtn');let resetPending=false,
 function resetRecordLabel(t){resetRecBtn.textContent=t;}
 function resetRecord(){
   clearTimeout(resetTimer);
-  if(!bestTotal&&!Object.keys(taBest).length){resetPending=false;resetRecordLabel('🏆 Nessun record da azzerare');resetTimer=setTimeout(()=>resetRecordLabel('🏆 Azzera record'),2000);return;}
+  if(!bestTotal&&!Object.keys(taBest).length&&!Object.keys(bestSplits).length&&!board.career.length&&!Object.keys(board.stages).length){resetPending=false;resetRecordLabel('🏆 Nessun record da azzerare');resetTimer=setTimeout(()=>resetRecordLabel('🏆 Azzera record'),2000);return;}
   if(!resetPending){
     resetPending=true;resetRecordLabel('⚠ Sei sicuro? Premi di nuovo');
     resetTimer=setTimeout(()=>{resetPending=false;resetRecordLabel('🏆 Azzera record');},4000);
     return;
   }
   resetPending=false;
-  bestTotal=null;taBest={};
-  try{localStorage.removeItem(BEST_KEY);localStorage.removeItem(TA_KEY);}catch(e){}
+  bestTotal=null;taBest={};bestSplits={};board={stages:{},career:[]};
+  try{localStorage.removeItem(BEST_KEY);localStorage.removeItem(TA_KEY);localStorage.removeItem(SPLIT_KEY);localStorage.removeItem(BOARD_KEY);}catch(e){}
   bestEl.textContent='--';
   document.getElementById('titleBest').textContent='--';
   resetRecordLabel('✓ Record azzerato');
   resetTimer=setTimeout(()=>resetRecordLabel('🏆 Azzera record'),2000);
 }
 function moveTitle(d){const n=titleBtns().length;titleSel=(titleSel+d+n)%n;renderTitleSel();}
-function titleBack(){if(titleSub!=='main') titleGoMain(titleSub);}
+function titleBack(){
+  if(titleSub==='main') return;
+  // scelta dell'auto per il Time Attack, o nome chiesto dopo la pista: si torna all'elenco delle piste
+  const toTA=(titleSub==='car'&&carCtx.mode==='ta')||(titleSub==='name'&&afterName&&afterName.mode==='ta');
+  if(toTA){
+    const c=titleSub==='car'?carCtx.course:afterName.course;
+    if(titleSub==='car') setCar(savedCarId);else pilotInput.blur();
+    afterName=null;titleSub='ta';renderTAList();
+    titleSel=Math.max(0,titleBtns().findIndex(b=>+b.dataset.c===c));renderTitleSel();return;
+  }
+  if(titleSub==='name'&&!afterName){pilotInput.blur();titleSub='options';titleSel=0;renderTitleSel();return;}
+  const from=subAct();afterName=null;titleGoMain(from);
+}
+// ◀▶ su una barra del volume o sul selettore della classifica
+function titleSide(d){
+  const b=titleBtns()[titleSel];
+  if(adjustVolRow(b,d)) return true;
+  if(b&&b.dataset.act==='boardSel'){cycleBoard(d);return true;}
+  return false;
+}
 function titleKey(e){
+  // nel campo del nome si scrive liberamente: Invio conferma, ↓ passa ai pulsanti
+  if(e.target===pilotInput){
+    if(['Enter','NumpadEnter'].includes(e.code)){e.preventDefault();if(!e.repeat) confirmName();}
+    else if(e.code==='ArrowDown'){e.preventDefault();pilotInput.blur();titleSel=0;renderTitleSel();}
+    return;
+  }
   if(['ArrowUp','KeyW'].includes(e.code)){e.preventDefault();moveTitle(-1);}
   else if(['ArrowDown','KeyS'].includes(e.code)){e.preventDefault();moveTitle(1);}
+  else if(['ArrowLeft','KeyA','ArrowRight','KeyD'].includes(e.code)){if(titleSide(/Right|KeyD/.test(e.code)?1:-1)) e.preventDefault();}
   else if(['Enter','Space','NumpadEnter'].includes(e.code)){e.preventDefault();if(!e.repeat) titleAction(titleBtns()[titleSel].dataset.act);}
 }
-for(const list of [titleMain,titleOpts,titleGarage,titleTA]){
-  list.addEventListener('click',e=>{const b=e.target.closest('button');if(b){b.blur();titleSel=titleBtns().indexOf(b);titleAction(b.dataset.act);}});
+for(const list of [titleMain,titleOpts,titleGarage,titleTA,titleBoard,titleName]){
+  list.addEventListener('click',e=>{if(e.target.closest('.vBar')) return;const b=e.target.closest('button');if(b){b.blur();titleSel=titleBtns().indexOf(b);titleAction(b.dataset.act);}});
   list.addEventListener('mouseover',e=>{const b=e.target.closest('button');if(b&&titleBtns().includes(b)){titleSel=titleBtns().indexOf(b);renderTitleSel();}});
 }
 // la musica del menu parte al primo tocco/tasto (i browser vietano l'audio prima di un gesto)
@@ -6392,10 +7021,13 @@ for(const ev of ['pointerdown','keydown']) window.addEventListener(ev,()=>{if(ti
 function padTitleInput(gp){
   const on=i=>btnVal(gp.buttons[i])>0.5;
   if(!titleOpen()||settingsOpen()||capture){padPrev.a=on(0)||on(9);padPrev.b=on(1);return;}
-  const ay=gp.axes[1]||0,up=on(12)||ay<-0.6,down=on(13)||ay>0.6,ok=on(0)||on(9);
+  const ay=gp.axes[1]||0,ax=gp.axes[0]||0,up=on(12)||ay<-0.6,down=on(13)||ay>0.6,ok=on(0)||on(9);
+  const left=on(14)||ax<-0.6,right=on(15)||ax>0.6;
   if(up&&!padPrev.up) moveTitle(-1);
   if(down&&!padPrev.down) moveTitle(1);
-  padPrev.up=up;padPrev.down=down;
+  if(left&&!padPrev.left) titleSide(-1);
+  if(right&&!padPrev.right) titleSide(1);
+  padPrev.up=up;padPrev.down=down;padPrev.left=left;padPrev.right=right;
   if(ok&&!padPrev.a){padPrev.menu=true;titleAction(titleBtns()[titleSel].dataset.act);}
   if(on(1)&&!padPrev.b) titleBack();
   padPrev.a=ok;padPrev.b=on(1);
@@ -6409,11 +7041,13 @@ function padPauseInput(gp){
   }
   padPrev.start=startNow;
   if(!pauseOpen()||settingsOpen()||capture){padPrev.a=on(0);padPrev.b=on(1);return;}
-  const ay=gp.axes[1]||0;
-  const up=on(12)||ay<-0.6,down=on(13)||ay>0.6;
+  const ay=gp.axes[1]||0,ax=gp.axes[0]||0;
+  const up=on(12)||ay<-0.6,down=on(13)||ay>0.6,left=on(14)||ax<-0.6,right=on(15)||ax>0.6;
   if(up&&!padPrev.up) movePause(-1);
   if(down&&!padPrev.down) movePause(1);
-  padPrev.up=up;padPrev.down=down;
+  if(left&&!padPrev.left) adjustVolRow(pauseBtns()[pauseSel],-1);
+  if(right&&!padPrev.right) adjustVolRow(pauseBtns()[pauseSel],1);
+  padPrev.up=up;padPrev.down=down;padPrev.left=left;padPrev.right=right;
   if(on(0)&&!padPrev.a){padPrev.menu=true;pauseAction(pauseBtns()[pauseSel].dataset.act);}
   if(on(1)&&!padPrev.b) closePause();
   padPrev.a=on(0);padPrev.b=on(1);
@@ -6646,7 +7280,7 @@ const touchEnd=e=>{
 touchUI.addEventListener('touchend',touchEnd);touchUI.addEventListener('touchcancel',touchEnd);
 // il primo tocco sullo schermo attiva i comandi touch, un tasto della tastiera li nasconde
 window.addEventListener('touchstart',()=>setTouchMode(true),{capture:true,passive:true});
-window.addEventListener('keydown',e=>{if(!e.repeat&&kbActionsFor(e.code).length) setTouchMode(false);},true);
+window.addEventListener('keydown',e=>{if(!e.repeat&&e.target.tagName!=='INPUT'&&kbActionsFor(e.code).length) setTouchMode(false);},true);
 // nel replay un tocco qualsiasi torna al risultato (senza "cliccare" il pulsante che riappare sotto il dito)
 window.addEventListener('touchstart',e=>{if(replayMode){e.preventDefault();e.stopPropagation();exitReplay();}},{capture:true,passive:false});
 // visibilità: solo in gara (anche durante il via), non nei menu né nel replay
