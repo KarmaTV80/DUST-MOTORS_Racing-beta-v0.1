@@ -15,7 +15,7 @@
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Saira+Semi+Condensed:wght@600;700;800&family=Teko:wght@500;600&display=swap" rel="stylesheet">
 <style>
   :root{--card:#1b2418;--accent:#ffcf5c;--text:#f4fbff;--danger:#e8564f;}
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -122,6 +122,37 @@
   #padDiag{font-family:Consolas,monospace;font-size:11px;white-space:pre-wrap;margin-top:6px;opacity:.9;line-height:1.45;}
   .setActions{display:flex;justify-content:space-between;gap:10px;margin-top:14px;flex-wrap:wrap;}
   .setActions button{padding:10px 18px;font-size:13px;}
+  /* ---- HUD di gara ---- */
+  /* stile da gioco di corse: pannelli scuri "a vetro" tagliati in diagonale, numeri Teko, scritte
+     Saira condensato; giallo del gioco per il tempo, viola (come il giro più veloce in TV) per il record */
+  :root{--hudBg:rgba(9,11,15,.80);--hudBg2:rgba(9,11,15,.50);--hudLine:rgba(255,255,255,.16);--hudPurple:#b768ff;--hudPurpleHi:#d4a6ff;
+    --hudNum:'Teko','Saira Semi Condensed','Segoe UI',sans-serif;--hudTxt:'Saira Semi Condensed','Segoe UI',Tahoma,sans-serif;}
+  .hud{padding-left:max(16px,min(230px,22vw));padding-right:max(16px,min(230px,22vw));font-family:var(--hudTxt);font-weight:600;letter-spacing:.02em;}
+  .hud .hOld,.hud .hBest{display:none !important;}
+  .hudTime,.hudRec{position:fixed;top:max(10px,env(safe-area-inset-top));z-index:6;pointer-events:none;color:var(--text);
+    text-shadow:0 2px 6px rgba(0,0,0,.5);display:inline-flex;flex-direction:column;}
+  .hudTime{left:max(16px,env(safe-area-inset-left));padding:5px 30px 5px 12px;border-left:4px solid var(--accent);
+    background:linear-gradient(90deg,var(--hudBg) 55%,var(--hudBg2));clip-path:polygon(0 0,100% 0,calc(100% - 16px) 100%,0 100%);}
+  .hudRec{right:max(16px,env(safe-area-inset-right));align-items:flex-end;padding:5px 12px 5px 30px;border-right:4px solid var(--hudPurple);
+    background:linear-gradient(270deg,var(--hudBg) 55%,var(--hudBg2));clip-path:polygon(0 0,100% 0,100% 100%,16px 100%);}
+  .hudRec[hidden]{display:none !important;}
+  .htLbl{font-family:var(--hudTxt);font-weight:700;font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;opacity:.82;line-height:1.2;}
+  .hudRec .htLbl{color:var(--hudPurpleHi);opacity:1;}
+  .htVal{font-family:var(--hudNum);font-weight:600;font-size:clamp(42px,3.9vw,56px);line-height:.86;color:#fff;margin-top:3px;white-space:nowrap;}
+  .hudRec .htVal{color:var(--hudPurple);font-size:clamp(30px,2.7vw,40px);text-shadow:0 0 14px rgba(183,104,255,.45),0 2px 6px rgba(0,0,0,.5);}
+  /* cifre a larghezza fissa: il riquadro è largo esattamente quanto il tempo e non "balla" mentre scorre */
+  .htVal .d{display:inline-block;width:.5em;text-align:center;}
+  .htVal .s{display:inline-block;width:.2em;text-align:center;}
+  .htSub{font-family:var(--hudTxt);font-weight:600;font-size:12px;opacity:.85;line-height:1.25;white-space:nowrap;}
+  .htSub:empty{display:none;}
+  .hudGauge{position:fixed;right:max(18px,env(safe-area-inset-right));bottom:max(14px,env(safe-area-inset-bottom));width:clamp(184px,15.5vw,230px);height:auto;z-index:6;pointer-events:none;}
+  .hudTyres{position:fixed;left:max(18px,env(safe-area-inset-left));bottom:max(16px,env(safe-area-inset-bottom));width:clamp(70px,5.6vw,86px);height:auto;z-index:6;pointer-events:none;}
+  body.titleMode .hudTime,body.titleMode .hudRec,body.titleMode .hudGauge,body.titleMode .hudTyres{display:none !important;}
+  /* telefono: in basso ci sono i comandi touch, quindi contagiri al centro e gomme sotto il cronometro;
+     il record si sposta a sinistra dei tasti telecamera e pausa */
+  body.touch .hudGauge{right:auto;left:50%;transform:translateX(-50%);width:140px;bottom:max(4px,env(safe-area-inset-bottom));}
+  body.touch .hudTyres{bottom:auto;top:calc(max(10px,env(safe-area-inset-top)) + 76px);width:50px;}
+  body.touch .hudRec{right:calc(max(14px,env(safe-area-inset-right)) + 112px);}
   /* ---- comandi touch (telefono/tablet) ---- */
   body{touch-action:manipulation;}
   #touchUI{position:fixed;inset:0;z-index:8;display:none;pointer-events:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;}
@@ -152,7 +183,15 @@
   @media (orientation:portrait){body.touch #rotateHint{display:flex;}}
   /* schermi bassi (telefono in orizzontale): HUD su una riga, menu compatti */
   @media (max-height:500px){
-    .hud{font-size:11.5px;padding:6px 12px 14px;gap:4px 14px;}
+    .hud{font-size:11.5px;padding:6px min(180px,26vw) 14px min(180px,26vw);gap:4px 14px;}
+    .hudTime{padding:3px 24px 4px 10px;}
+    .hudRec{padding:3px 10px 4px 24px;}
+    .htLbl{font-size:9px;letter-spacing:.16em;}
+    .htVal{font-size:32px;}
+    .hudRec .htVal{font-size:24px;}
+    .htSub{font-size:10px;}
+    .hudGauge{width:156px;}
+    .hudTyres{width:58px;}
     .hud .hSurf,.hud .hBest{display:none;}
     .warn{top:44px;font-size:14px;}
     .title{padding:3vh max(16px,5vw);}
@@ -178,13 +217,18 @@
   <div class="hud">
     <span id="hudStage">Stage <b id="stageNum">1</b>/12</span><span id="hudTA" style="display:none;">⏱ <b>Time Attack</b></span>
     <span class="hSurf">Sup: <b id="surfName">-</b></span>
-    <span>Marcia <b id="gearNum">1</b> <span class="tach"><span id="tachFill"></span></span></span>
+    <span class="hOld">Marcia <b id="gearNum">1</b> <span class="tach"><span id="tachFill"></span></span></span>
     <span>Percorso <b id="prog">0%</b></span>
-    <span>Tempo: <b id="time">0.0s</b></span>
-    <span id="hudTotal">Totale: <b id="totalTime">0.0s</b></span>
+    <span class="hOld">Tempo: <b id="time">0.0s</b></span>
+    <span id="hudTotal" class="hOld">Totale: <b id="totalTime">0.0s</b></span>
     <span class="hBest"><span id="bestLbl">Record</span>: <b id="best">--</b></span>
     <span id="padIcon" title="Joypad collegato" style="display:none;">🎮</span>
   </div>
+  <!-- HUD di gara: cronometro in alto a sinistra, contagiri circolare in basso a destra, gomme in basso a sinistra -->
+  <div class="hudTime" id="hudTimeBox"><div class="htLbl" id="htLbl">Stage 1/12</div><div class="htVal" id="htVal">0:00.00</div><div class="htSub" id="htSub"></div></div>
+  <div class="hudRec" id="hudRecBox" hidden><div class="htLbl" id="hrLbl">Record</div><div class="htVal" id="hrVal">0:00.00</div></div>
+  <canvas class="hudGauge" id="hudGauge" width="240" height="240" aria-label="Contagiri, marcia, velocità, acceleratore e freno"></canvas>
+  <canvas class="hudTyres" id="hudTyres" width="100" height="150" aria-label="Aderenza delle quattro gomme"></canvas>
   <div class="stageWrap">
     <div id="game"></div>
     <div class="warn" id="warn">FUORI PISTA</div>
@@ -812,6 +856,33 @@ function buildTrack(stage){
       for(const side of [-1,1]){railRuns.push({start:s.start,end:s.end,side});addRailPoints(s.start,s.end,side,4);}
     }else{
       for(const side of [-1,1]) addRailPoints(s.start,s.end,side,4,'stone');
+      // dall'esterno la galleria è un blocco solido: i due portali in calcestruzzo e i fianchi della collina
+      // che la ricopre (alla base, dove la collina è alta ~0,8 m: lì la tocca la carrozzeria) fermano l'auto
+      // che ci arriva fuori strada, invece di lasciarla entrare nella struttura. Per ogni lato: portale
+      // d'ingresso (dalla parete interna verso l'esterno), fianco lungo la galleria, portale d'uscita.
+      const OUT=0.9,near=(x,y)=>{   // (niente barriere sopra altri tratti di strada che passano lì vicino)
+        for(let j=0;j<N;j+=2){if(j>s.start-40&&j<s.end+40) continue;const w=wps[j];if(Math.hypot(w.x-x,w.y-y)<w.half+14) return true;}
+        return false;
+      };
+      const at=(i,lat)=>{const w=wps[i],n=w.heading+Math.PI/2;return {x:w.x+Math.cos(n)*lat,y:w.y+Math.sin(n)*lat};};
+      let brk=true;   // il primo punto di ogni tratto non si collega al precedente; dopo un buco si riparte staccati
+      const push=p=>{if(near(p.x,p.y)){brk=true;return;}railPoints.push({x:p.x,y:p.y,k:'stone',brk});brk=false;};
+      const portalLine=(i,side,outward)=>{
+        const w=wps[i],a=w.half+4,b=(w.half+62)*OUT,n=Math.max(2,Math.ceil((b-a)/8));
+        for(let q=0;q<=n;q++){const f=outward?q/n:1-q/n;push(at(i,(a+(b-a)*f)*side));}
+      };
+      for(const side of [-1,1]){
+        brk=true;
+        portalLine(s.start,side,true);
+        for(let i=s.start;i<=s.end;i++){
+          push(at(i,(wps[i].half+62)*OUT*side));
+          if(i<s.end){   // punto intermedio: sul lato esterno delle curve i punti si allontanano
+            const p=at(i,(wps[i].half+62)*OUT*side),q=at(i+1,(wps[i+1].half+62)*OUT*side);
+            push({x:(p.x+q.x)/2,y:(p.y+q.y)/2});
+          }
+        }
+        portalLine(s.end,side,false);
+      }
     }
   }
   // pozzanghere: poche, sempre negli stessi punti dello stage, dove l'acqua ristagna davvero
@@ -2267,10 +2338,13 @@ function extrude(a,b,profileFn,uvScale){
   g.computeVertexNormals();
   return g;
 }
+// sezione della galleria in proporzione all'auto (1 unità mondo ≈ 1,7 m): pareti dritte ~2,7 m,
+// volta ribassata fino a ~5 m al centro, più larga che alta come una galleria stradale vera
+const TUN_WALL=1.75,TUN_RISE=1.45,TUN_CROWN=TUN_WALL+TUN_RISE;   // volta a ~5,4 m
 const tunnelInner=w=>{
-  const L=w.half+3,p=[[-L,-0.2],[-L,3.0]];
-  for(let k=1;k<8;k++){const a=Math.PI*(1-k/8);p.push([Math.cos(a)*L,3.0+Math.sin(a)*2.6]);}
-  p.push([L,3.0],[L,-0.2]);
+  const L=w.half+3,p=[[-L,-0.2],[-L,TUN_WALL]];
+  for(let k=1;k<8;k++){const a=Math.PI*(1-k/8);p.push([Math.cos(a)*L,TUN_WALL+Math.sin(a)*TUN_RISE]);}
+  p.push([L,TUN_WALL],[L,-0.2]);
   return p;
 };
 const tunnelOuter=w=>{
@@ -2318,7 +2392,7 @@ function buildStructures(structs){
       shadowy(new THREE.Mesh(portal(wps[s.end],1),concreteMat));
       const p=[0,0,0];
       for(let i=s.start+2;i<s.end-1;i+=3){
-        const w=wps[i];wpPoint(w,0,5.52,p);
+        const w=wps[i];wpPoint(w,0,TUN_CROWN-0.07,p);
         const m=new THREE.Matrix4().makeRotationY(Math.atan2(Math.cos(w.heading),Math.sin(w.heading)));
         m.setPosition(p[0],p[1],p[2]);
         lampMatrices.push(m);
@@ -4424,9 +4498,10 @@ function buildRailSegs(){
   };
   for(let i=0;i<railsList.length;i++){
     const a=railsList[i],b=railsList[i+1];
-    const linked=b&&(b.k||'metal')===(a.k||'metal')&&Math.hypot(b.x-a.x,b.y-a.y)<16;
+    // (brk: il punto inizia un tratto nuovo e non si collega al precedente)
+    const linked=b&&!b.brk&&(b.k||'metal')===(a.k||'metal')&&Math.hypot(b.x-a.x,b.y-a.y)<16;
     if(linked) add(a,b);
-    else{const p=railsList[i-1];if(!(p&&(p.k||'metal')===(a.k||'metal')&&Math.hypot(p.x-a.x,p.y-a.y)<16)) add(a,a);}   // punto isolato
+    else{const p=railsList[i-1];if(!(p&&!a.brk&&(p.k||'metal')===(a.k||'metal')&&Math.hypot(p.x-a.x,p.y-a.y)<16)) add(a,a);}   // punto isolato
   }
 }
 const ACCEL=112,BRAKE=230,MAXSPD=230,REVMAX=-70,STEERRATE=2.4;
@@ -4469,7 +4544,7 @@ function applyLighting(L,theme){
 let headlightBase=0,tunnelT=0;
 // luce calda delle lampade al sodio, attiva solo in galleria
 const tunnelLamp=new THREE.PointLight(0xffb866,0,22,1.4);
-tunnelLamp.position.set(0,4.2,0.5);carGroup.add(tunnelLamp);
+tunnelLamp.position.set(0,2.3,0.5);carGroup.add(tunnelLamp);   // (sotto la volta della galleria)
 function applyTunnelLight(){
   sun.intensity=curLight.sunI*(1-0.85*tunnelT);
   hemi.intensity=curLight.hI*(1-0.55*tunnelT);
@@ -4697,7 +4772,7 @@ const CAR_PHYS={
   raid:   {a:6.5,b:6.5,track:8.3, hL:0.32,rollF:0.64,rear:0.5, grip:0.97,iz:1.25,stab:0.9,drive:'integrale'},
   buggy:  {a:6.5,b:6.0,track:10.6,hL:0.2, rollF:0.38,rear:1.0, grip:1.03,iz:0.8, stab:0.45,drive:'posteriore'}
 };
-const phys={ax:0,ay:0,alphaF:0,alphaR:0,spin:0,lock:0,laF:0,laR:0};
+const phys={ax:0,ay:0,alphaF:0,alphaR:0,spin:0,lock:0,laF:0,laR:0,muF:1,muR:1,exF:0,exR:0,rear:0.5};
 const TYRE_RELAX=22;   // unità pista (~2,3 m): ritardo della risposta delle gomme
 const YAW_INERTIA=1.45;
 // velocità di rotazione del volante (rad/s delle ruote): più lenta ad alta velocità
@@ -4820,6 +4895,8 @@ function physicsStep(h,P,mu,drive,brake,hb,airborne){
     phys.spin+=(Math.min(1,driveEx*1.5)-phys.spin)*Math.min(1,h*20);
     phys.lock+=(Math.min(1,(brake>0||hb)?Math.max(exF,exR)*1.5+(hb?0.6:0):0)-phys.lock)*Math.min(1,h*20);
     phys.alphaF=af;phys.alphaR=ar;
+    // per l'HUD gomme: aderenza disponibile di ciascun asse ed eccesso di richiesta (oltre il cerchio d'aderenza)
+    phys.muF=muF/(P.grip||1);phys.muR=muR*(hb?0.72:1)/(P.grip||1);phys.exF=exF;phys.exR=exR;phys.rear=P.rear;
     // equazioni del moto nel sistema dell'auto che ruota
     const axL=Fxf*cd-Fyf*sd+Fxr,ayL=Fyf*cd+Fxf*sd+Fyr;
     // inerzia d'imbardata aumentata: l'auto impiega un attimo a mettersi in rotazione (e a smettere)
@@ -5122,6 +5199,7 @@ function verticalStep(h,ax,ay){
       if(f>0) contacts++;
     }
     F+=f;Mp+=f*w.rest.z;Mr+=f*w.rest.x;
+    w.ld=f/(GRAV_Y/4);                         // carico sulla ruota (1 = a riposo, 0 = sollevata): per l'HUD gomme
   }
   // coppie d'inerzia: in frenata il muso si abbassa, in curva la scocca si inclina verso l'esterno
   // (accelerazioni orizzontali riportate alla scala della gravità verticale)
@@ -5340,6 +5418,66 @@ function updateTyreFX(dt,active){
 const camOffset=new THREE.Vector3();
 const camTarget=new THREE.Vector3();
 let camYaw=0;
+// ---- telecamera in galleria ----
+// Prima dell'imbocco (con un anticipo di ~1,3 s, più lungo se si va forte) la camera scende sotto la volta
+// e si avvicina un po'; dentro resta un normale inseguimento dietro l'auto (stessa direzione e stessa
+// risposta allo sterzo di fuori), ma viene tenuta dentro la sezione della galleria: si proietta in modo
+// continuo sull'asse della strada e lo scostamento laterale si limita a distanza dalle pareti. Così non
+// attraversa mai pareti o volta e non ci sono scatti. All'uscita torna gradualmente all'inquadratura scelta.
+let tunCamS=0;                                   // 0 = camera normale, 1 = camera da galleria (smorzato)
+const _tp=new THREE.Vector3(),_tt=new THREE.Vector3();
+const TUN_CAM_D=4.7,TUN_CAM_H=1.8;               // distanza dietro l'auto e altezza sulla strada (unità mondo)
+let tunCamRoad=0;                                // quota della strada sotto la camera da galleria
+// direzione dell'inseguimento: segue il muso (più una parte della derapata) con un po' di ritardo
+function followYaw(){
+  const beta=Math.atan2(car.vy,Math.max(Math.abs(car.speed),8));
+  let dYaw=car.angle+beta*0.45-camYaw;
+  dYaw=Math.atan2(Math.sin(dYaw),Math.cos(dYaw));
+  camYaw+=Math.abs(dYaw)>1.5?dYaw:dYaw*0.1;
+}
+// la camera non deve finire nel terreno: il limite si applica al punto verso cui si muove (poi ammorbidito),
+// non alla camera stessa. Così vicino ai fianchi ripidi delle montagne (imbocchi delle gallerie, strapiombo)
+// non viene sbalzata su e giù a ogni fotogramma.
+function groundSafe(o){
+  if(tunCamS>=0.5) return;
+  const gd=terrainAt(o.x/S3,o.z/S3)+1.2;
+  if(o.y<gd) o.y=gd;
+}
+function tunnelCamBlend(){
+  if(!wps.length) return 0;
+  const ramp=Math.max(12,Math.abs(car.speed)*1.6/STEP);
+  let b=0;
+  for(let k=-5-Math.ceil(ramp);k<=Math.ceil(ramp)+3;k++){
+    const w=wps[lastIdx+k];if(!w||!w.tunnel) continue;
+    // appena dietro l'auto (dove sta la camera) e appena davanti: dentro; più avanti: anticipo progressivo;
+    // galleria ormai alle spalle: la camera torna su e indietro gradualmente
+    let f=k<-5?Math.max(0,1-(-5-k)/ramp):k<=3?1:Math.max(0,1-(k-3)/ramp);
+    f=f*f*(3-2*f);
+    if(f>b) b=f;
+    if(b>=1) break;
+  }
+  return b;
+}
+// camera da galleria: distW dietro l'auto lungo la direzione (dx,dz), riportata dentro la sezione della
+// galleria (in _tp), e punto di mira davanti all'auto (in _tt). Restituisce la quota della strada lì sotto.
+function tunnelCamFrom(dx,dz,distW){
+  const px=(car.x*S3-dx*distW)/S3,py=(car.y*S3-dz*distW)/S3;
+  // punto più vicino sull'asse della strada (segmenti attorno all'auto): continuo, niente salti tra i waypoint
+  let best=1e18,qx=px,qy=py,nx=0,ny=1,half=20,elev=carVisElev;
+  const i0=Math.max(0,lastIdx-10),i1=Math.min(wps.length-2,lastIdx+3);
+  for(let i=i0;i<=i1;i++){
+    const a=wps[i],b=wps[i+1],ex=b.x-a.x,ey=b.y-a.y,L2=ex*ex+ey*ey||1;
+    const t=Math.max(0,Math.min(1,((px-a.x)*ex+(py-a.y)*ey)/L2));
+    const cx=a.x+ex*t,cy=a.y+ey*t,d=(px-cx)*(px-cx)+(py-cy)*(py-cy);
+    if(d<best){best=d;qx=cx;qy=cy;const L=Math.sqrt(L2);nx=-ey/L;ny=ex/L;half=a.half+(b.half-a.half)*t;elev=a.elev+(b.elev-a.elev)*t;}
+  }
+  // scostamento laterale dall'asse: libero, ma sempre a distanza dalle pareti
+  const lim=Math.max(0,half-4.5),lat=Math.max(-lim,Math.min(lim,(px-qx)*nx+(py-qy)*ny));
+  _tp.set((qx+nx*lat)*S3,elev+TUN_CAM_H,(qy+ny*lat)*S3);
+  _tt.set(car.x*S3+dx*3,carVisElev+0.65,car.y*S3+dz*3);
+  tunCamRoad=elev;
+  return elev;
+}
 function updateScene(){
   const cx=car.x*S3, cz=car.y*S3;
   // increspature dell'acqua mosse dal vento
@@ -5363,6 +5501,7 @@ function updateScene(){
   sun.target.updateMatrixWorld();
 
   const onboard=!demoMode&&!replayMode&&!(countdownT>0||finishing)&&(camMode==='hood'||camMode==='bumper');
+  {const tb=tunnelCamBlend();tunCamS+=(tb-tunCamS)*(tb>tunCamS?0.18:0.05);if(tunCamS<0.002) tunCamS=0;}   // (si esce più piano di come si entra)
   if(demoMode) demoCamera(cx,cz,dirX,dirZ);
   else if(replayMode) replayCamera(cx,cz,dirX,dirZ);
   else if(onboard){
@@ -5402,21 +5541,35 @@ function updateScene(){
     // davanti alla tribuna di partenza la telecamera si avvicina invece di finirci dentro
     while(D>4&&(inStand(cx-cdx*D,-1e4,cz-cdz*D)||standBlocks(cx-cdx*D,camY,cz-cdz*D,cx,carVisElev+0.8,cz))) D-=1;
     camOffset.set(cx-cdx*(D+airPull-zoomIn),camY,cz-cdz*(D+airPull-zoomIn));
-    camera.position.lerp(camOffset,0.12);
+    // galleria: in anticipo la camera scende, si avvicina e resta dentro la sezione (vedi tunnelCamFrom)
+    if(tunCamS>0){tunnelCamFrom(cdx,cdz,TUN_CAM_D);camOffset.lerp(_tp,tunCamS);}
+    groundSafe(camOffset);
+    camera.position.lerp(camOffset,0.12+0.16*tunCamS);
     if(camShake>0.01){
-      camera.position.x+=(Math.random()-0.5)*camShake*0.35;
-      camera.position.y+=(Math.random()-0.5)*camShake*0.35;
-      camera.position.z+=(Math.random()-0.5)*camShake*0.35;
+      const sh=camShake*0.35*(1-0.6*tunCamS);
+      camera.position.x+=(Math.random()-0.5)*sh;
+      camera.position.y+=(Math.random()-0.5)*sh;
+      camera.position.z+=(Math.random()-0.5)*sh;
     }
     camTarget.set(cx+cdx*4,0.8+carVisElev+carAirY*0.5,cz+cdz*4);
+    if(tunCamS>0) camTarget.lerp(_tt,tunCamS);
   }
   // la telecamera non deve entrare nelle colline (a bordo è attaccata all'auto)
+  // (in galleria il "terreno" è la montagna sopra: lì conta la strada, e la camera resta sotto la volta)
   if(!onboard){
-    const camGround=terrainAt(camera.position.x/S3,camera.position.z/S3)+1.2;
-    if(camera.position.y<camGround) camera.position.y=camGround;
+    if(tunCamS>0.05){
+      const road=tunnelCamFrom(Math.cos(camYaw),Math.sin(camYaw),TUN_CAM_D);
+      if(tunCamS>0.85) camera.position.y=Math.min(camera.position.y,road+TUN_CROWN-0.75);
+      camera.position.y=Math.max(camera.position.y,road+0.6);
+    }else{
+      // (sicurezza: il limite vero è sul punto di arrivo, vedi groundSafe; qui solo per non bucare il terreno)
+      const camGround=terrainAt(camera.position.x/S3,camera.position.z/S3)+0.45;
+      if(camera.position.y<camGround) camera.position.y=camGround;
+    }
   }
   camera.lookAt(camTarget);
   if(!replayMode) camera.fov=demoMode?50:onboard?(camMode==='bumper'?74:68):camMode==='heli'?48:60+Math.min(4,carAirY*1.8)-jumpAnticipation*4;
+  if(!onboard&&tunCamS>0) camera.fov+=(64-camera.fov)*tunCamS;   // in galleria un'inquadratura un po' più ampia
   camera.updateProjectionMatrix();
   skyMesh.position.copy(camera.position);
   sunDisc.position.copy(camera.position).addScaledVector(sunDir,360);
@@ -5452,7 +5605,7 @@ function demoCamera(cx,cz,dirX,dirZ){
   const w=wps[lastIdx],y=carVisElev;
   // dentro tunnel e sui ponti solo inseguimento; altrove un'inquadratura diversa ogni 7 secondi
   const garage=titleOpen()&&titleSub==='garage';
-  const mode=garage&&!w.struct?'showroom':(w.tunnel||w.bridgeF>0)?'chase':DEMO_CAMS[Math.floor(demoTime/7)%DEMO_CAMS.length];
+  const mode=garage&&!w.struct?'showroom':(tunCamS>0.02||w.tunnel||w.bridgeF>0)?'chase':DEMO_CAMS[Math.floor(demoTime/7)%DEMO_CAMS.length];
   const nx=-dirZ,nz=dirX;
   if(mode==='showroom'){ // garage: orbita ravvicinata per guardare bene l'auto
     const a=demoTime*0.35;
@@ -5471,8 +5624,12 @@ function demoCamera(cx,cz,dirX,dirZ){
   }else{
     camOffset.set(cx-dirX*8,y+3.2,cz-dirZ*8);
   }
-  camera.position.lerp(camOffset,0.05);
+  followYaw();
+  if(tunCamS>0){tunnelCamFrom(Math.cos(camYaw),Math.sin(camYaw),TUN_CAM_D);camOffset.lerp(_tp,tunCamS);}
+  groundSafe(camOffset);
+  camera.position.lerp(camOffset,0.05+0.2*tunCamS);
   camTarget.set(cx+dirX*1.5,0.7+y,cz+dirZ*1.5);
+  if(tunCamS>0) camTarget.lerp(_tt,tunCamS);
 }
 
 // ======================= TELECAMERE DI GARA =======================
@@ -5512,7 +5669,8 @@ function recFrame(dt){
   recAcc=0;
   const m=carModels[curCarId];
   rec.push([recT,car.x,car.y,car.angle,car.speed,VB.y,VB.p,VB.r,steerAng,rpm,throttleS,slipAmt,carAirY,
-    m?m.wheels.map(w=>w.susX||0):[0,0,0,0],carVisElev,car.vy]);
+    m?m.wheels.map(w=>w.susX||0):[0,0,0,0],carVisElev,car.vy,
+    HUD.tyres.slice(),ctl.brk,ctl.hb?1:0,HUD.air.slice()]);   // (HUD: gomme, freno, freno a mano, ruote sollevate)
 }
 function startReplay(){
   if(rec.length<10) return;
@@ -5533,6 +5691,7 @@ function applyRecFrame(a,b,t){
   car.x=L(1);car.y=L(2);car.angle=a[3]+da*t;car.speed=L(4);car.vy=L(15);
   VB.y=L(5);VB.p=L(6);VB.r=L(7);steerAng=L(8);rpm=L(9);throttleS=L(10);slipAmt=L(11);carAirY=L(12);carVisElev=L(14);
   const m=carModels[curCarId];if(m) m.wheels.forEach((w,i)=>{w.susX=a[13][i]+(b[13][i]-a[13][i])*t;});
+  if(a[16]){for(let i=0;i<4;i++){HUD.tyres[i]=a[16][i]+(b[16][i]-a[16][i])*t;HUD.air[i]=a[19][i];}HUD.brk=L(17);HUD.hb=a[18]>0;}
   // pseudo derive per la scia e la polvere (derivate dallo slittamento registrato)
   phys.alphaF=phys.alphaR=0.1+0.25*slipAmt;phys.spin=0;phys.lock=0;
 }
@@ -5566,7 +5725,7 @@ function replayCamera(cx,cz,dirX,dirZ){
       if(inStand(replayShot.pos.x,replayShot.pos.y,replayShot.pos.z)) replayShot.kind='side';
     }
   }
-  let kind=(w.tunnel||w.bridgeF>0)?'chase':replayShot.kind;
+  let kind=(tunCamS>0.02||w.tunnel||w.bridgeF>0)?'chase':replayShot.kind;
   const nx=-dirZ,nz=dirX,s=replayShot;
   if(kind==='track'){
     camera.position.copy(s.pos);camTarget.set(cx,0.7+y,cz);
@@ -5582,13 +5741,201 @@ function replayCamera(cx,cz,dirX,dirZ){
   else if(kind==='front') camOffset.set(cx+dirX*9+nx*2.5,y+1.6,cz+dirZ*9+nz*2.5);
   else camOffset.set(cx-dirX*7.5,y+3.2,cz-dirZ*7.5);
   if(standBlocks(camOffset.x,camOffset.y,camOffset.z,cx,y+0.8,cz)) camOffset.set(cx+nx*6+dirX*2,y+1.1,cz+nz*6+dirZ*2);  // tribuna in mezzo: ripresa laterale
-  camera.position.lerp(camOffset,replayT-s.start<0.05?1:0.08);
+  followYaw();
+  if(tunCamS>0){tunnelCamFrom(Math.cos(camYaw),Math.sin(camYaw),TUN_CAM_D);camOffset.lerp(_tp,tunCamS);}
+  groundSafe(camOffset);
+  camera.position.lerp(camOffset,replayT-s.start<0.05?1:0.08+0.2*tunCamS);
   camTarget.set(cx+dirX*1.5,0.7+y,cz+dirZ*1.5);
+  if(tunCamS>0) camTarget.lerp(_tt,tunCamS);
 }
 const replayEl=document.createElement('div');
 replayEl.style.cssText='position:fixed;top:58px;left:50%;transform:translateX(-50%);z-index:30;color:#fff;font:bold 15px Segoe UI,sans-serif;background:rgba(200,30,30,.85);padding:6px 16px;border-radius:8px;letter-spacing:.08em;display:none;pointer-events:none;';
 replayEl.textContent='● REPLAY  ·  Invio / Esc / A / B per uscire';
 document.body.appendChild(replayEl);
+
+// ======================= HUD DI GARA =======================
+// In alto a sinistra il tempo dello stage; in basso a destra un quadrante con contagiri (arco in basso),
+// marcia e velocità al centro, acceleratore (verde, a destra) e freno (rosso, a sinistra) attorno alla
+// marcia, avanzamento nello stage (arco in alto) e spia del freno a mano; in basso a sinistra le quattro
+// gomme viste dall'alto, dal verde (massima aderenza) al rosso (aderenza persa).
+const hudTimeBox=document.getElementById('hudTimeBox'),htLbl=document.getElementById('htLbl'),htVal=document.getElementById('htVal'),htSub=document.getElementById('htSub');
+const gaugeCv=document.getElementById('hudGauge'),tyreCv=document.getElementById('hudTyres');
+const gctx=gaugeCv.getContext('2d'),tctx=tyreCv.getContext('2d');
+const HUD={thr:0,brk:0,hb:false,tyres:[1,1,1,1],wet:[0,0,0,0],air:[0,0,0,0]};
+const KMH=0.727;      // unità pista/s → km/h (l'auto è lunga ~20 unità ≈ 4 m)
+const RPM_MAX=8000;
+const fmtClock=t=>{t=Math.max(0,t);const m=Math.floor(t/60),s=t-m*60;return m+':'+(s<10?'0':'')+s.toFixed(2);};
+// aderenza di ogni gomma (1 = piena, 0 = nessuna): fondo e pozzanghere (aderenza dell'asse), carico sulla
+// ruota (sospensione: una ruota scarica in curva o sollevata tiene meno), deriva oltre il picco della curva
+// della gomma, richiesta oltre il cerchio d'aderenza, pattinamento in accelerazione, bloccaggio, freno a mano
+function tyreGrip(dt){
+  const m=carModels[curCarId];if(!m) return;
+  const spd=Math.hypot(car.speed,car.vy),moving=Math.min(1,spd/30);
+  const peak=2.05/(tyreK.B||8);
+  const over=la=>Math.max(0,Math.min(1,(Math.abs(la)/peak-0.75)/0.9))*moving;
+  const overF=over(phys.laF),overR=over(phys.laR);
+  m.wheels.forEach((w,i)=>{
+    const front=w.rest.z>0,ld=w.ld===undefined?1:w.ld;
+    let g;
+    if(ld<0.04){g=0;HUD.air[i]=1;}
+    else{
+      HUD.air[i]=0;
+      const avail=Math.max(0,Math.min(1,front?phys.muF:phys.muR))*Math.min(1,0.45+0.55*ld);
+      let slide=Math.max(front?overF:overR,Math.min(1,(front?phys.exF:phys.exR)*1.6));
+      slide=Math.max(slide,phys.spin*Math.min(1,(front?1-phys.rear:phys.rear)*1.6));
+      slide=Math.max(slide,phys.lock*(front?0.75:1)*Math.min(1,spd/15));
+      if(!front&&HUD.hb) slide=Math.max(slide,0.85*Math.min(1,spd/20));
+      g=(0.3+0.7*avail)*(1-0.9*Math.min(1,slide));
+    }
+    HUD.tyres[i]+=(g-HUD.tyres[i])*Math.min(1,dt*12);
+    HUD.wet[i]=w.wet?1:0;
+  });
+}
+// adatta la risoluzione del canvas alla dimensione a schermo (nitido anche su schermi ad alta densità)
+function fitCanvas(cv,lw){
+  const css=cv.clientWidth;if(!css) return 0;
+  const px=Math.round(css*Math.min(2,window.devicePixelRatio||1));
+  const lh=Math.round(lw*cv.height/cv.width)||lw;
+  if(cv.width!==px){const ph=Math.round(px*lh/lw);cv.width=px;cv.height=ph;}
+  return px/lw;
+}
+const DEG=Math.PI/180;
+const H_GREEN='#3ddc84',H_YEL='#ffd23f',H_RED='#ff4757',H_ACC='#ffcf5c';
+const H_NUM="'Teko','Saira Semi Condensed','Segoe UI',sans-serif",H_TXT="'Saira Semi Condensed','Segoe UI',Tahoma,sans-serif";
+function spaced(g,px){if('letterSpacing' in g) g.letterSpacing=px+'px';}
+// quadrante: vetro scuro con bordo metallico, contagiri a led sull'arco in basso, marcia al centro,
+// velocità sotto, acceleratore e freno sui due lati della marcia, spia del freno a mano e avanzamento in alto
+function drawGauge(){
+  const k=fitCanvas(gaugeCv,240);if(!k) return;
+  const g=gctx,cx=120,cy=120,R=114;
+  g.setTransform(k,0,0,k,0,0);g.clearRect(0,0,240,240);
+  g.textAlign='center';g.textBaseline='middle';spaced(g,0);
+  // fondo e bordo
+  const bg=g.createRadialGradient(cx,cy-40,8,cx,cy,R);
+  bg.addColorStop(0,'rgba(38,42,52,.94)');bg.addColorStop(.62,'rgba(15,17,23,.92)');bg.addColorStop(1,'rgba(6,7,10,.88)');
+  g.fillStyle=bg;g.beginPath();g.arc(cx,cy,R,0,Math.PI*2);g.fill();
+  const bz=g.createLinearGradient(0,cy-R,0,cy+R);
+  bz.addColorStop(0,'rgba(255,255,255,.5)');bz.addColorStop(.45,'rgba(255,255,255,.06)');bz.addColorStop(1,'rgba(255,255,255,.25)');
+  g.lineWidth=3;g.strokeStyle=bz;g.stroke();
+  g.lineWidth=1;g.strokeStyle='rgba(255,255,255,.06)';g.beginPath();g.arc(cx,cy,R-8,0,Math.PI*2);g.stroke();
+  // avanzamento nello stage: arco sottile in alto
+  const prog=wps.length>1?Math.min(1,lastIdx/(wps.length-1)):0,p0=-128*DEG,ps=76*DEG;
+  g.lineCap='round';g.lineWidth=3;
+  g.strokeStyle='rgba(255,255,255,.1)';g.beginPath();g.arc(cx,cy,R-15,p0,p0+ps);g.stroke();
+  if(prog>0.005){g.strokeStyle=H_ACC;g.beginPath();g.arc(cx,cy,R-15,p0,p0+ps*prog);g.stroke();}
+  // contagiri a led: da sinistra (158°) a destra (22°) passando per il fondo
+  const a0=158*DEG,span=136*DEG,N=34,gap=1.3*DEG,rr=R-17;
+  const f=Math.max(0,Math.min(1,rpm/RPM_MAX)),red=RED_RPM/RPM_MAX;
+  g.lineCap='butt';g.lineWidth=14;
+  for(let i=0;i<N;i++){
+    const f0=i/N,s0=a0-f0*span-gap/2,s1=a0-(i+1)/N*span+gap/2;
+    const zone=f0>=red-0.004?H_RED:f0>=0.66?H_YEL:H_GREEN;
+    const lit=f>f0+0.5/N;
+    g.strokeStyle=lit?zone:(zone===H_RED?'rgba(255,71,87,.2)':'rgba(255,255,255,.07)');
+    g.shadowColor=zone;g.shadowBlur=lit?8:0;
+    g.beginPath();g.arc(cx,cy,rr,s0,s1,true);g.stroke();
+  }
+  g.shadowBlur=0;
+  g.font='500 16px '+H_NUM;
+  for(let n=0;n<=8;n++){
+    const a=a0-n/8*span;
+    g.fillStyle=n*1000>=RED_RPM-100?H_RED:'rgba(244,251,255,.55)';
+    g.fillText(n,cx+Math.cos(a)*(rr-19),cy+Math.sin(a)*(rr-19)+1.5);
+  }
+  // acceleratore (verde, a destra) e freno (rosso, a sinistra): si riempiono dal basso verso l'alto
+  const ri=58,ts=104*DEG;
+  g.lineCap='round';g.lineWidth=6;g.strokeStyle='rgba(255,255,255,.08)';
+  g.beginPath();g.arc(cx,cy,ri,52*DEG,52*DEG-ts,true);g.stroke();
+  g.beginPath();g.arc(cx,cy,ri,128*DEG,128*DEG+ts);g.stroke();
+  const pedal=(v,col,start,dirSign)=>{
+    if(v<0.01) return;
+    g.strokeStyle=col;g.shadowColor=col;g.shadowBlur=10;
+    g.beginPath();g.arc(cx,cy,ri,start,start+dirSign*ts*Math.min(1,v),dirSign<0);g.stroke();g.shadowBlur=0;
+  };
+  pedal(HUD.thr,H_GREEN,52*DEG,-1);
+  pedal(HUD.brk,H_RED,128*DEG,1);
+  // marcia, leggermente inclinata; lampeggia in rosso al limitatore
+  const gt=countdownT>0?'N':car.speed<-2?'R':String(gear);
+  const flash=rpm>RED_RPM*0.96&&Math.floor(performance.now()/80)%2===0;
+  g.save();g.translate(cx,cy+2);g.transform(1,0,-0.14,1,0,0);
+  g.font='600 92px '+H_NUM;g.fillStyle=flash?H_RED:'#ffffff';
+  g.shadowColor=flash?H_RED:'rgba(0,0,0,.6)';g.shadowBlur=flash?16:6;
+  g.fillText(gt,0,0);g.restore();g.shadowBlur=0;
+  // velocità
+  g.font='600 30px '+H_NUM;g.fillStyle='#f4fbff';
+  g.fillText(Math.round(Math.abs(car.speed)*KMH),cx,cy+44);
+  g.font='700 8.5px '+H_TXT;spaced(g,2);g.fillStyle='rgba(244,251,255,.5)';
+  g.fillText('KM/H',cx+1,cy+60);spaced(g,0);
+  // spia del freno a mano: (P) come sul cruscotto
+  const hb=HUD.hb,hc=hb?H_RED:'rgba(244,251,255,.2)';
+  g.strokeStyle=hc;g.fillStyle=hc;g.lineWidth=1.6;g.shadowColor=H_RED;g.shadowBlur=hb?10:0;
+  g.beginPath();g.arc(cx,cy-60,7.5,0,Math.PI*2);g.stroke();
+  g.beginPath();g.arc(cx,cy-60,11,-0.75,0.75);g.stroke();g.beginPath();g.arc(cx,cy-60,11,Math.PI-0.75,Math.PI+0.75);g.stroke();
+  g.font='700 10px '+H_TXT;g.fillText('P',cx,cy-59.5);g.shadowBlur=0;
+}
+// gomme: dal verde (aderenza piena) al giallo e al rosso (aderenza persa)
+const tyreColor=v=>{v=Math.max(0,Math.min(1,v));return 'hsl('+Math.round(120*v*v*(3-2*v))+',88%,'+Math.round(52-4*v)+'%)';};
+function rrect(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();}
+function drawTyres(){
+  const k=fitCanvas(tyreCv,100);if(!k) return;
+  const g=tctx;g.setTransform(k,0,0,k,0,0);g.clearRect(0,0,100,150);
+  g.textAlign='center';g.textBaseline='middle';
+  // pannello a vetro tagliato in diagonale (come i riquadri del tempo)
+  g.beginPath();g.moveTo(0,0);g.lineTo(100,0);g.lineTo(100,138);g.lineTo(88,150);g.lineTo(0,150);g.closePath();
+  const pg=g.createLinearGradient(0,0,0,150);pg.addColorStop(0,'rgba(9,11,15,.82)');pg.addColorStop(1,'rgba(9,11,15,.6)');
+  g.fillStyle=pg;g.fill();g.strokeStyle='rgba(255,255,255,.14)';g.lineWidth=1;g.stroke();
+  g.fillStyle=H_ACC;g.fillRect(0,0,3,150);
+  // sagoma dell'auto vista dall'alto (muso in alto)
+  g.fillStyle='rgba(244,251,255,.1)';g.strokeStyle='rgba(244,251,255,.22)';g.lineWidth=1;
+  rrect(g,35,16,32,108,11);g.fill();g.stroke();
+  g.fillStyle='rgba(244,251,255,.22)';rrect(g,39,40,24,13,4);g.fill();           // parabrezza
+  g.fillStyle='rgba(244,251,255,.12)';rrect(g,39,96,24,9,3);g.fill();            // lunotto
+  const m=carModels[curCarId];
+  if(m) m.wheels.forEach((w,i)=>{
+    const front=w.rest.z>0,left=w.rest.x>0;
+    const x=left?22:80,y=front?38:102,v=HUD.tyres[i],col=tyreColor(v);
+    g.save();g.translate(x,y);
+    if(front) g.rotate(steerAng);                                          // le anteriori sterzano (sinistra = angolo negativo)
+    if(HUD.air[i]>0){g.setLineDash([3,2.5]);g.lineWidth=2;g.strokeStyle=col;rrect(g,-7,-13,14,26,4);g.stroke();g.setLineDash([]);}
+    else{
+      g.shadowColor=col;g.shadowBlur=v<0.5?9:4;
+      g.fillStyle=col;rrect(g,-7,-13,14,26,4);g.fill();g.shadowBlur=0;
+      const hl=g.createLinearGradient(-7,0,7,0);hl.addColorStop(0,'rgba(255,255,255,.28)');hl.addColorStop(.5,'rgba(255,255,255,0)');hl.addColorStop(1,'rgba(0,0,0,.22)');
+      g.fillStyle=hl;rrect(g,-7,-13,14,26,4);g.fill();
+      g.strokeStyle='rgba(0,0,0,.3)';g.lineWidth=1;
+      for(let s=-8;s<=8;s+=4){g.beginPath();g.moveTo(-4.5,s);g.lineTo(4.5,s);g.stroke();}   // battistrada
+    }
+    if(HUD.wet[i]){g.fillStyle='#6cc4ff';g.beginPath();g.arc(0,-18,2.6,0,Math.PI*2);g.fill();}
+    g.restore();
+  });
+  g.font='700 8.5px '+H_TXT;spaced(g,2);g.fillStyle='rgba(244,251,255,.6)';
+  g.fillText('GRIP',51,137);spaced(g,0);
+}
+// tempo con cifre a larghezza fissa (span .d) e separatori stretti (span .s)
+const clockHTML=t=>fmtClock(t).replace(/./g,c=>c>='0'&&c<='9'?'<span class="d">'+c+'</span>':'<span class="s">'+c+'</span>');
+const hudRecBox=document.getElementById('hudRecBox'),hrLbl=document.getElementById('hrLbl'),hrVal=document.getElementById('hrVal');
+let hudTxt='',hudRecTxt='';
+function hudFrame(dt){
+  if(titleOpen()||demoMode) return;
+  if(replayMode) HUD.thr=throttleS;
+  else{
+    HUD.thr=ctl.thr;HUD.brk=ctl.brk;HUD.hb=ctl.hb;
+    if(running&&!paused) tyreGrip(dt);
+  }
+  // cronometro (a sinistra) e record (a destra, in viola, solo se esiste)
+  const t=replayMode?replayT:elapsed;
+  const lbl=gameMode==='ta'?'Time Attack':'Stage '+stage+'/'+TOTAL_STAGES;
+  const sub=gameMode==='ta'?'':'Totale '+fmtClock(stageDone||replayMode?sumTimes():sumTimes()+elapsed);
+  const tt=fmtClock(t),txt=lbl+'|'+tt+'|'+sub;
+  if(txt!==hudTxt){hudTxt=txt;htLbl.textContent=lbl;htVal.innerHTML=clockHTML(t);htSub.textContent=sub;}
+  const rv=gameMode==='ta'?taBest[course]:bestTotal;
+  const rtxt=rv?(gameMode==='ta'?'Record pista':'Record carriera')+'|'+fmtClock(rv):'';
+  if(rtxt!==hudRecTxt){
+    hudRecTxt=rtxt;hudRecBox.hidden=!rv;
+    if(rv){hrLbl.textContent=gameMode==='ta'?'Record pista':'Record carriera';hrVal.innerHTML=clockHTML(rv);}
+  }
+  drawGauge();drawTyres();
+}
 
 let lastT=performance.now(),paused=false;
 function loop(now){
@@ -5597,6 +5944,7 @@ function loop(now){
   readInput();
   navFrame();
   touchFrame();
+  hudFrame(dt);
   if(demoMode){
     demoUpdate(dt);slipAmt=0;updateEngine(dt,0);
     const st=Math.max(1,Math.ceil(dt/0.004));
