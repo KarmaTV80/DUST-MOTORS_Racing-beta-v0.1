@@ -1,0 +1,17 @@
+{
+  "name": "Dust & Motors",
+  "short_name": "Dust&Motors",
+  "description": "Rally 3D: 12 stage, Time Attack e replay.",
+  "lang": "it",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#141c11",
+  "theme_color": "#141c11",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
