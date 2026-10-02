@@ -61,7 +61,7 @@ del giorno sempre uguali, così si può imparare la strada e migliorare.
 
 Lungo il percorso si incontrano:
 
-- **Tornanti e curve strette** che obbligano a frenare e a usare il freno a mano, più frequenti nei passi di montagna.
+- **Tornanti e curve strette** da affrontare rallentando bene, più frequenti nei passi di montagna.
 - **Ponti e gallerie**, comprese gallerie scavate nella roccia sulla costa.
 - **Pozzanghere** che fanno perdere aderenza di colpo e rallentano l'auto.
 - **Guard-rail, alberi, rocce, staccionate, balle di fieno** e altri ostacoli da evitare.
@@ -136,7 +136,7 @@ La guida è pensata per essere da rally, non da arcade:
 - **Sterzo con ritardo**: bisogna anticipare la curva e impostarla prima.
 - **Fondi diversi**: ogni fondo ha la sua aderenza e il suo comportamento delle gomme. Sull'asfalto
   l'auto è precisa, su sabbia, fango e neve scivola molto di più.
-- **Freno a mano** per chiudere i tornanti.
+- **Sterzo che si apre a bassa velocità**: nei tornanti, rallentando, l'auto chiude la curva; in velocità lo sterzo è più limitato e la guida meno nervosa.
 - **Cambio automatico a 5 marce**, con contagiri nella barra in alto.
 - **Pozzanghere**: perdita netta di aderenza, rallentamento e vibrazione.
 - **Fuori pista**: l'auto rallenta, e la retromarcia è un po' più forte per tornare in strada.
@@ -170,7 +170,6 @@ teleobiettivo, inseguimento, ripresa laterale, elicottero, frontale e orbita att
 | Sterzo | ← → oppure A D |
 | Acceleratore | ↑ oppure W |
 | Freno / retromarcia | ↓ oppure S |
-| Freno a mano | Spazio |
 | Cambia telecamera | C |
 | Pausa | Esc oppure P |
 | Conferma nei menu | Invio |
@@ -182,7 +181,6 @@ teleobiettivo, inseguimento, ripresa laterale, elicottero, frontale e orbita att
 | Sterzo | Levetta sinistra oppure croce |
 | Acceleratore | RT / R2 oppure A / ✕ |
 | Freno / retromarcia | LT / L2 oppure B / ○ |
-| Freno a mano | X / □ oppure RB / R1 |
 | Cambia telecamera | Y / △ oppure View / Share |
 | Pausa e conferma | Start / Options, A / ✕ |
 
@@ -199,7 +197,6 @@ joypad, mouse o tocco.
 |---|---|
 | Metà sinistra | **Sterzo analogico**: appoggia il pollice dove vuoi e trascina a destra o sinistra. |
 | GAS / FRENO | In basso a destra. Si può far scivolare il dito da un pedale all'altro. |
-| MANO | Freno a mano, sopra il gas. |
 | 🎥 / ⏸ | In alto a destra: cambia telecamera e pausa. |
 
 Il telefono va tenuto **in orizzontale**. Se lo giri in verticale durante la gara, il gioco va

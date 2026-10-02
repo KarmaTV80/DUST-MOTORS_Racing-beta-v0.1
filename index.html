@@ -171,10 +171,13 @@
   /* ---- HUD di gara ---- */
   /* stile da gioco di corse: pannelli scuri "a vetro" tagliati in diagonale, numeri Teko, scritte
      Saira condensato; giallo del gioco per il tempo, viola (come il giro più veloce in TV) per il record */
-  :root{--hudBg:rgba(9,11,15,.80);--hudBg2:rgba(9,11,15,.50);--hudLine:rgba(255,255,255,.16);--hudPurple:#b768ff;--hudPurpleHi:#d4a6ff;
+  :root{--hudBg:rgba(9,11,15,.48);--hudBg2:rgba(9,11,15,.22);--hudLine:rgba(255,255,255,.16);--hudPurple:#b768ff;--hudPurpleHi:#d4a6ff;
     --hudNum:'Teko','Saira Semi Condensed','Segoe UI',sans-serif;--hudTxt:'Saira Semi Condensed','Segoe UI',Tahoma,sans-serif;}
   .hud{padding-left:max(16px,min(230px,22vw));padding-right:max(16px,min(230px,22vw));font-family:var(--hudTxt);font-weight:600;letter-spacing:.02em;}
   .hud .hOld,.hud .hBest{display:none !important;}
+  /* (sfondi trasparenti con una leggera sfocatura dietro: si legge anche su neve e cielo chiaro) */
+  .hudTime,.hudRec,.hudDelta{-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);}
+  .htLbl,.htSub,.htCourse,.htSurf,.htSplits,#htPct,.hdLbl,.hdSub{text-shadow:0 1px 2px rgba(0,0,0,.95),0 0 6px rgba(0,0,0,.6) !important;}
   .hudTime,.hudRec{position:fixed;top:max(10px,env(safe-area-inset-top));z-index:6;pointer-events:none;color:var(--text);
     text-shadow:0 2px 6px rgba(0,0,0,.5);display:inline-flex;flex-direction:column;}
   .hudTime{left:max(16px,env(safe-area-inset-left));padding:5px 30px 5px 12px;border-left:4px solid var(--accent);
@@ -197,7 +200,7 @@
   /* telefono: in basso ci sono i comandi touch, quindi contagiri al centro e gomme sotto il cronometro;
      il record si sposta a sinistra dei tasti telecamera e pausa */
   /* (contagiri in alto a destra, sotto il record e a sinistra dei tasti telecamera/pausa: la strada resta libera
-     e non tocca il tasto del freno a mano, che sta sotto i tasti) */
+     e non tocca i pedali in basso) */
   body.touch .hudGauge{bottom:auto;top:calc(max(10px,env(safe-area-inset-top)) + 50px);right:calc(max(14px,env(safe-area-inset-right)) + 112px);width:122px;}
   body.touch .hudTyres{bottom:auto;top:calc(max(10px,env(safe-area-inset-top)) + 76px);width:50px;}
   body.touch .hudRec{right:calc(max(14px,env(safe-area-inset-right)) + 112px);}
@@ -250,7 +253,6 @@
   .tBtn.on{background:rgba(255,207,92,.62);border-color:#ffcf5c;transform:scale(.93);color:#1b2418;text-shadow:none;}
   #tGas{right:max(20px,env(safe-area-inset-right));bottom:max(22px,env(safe-area-inset-bottom));width:104px;height:104px;background:rgba(40,120,50,.38);}
   #tBrake{right:calc(max(20px,env(safe-area-inset-right)) + 114px);bottom:max(16px,env(safe-area-inset-bottom));width:82px;height:82px;background:rgba(150,40,35,.36);}
-  #tHand{right:calc(max(20px,env(safe-area-inset-right)) + 22px);bottom:calc(max(22px,env(safe-area-inset-bottom)) + 116px);width:70px;height:70px;}
   #tCam,#tPause{top:max(58px,env(safe-area-inset-top));width:46px;height:46px;border-radius:12px;font-size:20px;}
   #tPause{right:max(14px,env(safe-area-inset-right));}
   #tCam{right:calc(max(14px,env(safe-area-inset-right)) + 56px);}
@@ -516,7 +518,7 @@ function genSegs(stage,attempt){
   }
   // Tornanti: tutti uguali (160°, raggio 34 ≈ 6 m al centro) con raccordi progressivi in entrata e in
   // uscita (la curvatura cresce e cala per gradi, come una clotoide): si impostano con regolarità e
-  // chiedono il freno a mano. Frequenti sui passi di montagna, rari altrove.
+  // si fanno rallentando bene. Frequenti sui passi di montagna, rari altrove.
   // Si entrano "riducendo" la direzione (la pista non torna indietro) e dopo c'è un rettilineo che allontana i rami.
   const hpProb=cliff?0.24:surf.scene==='mountain'||surf.scene==='snow'?0.2:0.025;
   for(let i=0;i<n;i++){
@@ -972,7 +974,10 @@ function buildTrack(stage){
   // parapetti dei ponti (visibili) e pareti dei tunnel (solo collisione)
   for(const s of structs){
     if(s.type==='bridge'){
-      for(const side of [-1,1]){railRuns.push({start:s.start,end:s.end,side});addRailPoints(s.start,s.end,side,4);}
+      // il guard-rail prosegue sulle rampe d'accesso, dove il terreno comincia a scendere nella gola:
+      // senza, si usciva di strada appena prima del ponte e si finiva sul fondo, senza modo di risalire
+      const a=Math.max(0,s.start-9),b=Math.min(N-1,s.end+9);
+      for(const side of [-1,1]){railRuns.push({start:a,end:b,side});addRailPoints(a,b,side,4);}
     }else{
       for(const side of [-1,1]) addRailPoints(s.start,s.end,side,4,'stone');
       // dall'esterno la galleria è un blocco solido: i due portali in calcestruzzo e i fianchi della collina
@@ -4836,6 +4841,34 @@ function resolveHit(cp,obst,rad,bounce,keep){
   return vn;
 }
 let hitKickT=0,postHitT=0;
+// ---- rimessa in strada: mai più bloccati ----
+// Se si dà gas o freno ma l'auto non si sposta per 2,5 s (incastrata tra ostacoli), oppure è finita in
+// basso fuori strada (gola sotto un ponte, strapiombo) da cui non si risale, la si rimette sulla strada nel
+// punto più vicino, ferma e nel senso di marcia. Il cronometro intanto corre: costa tempo, come nei rally.
+const recHist=[];let recSampleT=0,recStuckT=0,recLowT=0;
+function recoveryReset(){recHist.length=0;recSampleT=0;recStuckT=0;recLowT=0;}
+function recoveryCheck(dt){
+  if(!running||countdownT>0||finishing||stageDone||replayMode){recoveryReset();return;}
+  // posizione ogni 0,25 s: quanto ci si è spostati negli ultimi 2 secondi
+  recSampleT-=dt;
+  if(recSampleT<=0){recSampleT=0.25;recHist.push([car.x,car.y]);if(recHist.length>9) recHist.shift();}
+  const old=recHist[0],moved=recHist.length>=9?Math.hypot(car.x-old[0],car.y-old[1]):99;
+  const trying=ctl.thr>0.3||ctl.brk>0.3;
+  recStuckT=trying&&moved<6?recStuckT+dt:0;
+  const w=wps[lastIdx],below=w.elev-groundAt(car.x,car.y);
+  recLowT=offTrack&&below>3.5?recLowT+dt:0;          // ~6 m sotto la strada: gola o strapiombo
+  if(recStuckT>2.5||recLowT>2.5) recoverCar();
+}
+function recoverCar(){
+  // punto della strada più vicino, un po' più indietro se è dentro un tornante o subito dopo un ostacolo
+  let i=Math.max(0,Math.min(finishIdx-2,lastIdx));
+  const w=wps[i];
+  car.x=w.x;car.y=w.y;car.angle=w.heading;car.speed=0;car.vy=0;car.r=0;
+  phys.laF=phys.laR=phys.spin=phys.lock=0;steerAng=0;
+  carAirY=0;carVelY=0;carVisElev=w.elev;VB.init=false;
+  recoveryReset();
+  fsMsg('🔧 Auto rimessa in strada',1600);
+}
 // muso premuto contro una parete o una barriera a bassa velocità: la carrozzeria scivola sull'ostacolo e
 // l'auto si gira gradualmente lungo di esso (dalla parte verso cui è già più rivolta), così accelerando o
 // sterzando si riesce sempre a ripartire invece di restare piantati. (nx,ny) = normale verso l'esterno.
@@ -5303,8 +5336,10 @@ function frictionCircle(fx,fy,cap){
   return [fx*k,fy*k,(m-cap)/cap];
 }
 // sterzo: angolo massimo che si riduce con la velocità, e ruote che ci arrivano progressivamente
-// (ridotto: ~24,6° da fermi per i tornanti, ~12° a 80 km/h, ~9° a 145 km/h)
-const maxSteer=v=>0.43/(1+Math.abs(v)/110);
+// angolo massimo: ~12° a 80 km/h e ~9° a 145 km/h (ridotto, per una guida meno nervosa in velocità);
+// sotto i ~50 km/h torna a crescere (~27° a 20 km/h, ~36° da fermi): senza freno a mano i tornanti
+// si fanno con lo sterzo, rallentando, anche su neve e fango
+const maxSteer=v=>{const a=Math.abs(v);return 0.43/(1+a/110)+0.2*Math.exp(-(a/45)*(a/45));};
 function physicsStep(h,P,mu,drive,brake,hb,airborne){
   if(!(h>0)) return;
   if(!isFinite(car.speed+car.vy+car.r)){car.speed=car.vy=car.r=0;phys.laF=phys.laR=0;}   // valori corrotti: auto ferma
@@ -5575,6 +5610,7 @@ function update(dt){
   const drift=Math.max(0,(Math.max(Math.abs(phys.alphaF),Math.abs(phys.alphaR))-0.12)/0.3);
   slipAmt=airborne?0:Math.min(1,drift*Math.min(1,spd/60)+phys.spin*0.8+phys.lock*Math.min(1,spd/50)*0.8);
 
+  recoveryCheck(dt);
   checkpointFrame();
   if(running&&!stageDone&&countdownT<=0&&lastIdx>=finishIdx) beginFinish();
 }
@@ -5595,6 +5631,8 @@ function groundAt(x,y){
   const road=elevAt(a.dist+(b.dist-a.dist)*bt);
   const edge=Math.sqrt(best)-(a.half+(b.half-a.half)*bt);
   if(edge<=0) return road;
+  // sui ponti l'impalcato è più largo della carreggiata (fino al parapetto e oltre): lì sotto non c'è la gola
+  if(edge<=6&&(a.bridgeF>0.3||b.bridgeF>0.3)) return road;
   // oltre il bordo si passa gradualmente dal piano stradale al terreno
   const u=Math.min(1,edge/8),k=u*u*(3-2*u);
   return road+(terrainAt(x,y)-road)*k;
@@ -5642,11 +5680,15 @@ function verticalStep(h,ax,ay){
   const c=Math.cos(car.angle),s=Math.sin(car.angle);
   const sag=GRAV_Y/(4*SUS.k);                // compressione statica: a riposo le molle reggono il peso
   const sp=Math.sin(VB.p),sr=Math.sin(VB.r);
-  let F=0,Mp=0,Mr=0,contacts=0,gSum=0,gvSum=0,maxX=-1;
+  let F=0,Mp=0,Mr=0,contacts=0,gSum=0,gvSum=0,maxX=-1,gvOk=0,nOk=0;
   for(const w of m.wheels){
     const g=wheelGround(w,c,s);
-    // (limitata: un salto di quota improvviso, es. un riposizionamento, non deve catapultare l'auto)
-    const gv=Math.max(-30,Math.min(30,(g-(w.ghPrev===undefined?g:w.ghPrev))/h));w.ghPrev=g;w.gh=g;
+    // velocità con cui sale il suolo sotto la ruota. Limitata a un valore da strada vera (gradini, cordoli,
+    // rampe veloci): un salto di quota istantaneo (bordo di un ponte, auto spostata di lato da un urto,
+    // riposizionamento) non deve diventare un colpo di smorzatore che catapulta l'auto
+    const raw=(g-(w.ghPrev===undefined?g:w.ghPrev))/h;w.ghPrev=g;w.gh=g;
+    const gv=Math.max(-12,Math.min(12,raw));
+    if(Math.abs(raw)<15){gvOk+=raw;nOk++;}
     gSum+=g;gvSum+=gv;
     // quota e velocità verticale del punto della scocca sopra la ruota
     const yw=VB.y+w.rest.z*sp+w.rest.x*sr,vw=VB.vy+w.rest.z*VB.vp+w.rest.x*VB.vr;
@@ -5673,10 +5715,18 @@ function verticalStep(h,ax,ay){
   if(VB.contacts===0&&contacts>0) VB.land=Math.min(VB.land,VB.vy-gvSum/m.wheels.length);
   VB.vy+=(F-GRAV_Y)*h;VB.vp+=Mp/SUS.Ip*h;VB.vr+=Mr/SUS.Ir*h;
   if(contacts===0){VB.vp*=1-0.3*h;VB.vr*=1-0.8*h;}  // in volo solo un minimo smorzamento
-  // fuori strada (dove non ci sono rampe di salto): salendo con le ruote su una roccia ripida il tampone di
-  // fine corsa faceva da trampolino e lanciava l'auto in aria, di continuo se si insisteva col gas. La scocca
-  // ora sale al massimo poco più in fretta di quanto salga davvero il suolo sotto le ruote.
-  if(offTrack&&contacts>0) VB.vy=Math.min(VB.vy,Math.max(0,gvSum/m.wheels.length)+1.5);
+  // Niente "trampolini": salendo con le ruote su una roccia ripida, su un cordolo o su un dislivello (bordi
+  // della strada, imbocchi dei ponti, urti che spostano l'auto di lato) il tampone di fine corsa lanciava
+  // l'auto in aria. La scocca sale al massimo poco più in fretta di quanto sia salito il suolo sotto le ruote
+  // negli ultimi istanti: sulle rampe dei salti il decollo resta quello vero (il suolo saliva davvero).
+  {
+    const gvNow=nOk?Math.max(-9,Math.min(9,gvOk/nOk)):0;   // (ruote con salti di quota istantanei escluse)
+    VB.gvMem=Math.max(gvNow,(VB.gvMem||0)-25*h);
+    // fuori strada (scarpate, prato, sassi) il terreno morbido non fa da rampa: l'auto sale lungo il pendio
+    // ma non decolla; i salti veri sono sui dossi della strada, dove il limite resta quello della rampa
+    const gvLim=offTrack?Math.min(VB.gvMem,2.5)+0.8:VB.gvMem+1.5;
+    if(contacts>0) VB.vy=Math.min(VB.vy,Math.max(0,gvLim));
+  }
   VB.y+=VB.vy*h;VB.p+=VB.vp*h;VB.r+=VB.vr*h;
   // suolo molto più alto della ruota (salto di quota improvviso): la scocca viene sollevata, non catapultata
   if(maxX>0.5){VB.y+=maxX-0.5;VB.vy=Math.min(VB.vy,4);}
@@ -6402,7 +6452,7 @@ function drawGauge(){
   g.textAlign='center';g.textBaseline='middle';spaced(g,0);
   // fondo e bordo
   const bg=g.createRadialGradient(cx,cy-40,8,cx,cy,R);
-  bg.addColorStop(0,'rgba(38,42,52,.94)');bg.addColorStop(.62,'rgba(15,17,23,.92)');bg.addColorStop(1,'rgba(6,7,10,.88)');
+  bg.addColorStop(0,'rgba(38,42,52,.6)');bg.addColorStop(.62,'rgba(15,17,23,.52)');bg.addColorStop(1,'rgba(6,7,10,.42)');   // vetro trasparente
   g.fillStyle=bg;g.beginPath();g.arc(cx,cy,R,0,Math.PI*2);g.fill();
   const bz=g.createLinearGradient(0,cy-R,0,cy+R);
   bz.addColorStop(0,'rgba(255,255,255,.5)');bz.addColorStop(.45,'rgba(255,255,255,.06)');bz.addColorStop(1,'rgba(255,255,255,.25)');
@@ -6456,12 +6506,6 @@ function drawGauge(){
   g.fillText(Math.round(Math.abs(car.speed)*KMH),cx,cy+44);
   g.font='700 8.5px '+H_TXT;spaced(g,2);g.fillStyle='rgba(244,251,255,.5)';
   g.fillText('KM/H',cx+1,cy+60);spaced(g,0);
-  // spia del freno a mano: (P) come sul cruscotto
-  const hb=HUD.hb,hc=hb?H_RED:'rgba(244,251,255,.2)';
-  g.strokeStyle=hc;g.fillStyle=hc;g.lineWidth=1.6;g.shadowColor=H_RED;g.shadowBlur=hb?10:0;
-  g.beginPath();g.arc(cx,cy-60,7.5,0,Math.PI*2);g.stroke();
-  g.beginPath();g.arc(cx,cy-60,11,-0.75,0.75);g.stroke();g.beginPath();g.arc(cx,cy-60,11,Math.PI-0.75,Math.PI+0.75);g.stroke();
-  g.font='700 10px '+H_TXT;g.fillText('P',cx,cy-59.5);g.shadowBlur=0;
 }
 // gomme: dal verde (aderenza piena) al giallo e al rosso (aderenza persa)
 const tyreColor=v=>{v=Math.max(0,Math.min(1,v));return 'hsl('+Math.round(120*v*v*(3-2*v))+',88%,'+Math.round(52-4*v)+'%)';};
@@ -6472,7 +6516,7 @@ function drawTyres(){
   g.textAlign='center';g.textBaseline='middle';
   // pannello a vetro tagliato in diagonale (come i riquadri del tempo)
   g.beginPath();g.moveTo(0,0);g.lineTo(100,0);g.lineTo(100,138);g.lineTo(88,150);g.lineTo(0,150);g.closePath();
-  const pg=g.createLinearGradient(0,0,0,150);pg.addColorStop(0,'rgba(9,11,15,.82)');pg.addColorStop(1,'rgba(9,11,15,.6)');
+  const pg=g.createLinearGradient(0,0,0,150);pg.addColorStop(0,'rgba(9,11,15,.48)');pg.addColorStop(1,'rgba(9,11,15,.28)');
   g.fillStyle=pg;g.fill();g.strokeStyle='rgba(255,255,255,.14)';g.lineWidth=1;g.stroke();
   g.fillStyle=H_ACC;g.fillRect(0,0,3,150);
   // sagoma dell'auto vista dall'alto (muso in alto)
@@ -6597,15 +6641,14 @@ const ACTIONS=[
   {id:'right',label:'Sterza a destra'},
   {id:'up',label:'Acceleratore'},
   {id:'down',label:'Freno / retromarcia'},
-  {id:'hand',label:'Freno a mano'},
   {id:'menu',label:'Conferma nei menu'},
   {id:'cam',label:'Cambia telecamera'}
 ];
-const DRIVE_ACTIONS=['left','right','up','down','hand'];
+const DRIVE_ACTIONS=['left','right','up','down'];
 // sorgenti joypad: {b:i} pulsante (analogico se lo è, es. grilletti) · {a:i,d:±1} semiasse di uno stick
 const DEFAULT_PROFILE={
-  kb:{left:['ArrowLeft','KeyA'],right:['ArrowRight','KeyD'],up:['ArrowUp','KeyW'],down:['ArrowDown','KeyS'],hand:['Space',null],menu:['Enter','NumpadEnter'],cam:['KeyC',null]},
-  pad:{left:[{a:0,d:-1},{b:14}],right:[{a:0,d:1},{b:15}],up:[{b:7},{b:0}],down:[{b:6},{b:1}],hand:[{b:2},{b:5}],menu:[{b:0},{b:9}],cam:[{b:3},{b:8}]},
+  kb:{left:['ArrowLeft','KeyA'],right:['ArrowRight','KeyD'],up:['ArrowUp','KeyW'],down:['ArrowDown','KeyS'],menu:['Enter','NumpadEnter'],cam:['KeyC',null]},
+  pad:{left:[{a:0,d:-1},{b:14}],right:[{a:0,d:1},{b:15}],up:[{b:7},{b:0}],down:[{b:6},{b:1}],menu:[{b:0},{b:9}],cam:[{b:3},{b:8}]},
   curve:1.5,dead:0.12,rumble:true
 };
 const CTRL_KEY='rallyDriftControls_v1';
@@ -7256,10 +7299,11 @@ function readInputInner(){
     if(titleOpen()) padTitleInput(gp); else padPauseInput(gp);
   }
   let steer=0,thr=0,brk=0,hb=false;
-  if(useKb()){steer=(keys.right?1:0)-(keys.left?1:0);thr=keys.up?1:0;brk=keys.down?1:0;hb=!!keys.hand;}
+  // (niente freno a mano: hb resta sempre spento)
+  if(useKb()){steer=(keys.right?1:0)-(keys.left?1:0);thr=keys.up?1:0;brk=keys.down?1:0;}
   if(touchOn){
     if(Math.abs(TOUCH.steer)>Math.abs(steer)) steer=TOUCH.steer;
-    thr=Math.max(thr,TOUCH.thr);brk=Math.max(brk,TOUCH.brk);hb=hb||TOUCH.hb;
+    thr=Math.max(thr,TOUCH.thr);brk=Math.max(brk,TOUCH.brk);
   }
   if(gp&&usePad()&&!capture){
     const P=prof();
@@ -7269,7 +7313,6 @@ function readInputInner(){
     if(Math.abs(s)>Math.abs(steer)) steer=s;
     thr=Math.max(thr,actVal(gp,'up',P.dead));
     brk=Math.max(brk,actVal(gp,'down',P.dead));
-    hb=hb||actVal(gp,'hand',0.3)>0.5;
   }
   // telecamera (Y / View) in gara; nel replay A, B o Start tornano al risultato
   if(gp&&usePad()){
@@ -7295,20 +7338,20 @@ function readInputInner(){
 }
 // ================= COMANDI TOUCH (telefono / tablet) =================
 // Sinistra: sterzo analogico "flottante" (la base compare dove appoggi il pollice, fondo corsa a ±STEER_PX).
-// Destra: gas, freno, freno a mano (si può scivolare col dito da un pedale all'altro); in alto telecamera e pausa.
-const TOUCH={steer:0,thr:0,brk:0,hb:false};
+// Destra: gas e freno (si può scivolare col dito da un pedale all'altro); in alto telecamera e pausa.
+const TOUCH={steer:0,thr:0,brk:0};
 let touchOn=matchMedia('(pointer:coarse)').matches&&navigator.maxTouchPoints>0;
 const STEER_PX=64;
 const touchUI=document.createElement('div');touchUI.id='touchUI';
 touchUI.innerHTML='<div id="tSteer"><div id="tSteerBase" class="idle"><div id="tSteerKnob"></div></div></div>'+
-  '<div class="tBtn" id="tHand"><span>⤴</span>MANO</div><div class="tBtn" id="tBrake"><span>▼</span>FRENO</div><div class="tBtn" id="tGas"><span>▲</span>GAS</div>'+
+  '<div class="tBtn" id="tBrake"><span>▼</span>FRENO</div><div class="tBtn" id="tGas"><span>▲</span>GAS</div>'+
   '<div class="tBtn" id="tCam">🎥</div><div class="tBtn" id="tPause">⏸</div>';
 document.body.appendChild(touchUI);
 const rotateHint=document.createElement('div');rotateHint.id='rotateHint';
 rotateHint.innerHTML='<div>📱</div>Ruota il telefono in orizzontale per giocare';
 document.body.appendChild(rotateHint);
 const tSteer=document.getElementById('tSteer'),tBase=document.getElementById('tSteerBase'),tKnob=document.getElementById('tSteerKnob');
-const tPedals={gas:document.getElementById('tGas'),brake:document.getElementById('tBrake'),hand:document.getElementById('tHand')};
+const tPedals={gas:document.getElementById('tGas'),brake:document.getElementById('tBrake')};
 const tTouches=new Map();   // identifier -> {kind:'steer',x0} | {kind:'pedal'}
 function setTouchMode(on){
   if(touchOn===on) return;
@@ -7322,20 +7365,20 @@ function steerBaseHome(){
   tKnob.style.transform='';tBase.classList.add('idle');
 }
 function touchReset(){
-  tTouches.clear();TOUCH.steer=TOUCH.thr=TOUCH.brk=0;TOUCH.hb=false;
+  tTouches.clear();TOUCH.steer=TOUCH.thr=TOUCH.brk=0;
   for(const k in tPedals) tPedals[k].classList.remove('on');
   steerBaseHome();
 }
 // stato dei pedali: conta il pulsante che sta sotto a ciascun dito, non quello dove il dito è partito
 function touchPedals(list){
-  let g=false,b=false,h=false;
+  let g=false,b=false;
   for(const t of list){
     const s=tTouches.get(t.identifier);if(!s||s.kind!=='pedal') continue;
     const el=document.elementFromPoint(t.clientX,t.clientY),btn=el&&el.closest('.tBtn');
-    if(btn===tPedals.gas) g=true;else if(btn===tPedals.brake) b=true;else if(btn===tPedals.hand) h=true;
+    if(btn===tPedals.gas) g=true;else if(btn===tPedals.brake) b=true;
   }
-  TOUCH.thr=g?1:0;TOUCH.brk=b?1:0;TOUCH.hb=h;
-  tPedals.gas.classList.toggle('on',g);tPedals.brake.classList.toggle('on',b);tPedals.hand.classList.toggle('on',h);
+  TOUCH.thr=g?1:0;TOUCH.brk=b?1:0;
+  tPedals.gas.classList.toggle('on',g);tPedals.brake.classList.toggle('on',b);
 }
 function touchSteerMove(t,s){
   const dx=t.clientX-s.x0;
@@ -7432,13 +7475,13 @@ function kbList(id){return (prof().kb[id]||[]).filter(Boolean).map(keyName).join
 function padList(id){return (prof().pad[id]||[]).filter(Boolean).map(padName).join(' / ')||'—';}
 function updateHints(){
   const P=prof();
-  kbHint.textContent='Sterzo '+kbList('left')+' · '+kbList('right')+' — Gas '+kbList('up')+' — Freno '+kbList('down')+' — Freno a mano '+kbList('hand');
+  kbHint.textContent='Sterzo '+kbList('left')+' · '+kbList('right')+' — Gas '+kbList('up')+' — Freno '+kbList('down');
   if(padIndex!==null&&ctrl.mode==='keyboard') kbHint.textContent+=' — 🎮 joypad disattivato (⚙ → Dispositivo)';
   kbHint.style.display=useKb()?'block':'none';
   const padOn=padIndex!==null&&usePad();
   padEl.style.display=padOn?'inline':'none';
   padHint.style.display=padOn?'block':'none';
-  padHint.textContent='🎮 Sterzo '+padList('left')+' · '+padList('right')+' — Gas '+padList('up')+' — Freno '+padList('down')+' — Freno a mano '+padList('hand')+' — Menu '+padList('menu');
+  padHint.textContent='🎮 Sterzo '+padList('left')+' · '+padList('right')+' — Gas '+padList('up')+' — Freno '+padList('down')+' — Menu '+padList('menu');
   legend.innerHTML=
     (useKb()?'<li>⌨ '+kbList('left')+' · '+kbList('right')+' — sterzo</li><li>⌨ '+kbList('up')+' — acceleratore · '+kbList('down')+' — freno</li>':'')+
     (usePad()?'<li>🎮 '+padList('left')+' · '+padList('right')+' — sterzo</li><li>🎮 '+padList('up')+' — gas · '+padList('down')+' — freno</li>':'')+
