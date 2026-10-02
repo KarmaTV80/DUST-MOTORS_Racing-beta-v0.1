@@ -4636,14 +4636,18 @@ const MUSIC_TRACKS={
 };
 const MUSIC_LEVEL={menu:0.8,race:0.4,replay:0.65};     // in gara più bassa: non deve coprire il motore
 const musicUrls=key=>{const t=MUSIC_TRACKS[key];return ['musiche/'+t.slug+'.mp3','Musiche/'+encodeURIComponent(t.file)+'.mp3'];};
-const MUS={state:'idle',ctx:null,players:[],cur:null,fails:0,lastLv:-1};
+const MUS={state:'idle',ctx:null,players:[],cur:null,fails:0,lastLv:-1,retryT:0,ctxT:0};
+const IS_IOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 function musPlayer(){
-  const el=new Audio();el.preload='auto';
-  const p={el,g:null,urls:[],k:0,name:'',stopT:null};
-  // attraverso Web Audio (così il volume funziona anche su iPhone); se non si può, volume dell'elemento
-  try{const s=audioCtx.createMediaElementSource(el);p.g=audioCtx.createGain();p.g.gain.value=0;s.connect(p.g);p.g.connect(audioCtx.destination);}
-  catch(e){p.g=null;el.volume=0;}
-  el.addEventListener('error',()=>{if(p.urls.length) musLoadNext(p);});
+  const el=new Audio();el.preload='auto';el.playsInline=true;el.setAttribute('playsinline','');
+  const p={el,g:null,urls:[],k:0,tryUrl:'',name:'',stopT:null};
+  // Volume: direttamente sull'elemento audio. Solo su iPhone/iPad (dove il volume degli elementi audio
+  // non si può cambiare) passa da Web Audio. (Passando sempre da Web Audio la musica restava muta se il
+  // contesto audio veniva sospeso dal telefono, o aprendo il gioco come file senza indirizzo web.)
+  if(IS_IOS){try{const s=audioCtx.createMediaElementSource(el);p.g=audioCtx.createGain();p.g.gain.value=0;s.connect(p.g);p.g.connect(audioCtx.destination);}catch(e){p.g=null;}}
+  if(!p.g) el.volume=0;
+  // (si considera solo l'errore del file che si sta provando ora, non quelli di caricamenti già abbandonati)
+  el.addEventListener('error',()=>{if(p.urls.length&&el.src===p.tryUrl) musLoadNext(p);});
   el.addEventListener('playing',()=>{if(MUS.state!=='failed') MUS.state='playing';MUS.fails=0;});
   return p;
 }
@@ -4654,9 +4658,18 @@ function musLoadNext(p){
     if(MUS.state!=='playing'){MUS.state='failed';for(const q of MUS.players) q.el.pause();}
     return;
   }
-  p.el.src=p.urls[p.k++];
-  const pr=p.el.play();if(pr&&pr.catch) pr.catch(()=>{});
+  p.tryUrl=new URL(p.urls[p.k++],location.href).href;p.el.src=p.tryUrl;
+  musPlay(p);
 }
+function musPlay(p){const pr=p.el.play();if(pr&&pr.catch) pr.catch(()=>{});}
+// ad ogni tocco o tasto: risveglia l'audio e fa ripartire la musica se il telefono l'aveva fermata
+// (dentro un gesto dell'utente il browser lo permette sempre, anche su iPhone)
+function musWake(){
+  if(!audioCtx) return;
+  if(audioCtx.state!=='running'){const r=audioCtx.resume();if(r&&r.catch) r.catch(()=>{});}
+  if(MUS.cur&&MUS.cur.urls.length&&MUS.cur.el.paused&&MUS.state!=='failed') musPlay(MUS.cur);
+}
+for(const ev of ['pointerdown','keydown','touchend']) window.addEventListener(ev,musWake,true);
 function musLevelSet(p,v,tc){if(p.g) p.g.gain.setTargetAtTime(v,audioCtx.currentTime,tc);else p.el.volume=Math.max(0,Math.min(1,v));}
 function musStart(p,key){p.name=key;p.el.loop=true;p.urls=musicUrls(key);p.k=0;musLevelSet(p,0,0.01);musLoadNext(p);}
 // brano del momento: menu, oppure quello dello stage (posizione in carriera, 1–6 poi si ricomincia)
@@ -4687,6 +4700,12 @@ function musicFrame(){
   const mode=MUS.ctx==='menu'?'menu':replayMode?'replay':'race';
   const lv=volGain(musicVol)*MUSIC_LEVEL[mode]*(paused?0.5:1);
   if(Math.abs(lv-MUS.lastLv)>0.002){const first=MUS.lastLv<0;MUS.lastLv=lv;musLevelSet(MUS.cur,lv,first?0.6:0.25);}   // (all'inizio del brano entra in dissolvenza)
+  // controllo: se il sistema ha fermato la musica (schermo bloccato, app in secondo piano, audio sospeso)
+  // la si fa ripartire appena il gioco è di nuovo visibile, al massimo una volta al secondo
+  if(document.hidden) return;
+  const now=performance.now();
+  if(MUS.cur.urls.length&&MUS.cur.el.paused&&now>MUS.retryT){MUS.retryT=now+1000;musPlay(MUS.cur);}
+  if(MUS.cur.g&&audioCtx.state!=='running'&&now>MUS.ctxT){MUS.ctxT=now+1000;const r=audioCtx.resume();if(r&&r.catch) r.catch(()=>{});}
 }
 // volumi di musica ed effetti: 0 = muto … 1 = pieno, regolabili a barre (opzioni e pausa).
 // (la vecchia impostazione "attiva/disattivata" diventa 100% / muto)
@@ -4742,11 +4761,15 @@ window.addEventListener('pointerup',()=>{volDrag=null;});
 updateMuteLabel();
 // se la partita è partita dal joypad il browser può tenere l'audio sospeso: riprende al primo tasto/click
 for(const ev of ['pointerdown','keydown']) window.addEventListener(ev,()=>{
-  if(audioCtx&&audioCtx.state==='suspended'&&!document.hidden) audioCtx.resume();
+  // (anche "interrupted": è lo stato in cui lo lascia iPhone dopo una chiamata o lo schermo bloccato)
+  if(audioCtx&&audioCtx.state!=='running'&&audioCtx.state!=='closed'&&!document.hidden){const r=audioCtx.resume();if(r&&r.catch) r.catch(()=>{});}
 });
 document.addEventListener('visibilitychange',()=>{
   if(!audioCtx) return;
-  if(document.hidden) audioCtx.suspend(); else audioCtx.resume();
+  // in secondo piano tutto tace (anche la musica); al ritorno riparte: subito se il browser lo concede,
+  // altrimenti al primo tocco o tasto (vedi musWake e il controllo in musicFrame)
+  if(document.hidden){audioCtx.suspend();for(const p of MUS.players) p.el.pause();}
+  else{const r=audioCtx.resume();if(r&&r.catch) r.catch(()=>{});MUS.retryT=0;}
 });
 
 const car={x:0,y:0,angle:0,speed:0};
