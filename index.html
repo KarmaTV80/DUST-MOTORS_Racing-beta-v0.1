@@ -4573,6 +4573,8 @@ const SONGS={race:{step:STEP16,steps:SONG_STEPS,play:playStep},title:{step:T_STE
 let curSong=null,musicDelay=null;
 function musicScheduler(){
   if(!audioCtx||audioCtx.state!=='running') return;
+  // con le musiche in mp3 la musica sintetizzata tace (resta come riserva se i file non si trovano)
+  if(MUS.state!=='failed'){nextNoteT=audioCtx.currentTime+0.05;musicStep=0;return;}
   // musica spenta: non programma note (riparte dall'inizio del brano quando la riattivi)
   if(musicMuted){nextNoteT=audioCtx.currentTime+0.05;musicStep=0;return;}
   // schermata principale: tema racing; in gara: il brano di gara (cambio pulito, dall'inizio)
@@ -4615,6 +4617,76 @@ function initAudio(){
   tyre=buildTyres();
   nextNoteT=audioCtx.currentTime+0.1;
   setInterval(musicScheduler,25);
+  musicInit();
+}
+// ================= MUSICHE (file mp3) =================
+// Menu: tema principale; ogni stage ha il suo brano (gli stage 7–12 riprendono la sequenza dei primi 6;
+// nel Time Attack conta la posizione della pista nella carriera); il replay usa il brano dello stage.
+// Tutti a ciclo. Due lettori che si alternano permettono la dissolvenza incrociata. I file stanno nella
+// cartella "musiche" accanto al gioco (main-theme.mp3, stage-1.mp3 … stage-6.mp3) oppure, in
+// alternativa, nella cartella "Musiche" con i nomi originali.
+const MUSIC_TRACKS={
+  menu:{slug:'main-theme',file:'Turbo Track (main theme)'},
+  1:{slug:'stage-1',file:'Turbo Circuit (1 stage)'},
+  2:{slug:'stage-2',file:'Pixel Velocity (2 Stage)'},
+  3:{slug:'stage-3',file:'Pixelart Velocity  (3stage)'},
+  4:{slug:'stage-4',file:'Chase Mode (4 stage)'},
+  5:{slug:'stage-5',file:'Untitled (5 Stage)'},
+  6:{slug:'stage-6',file:'Turbo Square Wave (6 Stage)'}
+};
+const MUSIC_LEVEL={menu:0.8,race:0.4,replay:0.65};     // in gara più bassa: non deve coprire il motore
+const musicUrls=key=>{const t=MUSIC_TRACKS[key];return ['musiche/'+t.slug+'.mp3','Musiche/'+encodeURIComponent(t.file)+'.mp3'];};
+const MUS={state:'idle',ctx:null,players:[],cur:null,fails:0,lastLv:-1};
+function musPlayer(){
+  const el=new Audio();el.preload='auto';
+  const p={el,g:null,urls:[],k:0,name:'',stopT:null};
+  // attraverso Web Audio (così il volume funziona anche su iPhone); se non si può, volume dell'elemento
+  try{const s=audioCtx.createMediaElementSource(el);p.g=audioCtx.createGain();p.g.gain.value=0;s.connect(p.g);p.g.connect(audioCtx.destination);}
+  catch(e){p.g=null;el.volume=0;}
+  el.addEventListener('error',()=>{if(p.urls.length) musLoadNext(p);});
+  el.addEventListener('playing',()=>{if(MUS.state!=='failed') MUS.state='playing';MUS.fails=0;});
+  return p;
+}
+function musLoadNext(p){
+  if(p.k>=p.urls.length){
+    // brano non trovato: se non ne parte nessuno si torna alla musica sintetizzata
+    p.urls=[];MUS.fails++;
+    if(MUS.state!=='playing'){MUS.state='failed';for(const q of MUS.players) q.el.pause();}
+    return;
+  }
+  p.el.src=p.urls[p.k++];
+  const pr=p.el.play();if(pr&&pr.catch) pr.catch(()=>{});
+}
+function musLevelSet(p,v,tc){if(p.g) p.g.gain.setTargetAtTime(v,audioCtx.currentTime,tc);else p.el.volume=Math.max(0,Math.min(1,v));}
+function musStart(p,key){p.name=key;p.el.loop=true;p.urls=musicUrls(key);p.k=0;musLevelSet(p,0,0.01);musLoadNext(p);}
+// brano del momento: menu, oppure quello dello stage (posizione in carriera, 1–6 poi si ricomincia)
+function musicTarget(){
+  if(titleOpen()) return 'menu';
+  const n=gameMode==='ta'?Math.max(1,COURSE_ORDER.indexOf(course)+1):stage;
+  return ((n-1)%6)+1;
+}
+function switchMusic(key){
+  MUS.ctx=key;
+  const old=MUS.cur,p=MUS.players[0]===old?MUS.players[1]:MUS.players[0];
+  if(old){musLevelSet(old,0,0.35);clearTimeout(old.stopT);old.stopT=setTimeout(()=>{if(old!==MUS.cur) old.el.pause();},1600);}
+  clearTimeout(p.stopT);
+  MUS.cur=p;MUS.lastLv=-1;musStart(p,key);
+}
+// (chiamata dentro un gesto dell'utente: su iPhone ogni lettore va avviato una prima volta così)
+function musicInit(){
+  MUS.players=[musPlayer(),musPlayer()];MUS.state='loading';
+  const b=MUS.players[1].el;b.src=musicUrls(1)[0];
+  const pr=b.play();if(pr&&pr.catch) pr.catch(()=>{});b.pause();
+  switchMusic(musicTarget());
+}
+// a ogni fotogramma: brano giusto per il momento e volume (barra Musica × livello del momento × pausa)
+function musicFrame(){
+  if(!audioCtx||!MUS.players.length||MUS.state==='failed') return;
+  const want=musicTarget();
+  if(want!==MUS.ctx) switchMusic(want);
+  const mode=MUS.ctx==='menu'?'menu':replayMode?'replay':'race';
+  const lv=volGain(musicVol)*MUSIC_LEVEL[mode]*(paused?0.5:1);
+  if(Math.abs(lv-MUS.lastLv)>0.002){const first=MUS.lastLv<0;MUS.lastLv=lv;musLevelSet(MUS.cur,lv,first?0.6:0.25);}   // (all'inizio del brano entra in dissolvenza)
 }
 // volumi di musica ed effetti: 0 = muto … 1 = pieno, regolabili a barre (opzioni e pausa).
 // (la vecchia impostazione "attiva/disattivata" diventa 100% / muto)
@@ -6478,6 +6550,7 @@ function loop(now){
   navFrame();
   touchFrame();
   hudFrame(dt);
+  musicFrame();
   if(demoMode){
     demoUpdate(dt);slipAmt=0;updateEngine(dt,0);
     const st=Math.max(1,Math.ceil(dt/0.004));

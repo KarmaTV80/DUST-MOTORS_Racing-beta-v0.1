@@ -1,7 +1,7 @@
 // Dust & Motors: service worker per giocare anche senza connessione.
 // Il gioco (index.html) viene preso dalla rete quando c'è, così gli aggiornamenti arrivano subito;
 // offline si usa la copia salvata. Motore 3D, font e icone si salvano al primo avvio e poi restano.
-const CACHE = 'dust-motors-v2';
+const CACHE = 'dust-motors-v3';
 const CORE = [
   './',
   './index.html',
@@ -31,9 +31,37 @@ self.addEventListener('activate', e => {
   );
 });
 
+// Le musiche si caricano "a pezzi" (richieste Range del lettore audio): il file intero si scarica e si
+// salva la prima volta, poi i pezzi richiesti si ritagliano dalla copia salvata (funziona anche offline).
+async function rangeResponse(req) {
+  const cache = await caches.open(CACHE);
+  let full = await cache.match(req.url);
+  if (!full) {
+    const r = await fetch(req.url);
+    if (!r.ok) return r;
+    await cache.put(req.url, r.clone());
+    full = r;
+  }
+  const buf = await full.arrayBuffer(), size = buf.byteLength;
+  const m = /bytes=(\d*)-(\d*)/.exec(req.headers.get('range') || '');
+  let start = 0, end = size - 1;
+  if (m && m[1] !== '') { start = parseInt(m[1], 10); if (m[2] !== '') end = Math.min(parseInt(m[2], 10), size - 1); }
+  else if (m && m[2] !== '') { start = Math.max(0, size - parseInt(m[2], 10)); }   // ultimi N byte
+  return new Response(buf.slice(start, end + 1), {
+    status: 206, statusText: 'Partial Content',
+    headers: {
+      'Content-Type': full.headers.get('Content-Type') || 'audio/mpeg',
+      'Content-Range': 'bytes ' + start + '-' + end + '/' + size,
+      'Content-Length': String(end - start + 1),
+      'Accept-Ranges': 'bytes'
+    }
+  });
+}
+
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
+  if (req.headers.has('range')) { e.respondWith(rangeResponse(req).catch(() => fetch(req))); return; }
   const url = new URL(req.url);
   const isPage = req.mode === 'navigate' || (url.origin === location.origin && url.pathname.endsWith('.html'));
   if (isPage) {

@@ -214,7 +214,9 @@ in pausa. Nel replay basta un tocco per uscire. Se il telefono lo supporta, vibr
 - **Fari** con il fascio di luce che parte dai fari del modello.
 - **Audio sintetizzato**: motore diverso per ogni auto, gomme che cambiano suono col fondo,
   sgommate, urti diversi per metallo, legno, pietra e altri materiali, schizzi e atterraggi.
-- **Musica** a tema racing nella schermata iniziale.
+- **Colonna sonora**: un tema principale per i menu e un brano per ogni stage (dal 7 al 12 la
+  sequenza ricomincia), con dissolvenza tra un brano e l'altro. In gara la musica è più bassa per
+  lasciare spazio al motore, e si abbassa ancora in pausa.
 - **Risoluzione regolabile**, da 540p a 4K. Su telefono parte a 720p.
 
 ## Installarlo sul telefono
@@ -248,8 +250,9 @@ Il gioco è un'**app web installabile (PWA)**. Una volta installato:
 
 ## Struttura del progetto
 
-Il gioco è un'unica pagina HTML autonoma: grafica, fisica, audio e texture sono tutti
-generati dal codice, senza immagini o suoni esterni.
+Il gioco è un'unica pagina HTML: grafica, fisica, effetti sonori e texture sono tutti generati
+dal codice. Solo la colonna sonora è in file mp3, nella cartella `musiche` (se mancano, il gioco
+usa una musica sintetizzata di riserva).
 
 ```
 DUST-MOTORS_Racing-beta-v0.1/
@@ -259,6 +262,7 @@ DUST-MOTORS_Racing-beta-v0.1/
 ├── icon-192.png            # icone dell'app
 ├── icon-512.png
 ├── icon-maskable-512.png   # icona adattiva per Android
+├── musiche/                # colonna sonora: main-theme.mp3 (menu) e stage-1 … stage-6.mp3
 └── README.md
 ```
 
