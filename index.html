@@ -59,6 +59,31 @@
   @media (prefers-reduced-motion:reduce){.logo,.checker,.tagline,.titleMenu,.titleRecord{animation:none;}}
   /* menu pausa */
   #pauseMenu .card{max-width:340px;}
+  /* --- pausa, opzioni e fine tappa: stile "racing" come la schermata iniziale e l'HUD --- */
+  #pauseMenu .card,.overlay.result .card{background:linear-gradient(160deg,rgba(20,24,30,.95),rgba(9,11,15,.92));border:1px solid rgba(255,255,255,.08);
+    border-top:3px solid var(--accent);border-radius:14px;box-shadow:0 18px 40px rgba(0,0,0,.55);backdrop-filter:blur(6px);}
+  #pauseMenu .card{max-width:380px;padding:20px 22px 16px;text-align:left;}
+  .pHead{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px;}
+  .pHead h2,.overlay.result .card h2{font-family:'Russo One','Segoe UI',sans-serif;font-weight:400;text-transform:uppercase;letter-spacing:1px;transform:skewX(-8deg);}
+  .pHead h2{font-size:26px;margin:0;color:#fff;}
+  .pTag{font:600 12px 'Saira Semi Condensed','Segoe UI',sans-serif;color:var(--text);opacity:.7;text-transform:uppercase;letter-spacing:.8px;text-align:right;}
+  .pStats{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:6px;margin:2px 0 8px;}
+  .pStat{background:rgba(255,255,255,.06);border-radius:8px;padding:6px 9px 4px;}
+  .pStat small{display:block;font:700 10px 'Saira Semi Condensed','Segoe UI',sans-serif;color:var(--text);opacity:.6;text-transform:uppercase;letter-spacing:.9px;}
+  .pStat b{display:block;font:500 25px/1 'Teko','Segoe UI',sans-serif;color:#fff;font-variant-numeric:tabular-nums;margin-top:2px;}
+  .pProg{height:4px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden;margin:0 0 14px;}
+  .pProg i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),#ffe39a);}
+  #pauseMenu .menuList{gap:6px;}
+  #pauseMenu .menuList button,.overlay.result .card button{font-family:'Saira Semi Condensed','Segoe UI',sans-serif;font-weight:700;letter-spacing:.3px;}
+  #pauseMenu .menuList button{font-size:15.5px;padding:10px 14px;border:none;border-left:3px solid transparent;border-radius:8px;transition:background .12s,transform .12s;}
+  #pauseMenu .menuList button.sel{border-left-color:#e8564f;transform:translateX(4px);}
+  .card .menuList button.warn2,.card .menuList button.warn2.sel{background:#c0392b;color:#fff;}
+  #pauseMenu .pauseHint{text-align:center;}
+  .overlay.result .card h2{font-size:22px;color:#fff;}
+  .overlay.result .card .secondary{display:block;width:100%;margin-top:8px;}
+  .overlay.result #oB{display:block;width:100%;font-size:17px;padding:12px;}
+  .overlay.result #oB+br{display:none;}
+  .overlay.result #oReplay{display:block;width:100%;margin-top:8px;padding:10px;background:transparent;color:var(--accent);border:2px solid var(--accent);}
   .menuList{display:flex;flex-direction:column;gap:8px;margin:6px 0 12px;}
   .card .menuList button{background:rgba(255,255,255,.1);color:var(--text);padding:11px 16px;font-size:14.5px;text-align:left;border:2px solid transparent;transition:background .12s;}
   .card .menuList button.sel{background:var(--accent);color:#1b2418;}
@@ -413,27 +438,39 @@
     <button id="oB">Inizia</button><br>
     <button id="oReplay" style="display:none;">🎬 Replay</button>
     <button class="secondary" id="oMenu" style="display:none;">⏱ Scegli un'altra pista (Esc / B)</button>
+    <button class="secondary" id="oSet">⚙ Opzioni</button>
     <button class="secondary" id="oQuit" style="display:none;">⏏ Menu principale</button>
-    <button class="secondary" id="oSet">⚙ Comandi</button>
   </div>
 </div>
 <div class="overlay hide" id="pauseMenu">
   <div class="card">
-    <h2>⏸ Pausa</h2>
-    <p id="pauseInfo"></p>
+    <div class="pHead"><h2 id="pTitle">Pausa</h2><span class="pTag" id="pTag"></span></div>
+    <div id="pInfo">
+      <div class="pStats">
+        <div class="pStat"><small>Tempo</small><b id="psTime">0.0</b></div>
+        <div class="pStat"><small id="psStageL">Stage</small><b id="psStage">1/12</b></div>
+        <div class="pStat"><small>Percorso</small><b id="psProg">0%</b></div>
+      </div>
+      <div class="pProg"><i id="psBar"></i></div>
+    </div>
     <div class="menuList" id="pauseList">
       <button data-act="resume">▶ Riprendi</button>
       <button data-act="restart">↻ Ricomincia stage</button>
-      <button data-act="controls">⚙ Comandi</button>
-      <button data-act="res">🖥 Risoluzione: Nativa</button>
-      <button data-act="fs">⛶ Schermo intero: no</button>
+      <button data-act="opts">⚙ Opzioni</button>
+      <button data-act="quit">⏏ Menu principale</button>
+    </div>
+    <div class="menuList" id="pauseOpts" style="display:none;">
       <button data-act="vol" data-k="music" class="volRow"><span class="vLbl">🎵 Musica</span><span class="vBar"><i></i></span><span class="vPct">100%</span></button>
       <button data-act="vol" data-k="sfx" class="volRow"><span class="vLbl">🔊 Effetti</span><span class="vBar"><i></i></span><span class="vPct">100%</span></button>
-      <button data-act="quit">⏏ Menu principale</button>
+      <button data-act="cam" id="pCam">🎥 Telecamera: Inseguimento</button>
+      <button data-act="res">🖥 Risoluzione: Nativa</button>
+      <button data-act="fs">⛶ Schermo intero: no</button>
+      <button data-act="controls">🎮 Comandi</button>
+      <button data-act="back" id="pBack">← Indietro</button>
     </div>
     <p class="pauseHint" id="kbHint"></p>
     <p class="pauseHint" id="padHint" style="display:none;"></p>
-    <p class="pauseHint">Esc / P / Start: riprendi · ▲▼ + Invio o croce + A per scegliere</p>
+    <p class="pauseHint">▲▼ scegli · ◀▶ volume · Invio / A conferma · Esc / B indietro</p>
   </div>
 </div>
 <div class="overlay hide" id="settings">
@@ -7705,7 +7742,7 @@ window.addEventListener('keydown',e=>{
     e.preventDefault();
     if(settingsOpen()) closeSettings();
     else if(titleOpen()){if(e.code==='Escape') titleBack();}
-    else if(pauseOpen()) closePause();
+    else if(pauseOpen()) pauseBack();
     else if(running) openPause();
     return;
   }
@@ -7733,23 +7770,74 @@ window.addEventListener('blur',()=>{keys={};if(running&&!paused) openPause();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&running&&!paused) openPause();});
 
 // --- menu pausa ---
-const pauseEl=document.getElementById('pauseMenu'),pauseList=document.getElementById('pauseList');
+// Due pagine: azioni (riprendi, ricomincia, opzioni, menu principale) e Opzioni (volumi, telecamera,
+// risoluzione, schermo intero, comandi). Le Opzioni si aprono anche da sole sopra il riquadro di fine
+// tappa (pauseFrom='overlay'): lì "Indietro" torna al risultato. Ricomincia e Menu principale chiedono conferma.
+const pauseEl=document.getElementById('pauseMenu'),pauseList=document.getElementById('pauseList'),pauseOptsEl=document.getElementById('pauseOpts');
 const pauseOpen=()=>!pauseEl.classList.contains('hide');
-const pauseBtns=()=>[...pauseList.querySelectorAll('button')];
+let pausePage='main',pauseFrom='pause';
+const pauseBtns=()=>[...(pausePage==='opts'?pauseOptsEl:pauseList).querySelectorAll('button')];
 let pauseSel=0;
 const INTRO_TITLE=oT.textContent,INTRO_TEXT=oP.textContent;
 function renderPauseSel(){pauseBtns().forEach((b,i)=>b.classList.toggle('sel',i===pauseSel));}
+// conferma: il primo tocco chiede "Sicuro?", il secondo (entro 4 s) esegue
+let pConfirm=null,pConfirmT=null;
+const P_LABEL={restart:'↻ Ricomincia stage',quit:'⏏ Menu principale'};
+function resetPConfirm(){
+  pConfirm=null;clearTimeout(pConfirmT);
+  for(const b of pauseList.querySelectorAll('button')) if(P_LABEL[b.dataset.act]){b.textContent=P_LABEL[b.dataset.act];b.classList.remove('warn2');}
+}
+function askConfirm(act){
+  if(pConfirm===act){resetPConfirm();return true;}
+  resetPConfirm();pConfirm=act;
+  const b=pauseList.querySelector('[data-act="'+act+'"]');
+  if(b){b.textContent='⚠ Sicuro? Premi di nuovo';b.classList.add('warn2');}
+  pConfirmT=setTimeout(resetPConfirm,4000);
+  return false;
+}
+function updatePauseLabels(){
+  const c=document.getElementById('pCam');if(c) c.textContent='🎥 Telecamera: '+CAMS.find(x=>x.id===camMode).label;
+  document.getElementById('pBack').textContent=pauseFrom==='overlay'?'← Torna al risultato':'← Indietro';
+  updateDisplayLabels();updateMuteLabel();
+}
+function showPausePage(p){
+  pausePage=p;pauseSel=0;resetPConfirm();
+  pauseList.style.display=p==='main'?'':'none';pauseOptsEl.style.display=p==='opts'?'':'none';
+  document.getElementById('pInfo').style.display=p==='main'?'':'none';
+  document.getElementById('pTitle').textContent=p==='main'?'Pausa':'Opzioni';
+  updatePauseLabels();renderPauseSel();
+}
 function openPause(){
   if(!running||paused||settingsOpen()) return;
-  paused=true;keys={};pauseSel=0;
-  document.getElementById('pauseInfo').textContent=(gameMode==='ta'?'Time Attack · '+COURSES[course].name:'Stage '+stage+'/'+TOTAL_STAGES+' · '+COURSES[course].name)+' · Tempo '+elapsed.toFixed(1)+'s · Percorso '+progEl.textContent;
-  updateMuteLabel();updateHints();renderPauseSel();
+  paused=true;keys={};pauseFrom='pause';
+  const ta=gameMode==='ta';
+  document.getElementById('pTag').textContent=(ta?'Time Attack · ':'Carriera · ')+COURSES[course].name;
+  document.getElementById('psTime').textContent=fmtTime(elapsed);
+  document.getElementById('psStageL').textContent=ta?'Pista':'Stage';
+  document.getElementById('psStage').textContent=ta?String(course):stage+'/'+TOTAL_STAGES;
+  const prog=Math.min(100,Math.floor(lastIdx/Math.max(1,finishIdx)*100));
+  document.getElementById('psProg').textContent=prog+'%';
+  document.getElementById('psBar').style.width=prog+'%';
+  updateHints();showPausePage('main');
   pauseEl.classList.remove('hide');
 }
-function closePause(){
-  pauseEl.classList.add('hide');
-  paused=false;keys={};padPrev.menu=true;padPrev.a=true;
+// Opzioni da sole (riquadro di fine tappa o di inizio): niente pausa da gestire
+function openOptions(){
+  if(pauseOpen()||settingsOpen()) return;
+  pauseFrom='overlay';keys={};
+  document.getElementById('pTag').textContent='';
+  updateHints();showPausePage('opts');
+  pauseEl.classList.remove('hide');
+  padPrev.a=true;padPrev.menu=true;
 }
+function closePause(){
+  pauseEl.classList.add('hide');resetPConfirm();
+  if(pauseFrom==='pause') paused=false;
+  keys={};padPrev.menu=true;padPrev.a=true;navPrev.ok=true;
+  if(pauseFrom==='overlay') navApply('overlay');
+}
+// Esc / B: dalle Opzioni si torna indietro, altrimenti si riprende
+function pauseBack(){if(pausePage==='opts'&&pauseFrom==='pause') showPausePage('main');else closePause();}
 function showMainMenu(){
   oT.textContent=INTRO_TITLE;oP.textContent=INTRO_TEXT;
   legend.style.display='';oList.style.display='none';oReplay.style.display='none';oBoard.style.display='none';
@@ -7759,8 +7847,13 @@ function showMainMenu(){
   overlay.classList.remove('hide');
 }
 function pauseAction(act){
+  if(act!=='restart'&&act!=='quit') resetPConfirm();
   if(act==='resume') closePause();
+  else if(act==='opts') showPausePage('opts');
+  else if(act==='back') pauseBack();
+  else if(act==='cam'){cycleCamera();updatePauseLabels();}
   else if(act==='restart'){
+    if(!askConfirm('restart')) return;
     closePause();
     stageTimes.length=Math.min(stageTimes.length,stage-1); // la tappa ripetuta non conta due volte
     loadStage(stage,course);running=true;beginCountdown();
@@ -7768,8 +7861,8 @@ function pauseAction(act){
   else if(act==='controls') openSettings();
   else if(act==='res') cycleResolution(1);
   else if(act==='fs') toggleFullscreen();
-  else if(act==='vol'){const b=pauseBtns()[pauseSel];if(b) b.dataset.k==='music'?toggleMusic():toggleSfx();}
-  else if(act==='quit'){closePause();running=false;showTitle();}
+  else if(act==='vol'){const b=pauseBtns()[pauseSel];if(b){initAudio();b.dataset.k==='music'?toggleMusic():toggleSfx();}}
+  else if(act==='quit'){if(!askConfirm('quit')) return;closePause();running=false;showTitle();}
 }
 // ◀▶ su una barra del volume: ±10%
 function adjustVolRow(b,d){if(b&&b.dataset.act==='vol'){initAudio();setVolume(b.dataset.k,volOf(b.dataset.k)+d*0.1);return true;}return false;}
@@ -7780,8 +7873,10 @@ function pauseKey(e){
   else if(['ArrowLeft','KeyA','ArrowRight','KeyD'].includes(e.code)){if(adjustVolRow(pauseBtns()[pauseSel],/Right|KeyD/.test(e.code)?1:-1)) e.preventDefault();}
   else if(['Enter','Space','NumpadEnter'].includes(e.code)){e.preventDefault();if(!e.repeat) pauseAction(pauseBtns()[pauseSel].dataset.act);}
 }
-pauseList.addEventListener('click',e=>{if(e.target.closest('.vBar')) return;const b=e.target.closest('button');if(b){b.blur();pauseSel=pauseBtns().indexOf(b);pauseAction(b.dataset.act);}});
-pauseList.addEventListener('mouseover',e=>{const b=e.target.closest('button');if(b){pauseSel=pauseBtns().indexOf(b);renderPauseSel();}});
+for(const L of [pauseList,pauseOptsEl]){
+  L.addEventListener('click',e=>{if(e.target.closest('.vBar')) return;const b=e.target.closest('button');if(b){b.blur();pauseSel=pauseBtns().indexOf(b);pauseAction(b.dataset.act);}});
+  L.addEventListener('mouseover',e=>{const b=e.target.closest('button');if(b){pauseSel=pauseBtns().indexOf(b);renderPauseSel();}});
+}
 // --- schermata iniziale a tutto schermo ---
 const titleEl=document.getElementById('title'),titleMain=document.getElementById('titleMain'),titleOpts=document.getElementById('titleOptions');
 const titleGarage=document.getElementById('titleGarage');
@@ -8180,7 +8275,7 @@ function padPauseInput(gp){
   if(right&&!padPrev.right) adjustVolRow(pauseBtns()[pauseSel],1);
   padPrev.up=up;padPrev.down=down;padPrev.left=left;padPrev.right=right;
   if(on(0)&&!padPrev.a){padPrev.menu=true;pauseAction(pauseBtns()[pauseSel].dataset.act);}
-  if(on(1)&&!padPrev.b) closePause();
+  if(on(1)&&!padPrev.b) pauseBack();
   padPrev.a=on(0);padPrev.b=on(1);
 }
 
@@ -8613,7 +8708,7 @@ for(const [id,key,fmt] of [['optCurve','curve',v=>(+v).toFixed(1)],['optDead','d
     document.getElementById('setReset').disabled=false;document.getElementById('setReset').style.opacity=1;
   });
 }
-document.getElementById('oSet').addEventListener('click',e=>{e.currentTarget.blur();openSettings();});
+document.getElementById('oSet').addEventListener('click',e=>{e.currentTarget.blur();openOptions();});   // opzioni anche a fine tappa
 // ---- navigazione da tastiera e joypad nei riquadri "Comandi" e risultato/inizio ----
 // Righe di elementi: su/giù cambia riga, sinistra/destra si muove nella riga (o regola i cursori),
 // Invio/Spazio o A attiva l'elemento evidenziato. Le righe si ricalcolano ogni volta (le tabelle dei
@@ -8624,7 +8719,7 @@ const visible=el=>el&&el.offsetParent!==null&&!el.disabled&&el.style.display!=='
 function navRows(which){
   const rows=[];
   const push=list=>{const l=[...list].filter(visible);if(l.length) rows.push(l);};
-  if(which==='overlay'){push([oB]);push([oReplay]);push([oMenu]);push([oQuit]);push([document.getElementById('oSet')]);return rows;}
+  if(which==='overlay'){push([oB]);push([oReplay]);push([oMenu]);push([document.getElementById('oSet')]);push([oQuit]);return rows;}
   for(const id of ['segMode','segProfile','segTab']) push(document.querySelectorAll('#'+id+' button'));
   if(setTab==='kb') for(const tr of document.querySelectorAll('#kbTable tr')) push(tr.querySelectorAll('button'));
   else{
