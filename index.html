@@ -515,6 +515,18 @@ const SURFACES=[
  {name:'Asfalto cittadino',friction:1.0,grip:0.95,base:[56,56,62],spk:'36,36,42',scene:'town',fx:'asphalt',town:true,width:0.37,ovw:0.58}
 ];
 
+// meteo per percorso: rain = intensità della pioggia (0..1), snow = nevicata
+const WEATHER={5:{rain:0.55},7:{rain:1},10:{rain:0.75},6:{snow:1}};
+const weatherOf=c=>WEATHER[c]||{};
+// zone bagnate della pioggia lungo la strada: s = distanza lungo la pista, u = 0..1 attraverso la carreggiata.
+// Somma di onde lisce (stessa formula nello shader della strada: vedi patchRoadMat), più acqua nei solchi
+// delle ruote e verso i bordi, dove scorre e ristagna.
+function rainZone(s,u){
+  const z=0.5+0.5*(0.55*Math.sin(s*0.011+1.3)+0.3*Math.sin(s*0.027+u*3.0+4.1)+0.25*Math.sin(s*0.063-u*5.0+2.2))/1.1;
+  const rut=0.6*Math.exp(-Math.pow(Math.min(u,1-u)/0.06,2));   // (verso i bordi, dove l'acqua scorre)
+  const t=Math.max(0,Math.min(1,(z+0.18*rut-0.5)/0.3));
+  return t*t*(3-2*t);
+}
 function mulberry32(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 
 const MAX_HEADING=120; // gradi: la pista procede sempre "in avanti" e non si richiude su se stessa
@@ -1028,36 +1040,84 @@ function buildTrack(stage){
       }
     }
   }
-  // pozzanghere: poche, sempre negli stessi punti dello stage, dove l'acqua ristagna davvero
-  // (ai piedi dei dossi, dopo la discesa o prima della rampa) e in qualche tratto piano; mai su
-  // rampe, ponti, gallerie o vicino a partenza/arrivo. Contorno irregolare, allungato lungo la strada.
+  // pozzanghere: l'acqua sta dove ristagna davvero. Negli avvallamenti del profilo (il punto più basso tra
+  // una discesa e una salita, ai piedi dei dossi), nei solchi delle ruote e verso i bordi; con la pioggia
+  // anche nelle zone bagnate (rainZone). Mai su rampe, ponti, gallerie o vicino a partenza/arrivo.
+  // Quante dipende dal tempo e dal fondo: con la pioggia tante, di ogni forma e misura, spesso a gruppi;
+  // all'asciutto solo negli avvallamenti più profondi delle strade sterrate; nessuna su sabbia e neve.
   const puddles=[];
+  const surface=SURFACES[(stage-1)%SURFACES.length];
   const prng=mulberry32(4200+stage*31);
-  const nPud=Math.min(6,3+Math.floor(stage/3));
+  const rain=weatherOf(stage).rain||0;
+  const fx=surface.fx,soak={dirt:1,hard:0.7,gravel:0.5,fine:0.5,mixed:0.8,mud:1.4,asphalt:0.25,wet:1}[fx]||0;
+  const nPud=fx==='sand'||fx==='snow'?0:Math.round(rain>0?8+16*rain:soak*3);
   const inBump=i=>used.some(z=>i>=z.from-1&&i<=z.to+1);
-  const okPud=i=>i>=30&&i<N-45&&!inBump(i)&&!nearStruct(i,i,8)&&puddles.every(p=>Math.abs(p.idx-i)>=35);
-  const cand=[];
-  for(const z of used){
-    if(prng()<0.5){cand.push(z.to+2+Math.floor(prng()*2),z.from-3);}else{cand.push(z.from-3,z.to+2+Math.floor(prng()*2));}
-  }
-  const addPud=idx=>{
-    // (dimensione proporzionata alla carreggiata: occupa al massimo circa metà della strada)
-    const w=wps[idx],R=Math.min(10+prng()*7,w.half*0.55),ax=1.25+prng()*0.45;
-    const maxOff=Math.max(0,w.half-R*1.4-3);
-    const off=(prng()*2-1)*Math.min(maxOff,w.half*0.45);
-    const n=w.heading+Math.PI/2;
-    puddles.push({idx,x:w.x+Math.cos(n)*off,y:w.y+Math.sin(n)*off,dist:w.dist,heading:w.heading+(prng()-0.5)*0.3,
-      R,ax,r:R*ax*1.3,ph:[prng()*6.28,prng()*6.28,prng()*6.28],elev:w.elev});
+  const okPud=(i,gap)=>i>=30&&i<N-45&&!inBump(i)&&!nearStruct(i,i,8)&&puddles.every(p=>Math.abs(p.idx-i)>=gap);
+  // profondità dell'avvallamento: quanto il punto sta sotto i punti più alti prima e dopo
+  const sag=i=>{let a=-1e9,b=-1e9;for(let k=1;k<=9;k++){a=Math.max(a,wps[Math.max(0,i-k)].elev);b=Math.max(b,wps[Math.min(N-1,i+k)].elev);}return Math.min(a,b)-wps[i].elev;};
+  const addPud=(idx,o)=>{
+    const w=wps[idx],n=w.heading+Math.PI/2;
+    // forma: pozza tonda, lunga pozza nel solco, o pozza larga e bassa; misura da piccola a grande
+    const kind=o.kind||(prng()<0.4?'rut':'pool');
+    let R,ax,u;
+    if(kind==='rut'){R=2.2+prng()*2.6;ax=2.2+prng()*2.2;u=0.15+prng()*0.7;}
+    else{R=Math.min((o.big?7:3)+prng()*(o.big?9:7),w.half*0.5);ax=1.1+prng()*0.9;u=0.5+(prng()*2-1)*0.3;}
+    R*=o.scale||1;
+    let off=(u*2-1)*w.half+(o.dx||0)+(prng()-0.5)*3;
+    const maxOff=Math.max(0,w.half-R*1.2-1.5);off=Math.max(-maxOff,Math.min(maxOff,off));
+    const along=(o.along||0);
+    const x=w.x+Math.cos(n)*off+Math.cos(w.heading)*along,y=w.y+Math.sin(n)*off+Math.sin(w.heading)*along;
+    puddles.push({idx,x,y,dist:w.dist+along,heading:w.heading+(prng()-0.5)*(kind==='rut'?0.08:0.6),
+      R,ax,r:R*ax*1.35,ph:[prng()*6.28,prng()*6.28,prng()*6.28,prng()*6.28],amp:[0.08+prng()*0.16,0.05+prng()*0.12,0.03+prng()*0.08,0.02+prng()*0.05],
+      elev:w.elev,off,kind});
+    return puddles[puddles.length-1];
   };
-  for(const idx of cand){if(puddles.length>=Math.ceil(nPud/2)) break;if(okPud(idx)) addPud(idx);}
-  for(let k=0;k<nPud*6&&puddles.length<nPud;k++){
-    const idx=30+Math.floor(prng()*(N-80));
-    if(okPud(idx)) addPud(idx);
+  // gruppo: una pozza principale e qualche pozza più piccola lì vicino (come l'acqua che si spezza tra i solchi)
+  const addGroup=(idx,big)=>{
+    const m=addPud(idx,{big});
+    const extra=rain>0?Math.floor(prng()*3):(prng()<0.4?1:0);
+    for(let k=0;k<extra;k++) addPud(idx,{kind:prng()<0.6?'rut':'pool',scale:0.6,along:(prng()-0.5)*m.R*m.ax*3.2,dx:(prng()-0.5)*m.R*2});
+  };
+  if(nPud>0){
+    // candidati: avvallamenti (più profondi prima), poi le zone più bagnate (con la pioggia)
+    const cand=[];
+    for(let i=30;i<N-45;i++){const d=sag(i);if(d>0.06) cand.push({i,score:0.3+d*3+(rain?rainZone(wps[i].dist,0.5)*0.6:0)});}
+    // fondo di una discesa dove la strada torna piana: l'acqua che scende si ferma lì
+    for(let i=30;i<N-45;i++){
+      const drop=wps[i-12].elev-wps[i].elev,flat=Math.abs(wps[i+5].elev-wps[i].elev);
+      if(drop>0.6&&flat<0.12) cand.push({i,score:0.35+Math.min(0.4,drop*0.15)+(rain?rainZone(wps[i].dist,0.5)*0.4:0)});
+    }
+    if(rain>0) for(let i=30;i<N-45;i+=3){const z=rainZone(wps[i].dist,0.5);if(z>0.6) cand.push({i,score:z*0.5+prng()*0.3});}
+    cand.sort((a,b)=>b.score-a.score);
+    const gap=rain>0?14:40;
+    for(const c of cand){if(puddles.length>=nPud) break;if(rain===0&&c.score<(fx==='asphalt'?0.9:0.45)) break;if(okPud(c.i,gap)) addGroup(c.i,sag(c.i)>0.3);}
   }
   puddles.sort((a,b)=>a.idx-b.idx);
-  const surface=SURFACES[(stage-1)%SURFACES.length];
+  // cumuli di neve fresca (solo quando nevica): accumuli spinti dal vento lungo i bordi, lingue di neve che
+  // attraversano la strada di sbieco e mucchietti sparsi. Sono gobbe vere (vedi driftAt in groundAt).
+  const drifts=[];
+  if(weatherOf(stage).snow){
+    const dr=mulberry32(7300+stage*17),nDr=22;
+    const okDr=i=>i>=25&&i<N-40&&!inBump(i)&&!nearStruct(i,i,6)&&drifts.every(d=>Math.abs(d.idx-i)>=9);
+    for(let k=0;k<nDr*8&&drifts.length<nDr;k++){
+      const idx=25+Math.floor(dr()*(N-65));
+      if(!okDr(idx)) continue;
+      const w=wps[idx],n=w.heading+Math.PI/2,t=dr();
+      let R,ax,h,off,hd=w.heading;
+      if(t<0.45){         // lungo il bordo: lungo e alto, sporge un po' nella carreggiata
+        R=2.5+dr()*2;ax=2.5+dr()*2;h=0.14+dr()*0.1;off=(dr()<0.5?-1:1)*(w.half-R*0.75);hd+=(dr()-0.5)*0.15;
+      }else if(t<0.75){   // lingua di sbieco: bassa, attraversa buona parte della strada
+        R=1.8+dr()*1.2;ax=3+dr()*2.5;h=0.07+dr()*0.05;off=(dr()-0.5)*w.half*0.6;hd+=(dr()<0.5?-1:1)*(0.6+dr()*0.5);
+      }else{              // mucchio: piccolo e tondo, in un punto qualsiasi
+        R=1.5+dr()*1.6;ax=1+dr()*0.6;h=0.1+dr()*0.1;off=(dr()*2-1)*(w.half-R*1.6);
+      }
+      drifts.push({idx,x:w.x+Math.cos(n)*off,y:w.y+Math.sin(n)*off,dist:w.dist,heading:hd,R,ax,h,r:R*ax*1.35,
+        ph:[dr()*6.28,dr()*6.28,dr()*6.28,dr()*6.28],amp:[0.1+dr()*0.12,0.06+dr()*0.1,0.03+dr()*0.06,0.02+dr()*0.04]});
+    }
+    drifts.sort((a,b)=>a.idx-b.idx);
+  }
   const props=buildProps(wps,stage,surface.scene,trees,nearStruct,railPoints);
-  return {wps,trees,posts,puddles,railRuns,railPoints,surface,structs,bumps,props};
+  return {wps,trees,posts,puddles,drifts,railRuns,railPoints,surface,structs,bumps,props};
 }
 
 // --- three.js setup ---
@@ -1155,17 +1215,26 @@ function dirtTexture(surface){
   // carreggiate: le due fasce dove passano le ruote (battute, più scure o più lucide). Non sono righe
   // dritte: serpeggiano, cambiano intensità e a tratti quasi spariscono (periodiche sull'altezza della
   // texture, che si ripete lungo la pista, così non si vede la giunta)
+  // Zone battute e segni delle gomme sparsi a caso su tutta la carreggiata: niente fasce continue
+  // (prima le due carreggiate parallele sembravano "binari"). Chiazze di misura e intensità diverse,
+  // tracce brevi e un po' storte in ogni punto, come una strada percorsa da tante auto su linee diverse.
   const ph=[0,0,0,0,0,0].map(()=>rr()*6.28);
-  const wander=(u,li,y)=>u*W+Math.sin(y/H*6.2832+ph[li])*14+Math.sin(y/H*6.2832*3+ph[li+2])*4;
-  const patchy=(li,y)=>0.15+0.85*Math.pow(0.5+0.5*Math.sin(y/H*6.2832*2+ph[li]*1.7)*Math.cos(y/H*6.2832+ph[li+2]),1.5);
-  const lanes=(k,a,w)=>{[0.35,0.65].forEach((u,li)=>{
-    for(let y=0;y<H;y+=3){const x=wander(u,li,y)+(rr()-0.5)*w*0.8;blot(x,y+(rr()-0.5)*8,w*(0.5+rr()*0.8),10+rr()*16,k,a*0.6*patchy(li,y)*(0.4+rr()*0.6));}
-  });};
-  // segni del battistrada e solchi: tratti brevi che seguono le fasce, non righe lunghe tutta la pista
+  const wander=(u,li,y)=>u*W+Math.sin(y/H*6.2832+ph[li%6])*14;   // (per i solchi del fango)
+  const patchy=(li,y)=>0.15+0.85*Math.pow(0.5+0.5*Math.sin(y/H*6.2832*2+ph[li%6]*1.7)*Math.cos(y/H*6.2832+ph[(li+2)%6]),1.5);
+  const lanes=(k,a,w)=>{
+    const n=Math.round(70*W/512);
+    for(let i=0;i<n;i++){
+      const x=W*(0.08+rr()*0.84),y=rr()*H;
+      blot(x,y,w*(0.4+rr()*1.4),14+rr()*50,k,a*(0.15+rr()*0.45));
+    }
+  };
   const treads=(n,k,a,spread)=>{g.lineCap='round';for(let i=0;i<n;i++){
-    const li=rr()<0.5?0:1,u=li?0.65:0.35,off=(rr()-0.5)*spread*W,y0=rr()*H,len=20+rr()*80,al=a*(0.35+rr()*0.65),lw=0.8+rr()*1.4;
-    wrap(oy=>{g.strokeStyle=rgba(k,al);g.lineWidth=lw;g.beginPath();
-      for(let y=y0;y<=y0+len;y+=8) (y===y0?g.moveTo.bind(g):g.lineTo.bind(g))(wander(u,li,y)+off,y+oy);g.stroke();});}};
+    const x0=W*(0.06+rr()*0.88),y0=rr()*H,len=12+rr()*55,ang=(rr()-0.5)*0.35,bend=(rr()-0.5)*10,al=a*(0.25+rr()*0.75),lw=0.7+rr()*1.5;
+    // a volte due segni affiancati (le due gomme dello stesso asse sono lontane: qui solo coppie di battistrada)
+    const twin=rr()<0.3?3+rr()*4:0;
+    wrap(oy=>{g.strokeStyle=rgba(k,al);g.lineWidth=lw;
+      for(const dx of twin?[0,twin]:[0]){g.beginPath();g.moveTo(x0+dx,y0+oy);
+        g.quadraticCurveTo(x0+dx+Math.sin(ang)*len*0.5+bend,y0+oy+len*0.5,x0+dx+Math.sin(ang)*len,y0+oy+len);g.stroke();}});}};
   // materiale smosso: chiazze allungate sparse a caso (non più una fascia al centro della strada)
   const loose=(n,k)=>{for(let i=0;i<n;i++) blot(rr()*W,rr()*H,8+rr()*26,24+rr()*70,k,0.16+rr()*0.18);};
   const cracks=(n,a)=>{g.lineCap='round';for(let i=0;i<n;i++){
@@ -1207,10 +1276,13 @@ function dirtTexture(surface){
     blots(60,0.7,1.15,0.25,0.4,1);
     grain(5000,1,3,0.5,1.3,0.25,0.5);
     lanes(0.58,0.55,26);treads(70,0.5,0.22,0.16);
-    // creste di fango ai lati dei solchi (che seguono i solchi e si interrompono) e acqua nei solchi
-    [0.35,0.65].forEach((u,li)=>{for(const side of [-1,1]) for(let y=0;y<H;y+=4){if(patchy(li+1,y)<0.55) continue;
-      blot(wander(u,li,y)+side*(22+rr()*5),y,4+rr()*3,7,1.22,0.22);}});
-    for(let i=0;i<40;i++){const li=rr()<0.5?0:1,y=rr()*H;blot(wander(li?0.65:0.35,li,y)+(rr()-0.5)*24,y,4+rr()*10,10+rr()*30,2.2,0.12+rr()*0.15);}
+    // solchi brevi sparsi a caso, con le creste di fango ai lati, e acqua ferma nelle buche
+    for(let i=0;i<26;i++){
+      const x=W*(0.1+rr()*0.8),y0=rr()*H,len=20+rr()*60,dx=(rr()-0.5)*20;
+      for(let t=0;t<=1;t+=0.08){const x1=x+dx*t,y1=y0+len*t;
+        blot(x1,y1,5+rr()*3,6,0.6,0.25);blot(x1-9,y1,3+rr()*2,5,1.22,0.18);blot(x1+9,y1,3+rr()*2,5,1.22,0.18);}
+    }
+    for(let i=0;i<40;i++) blot(W*(0.06+rr()*0.88),rr()*H,4+rr()*12,6+rr()*26,2.2,0.1+rr()*0.15);
   }else if(kind==='snow'){
     blots(40,0.92,1.08,0.2,0.3,1.2);
     grain(4000,1,2,0.85,1.2,0.25,0.5);
@@ -1224,11 +1296,13 @@ function dirtTexture(surface){
     loose(22,1.14);
   }
   // bordi scuri (carreggiata consumata/bordo rialzato) per separare la pista dal terreno
-  for(const [x0,x1] of [[0,22],[W,W-22]]){
+  // (sottili e irregolari: chiazze di larghezza variabile, non due righe dritte)
+  for(const [x0,x1] of [[0,10],[W,W-10]]){
     const eg=g.createLinearGradient(x0,0,x1,0);
-    eg.addColorStop(0,'rgba(20,16,12,0.45)');eg.addColorStop(1,'rgba(20,16,12,0)');
-    g.fillStyle=eg;g.fillRect(Math.min(x0,x1),0,22,H);
+    eg.addColorStop(0,'rgba(20,16,12,0.32)');eg.addColorStop(1,'rgba(20,16,12,0)');
+    g.fillStyle=eg;g.fillRect(Math.min(x0,x1),0,10,H);
   }
+  for(let i=0;i<60;i++){const left=rr()<0.5;blot(left?rr()*8:W-rr()*8,rr()*H,6+rr()*18,10+rr()*30,0.55,0.12+rr()*0.18);}
   const tex=new THREE.CanvasTexture(c);
   tex.wrapS=THREE.RepeatWrapping;tex.wrapT=THREE.RepeatWrapping;
   tex.anisotropy=renderer.capabilities.getMaxAnisotropy();
@@ -1275,6 +1349,18 @@ function skyTexture(theme,L){
     rg.addColorStop(1,'rgba('+L.cloud+',0)');
     g.fillStyle=rg;
     g.beginPath();g.ellipse(cx,cy,r,r*0.5,0,0,Math.PI*2);g.fill();
+  }
+  // cielo coperto (pioggia): una coltre di nuvole basse e gonfie su tutto il cielo, con stracci più scuri
+  if(L.overcast){
+    const ov=L.overcast;
+    g.fillStyle='rgba('+L.cloud+','+(0.45*ov).toFixed(2)+')';g.fillRect(0,0,W,H*0.56);
+    for(let i=0;i<Math.round(140*ov);i++){
+      const cx=Math.random()*W,cy=Math.random()*H*0.5,r=40+Math.random()*120,dark=Math.random()<0.45;
+      const rg=g.createRadialGradient(cx,cy,0,cx,cy,r);
+      const col=dark?(L.night?'14,16,22':'72,78,88'):L.cloud;
+      rg.addColorStop(0,'rgba('+col+','+((dark?0.35:0.5)*ov).toFixed(2)+')');rg.addColorStop(1,'rgba('+col+',0)');
+      g.fillStyle=rg;g.beginPath();g.ellipse(cx,cy,r,r*0.42,0,0,Math.PI*2);g.fill();
+    }
   }
 
   const HZ=H*0.53;
@@ -1957,6 +2043,7 @@ const SURF_U={
   uSunDir:{value:new THREE.Vector3(0,1,0)},uSunCol:{value:new THREE.Color(1,1,1)},uSunVis:{value:1},
   uSkyTop:{value:new THREE.Color(0x6aa0d8)},uSkyHor:{value:new THREE.Color(0xcfe0f0)},
   uHeadPos:{value:new THREE.Vector3()},uHeadI:{value:0},uTime:{value:0},uTunnel:{value:0},
+  uRain:{value:0},uTrackV:{value:55},
   uGloss:{value:0.2},uRut:{value:0.2},uWet:{value:0},uWetPatch:{value:0},uReflI:{value:0.5},uSpecMax:{value:0.3},
   uSparkle:{value:0},uSparkleScale:{value:12},uGroundSparkle:{value:0}
 };
@@ -2014,7 +2101,13 @@ function patchRoadMat(m){
       .replace('#include <common>','#include <common>\nvarying vec3 vSWP;')
       .replace('#include <begin_vertex>','#include <begin_vertex>\nvSWP=(modelMatrix*vec4(transformed,1.0)).xyz;');
     sh.fragmentShader=sh.fragmentShader
-      .replace('#include <common>','#include <common>\nvarying vec3 vSWP;\nuniform float uGloss;uniform float uRut;uniform float uWet;uniform float uWetPatch;uniform float uReflI;uniform float uSpecMax;\n'+SURF_GLSL)
+      .replace('#include <common>','#include <common>\nvarying vec3 vSWP;\nuniform float uGloss;uniform float uRut;uniform float uWet;uniform float uWetPatch;uniform float uReflI;uniform float uSpecMax;uniform float uRain;uniform float uTrackV;\n'+SURF_GLSL+`
+        // zone bagnate dalla pioggia: stessa formula di rainZone() (s = distanza lungo la pista, u = attraverso)
+        float rainZoneG(float s,float u){
+          float z=0.5+0.5*(0.55*sin(s*0.011+1.3)+0.3*sin(s*0.027+u*3.0+4.1)+0.25*sin(s*0.063-u*5.0+2.2))/1.1;
+          float rut=0.6*exp(-pow(min(u,1.0-u)/0.06,2.0));
+          return smoothstep(0.0,1.0,clamp((z+0.18*rut-0.5)/0.3,0.0,1.0));
+        }`)
       .replace('#include <map_fragment>',`#include <map_fragment>
         // chiazze grandi (umido, fango lucido) e grana fine
         float sN1=sNoise(vSWP.xz*0.35),sN2=sNoise(vSWP.xz*2.7);
@@ -2024,10 +2117,12 @@ function patchRoadMat(m){
         vec4 sT2=mapTexelToLinear(texture2D(map,vec2(1.0-vUv.x,vUv.y*0.61+0.37)));
         diffuseColor.rgb=mix(diffuseColor.rgb,diffuse*sT2.rgb,sMx*0.85);
         diffuseColor.rgb*=0.84+0.3*sNoise(vSWP.xz*0.07+vec2(3.3,9.1))+0.08*(sNoise(vSWP.xz*0.6)-0.5);
-        // corsie consumate dalle gomme: serpeggiano e a tratti spariscono (niente righe dritte)
-        float sOff=(sNoise(vSWP.xz*0.04)-0.5)*0.1;
-        float sTr=smoothstep(0.1,0.0,abs(abs(vUv.x-0.5+sOff)-0.22))*smoothstep(0.25,0.7,sNoise(vSWP.xz*0.09+vec2(7.0,2.0)));
+        // zone lucidate dal passaggio delle gomme: chiazze sparse a caso (niente corsie parallele a "binario")
+        float sTr=smoothstep(0.58,0.82,sNoise(vSWP.xz*0.22+vec2(7.0,2.0)))*smoothstep(0.3,0.7,sNoise(vSWP.xz*0.05+vec2(1.7,8.3)));
         float sWet=clamp(uWet+uWetPatch*smoothstep(0.55,0.8,sN1+0.12*sN2),0.0,1.0);
+        // pioggia: tutto umido, e zone dove l'acqua scorre e ristagna (solchi, bordi, tratti bassi) quasi a specchio
+        float sRainZ=0.0;
+        if(uRain>0.0){sRainZ=rainZoneG(vUv.y*uTrackV,vUv.x);sWet=max(sWet,clamp(uRain*(0.45+0.55*sRainZ),0.0,1.0));}
         float sGl=clamp(uGloss*(0.7+0.6*sN2)+sTr*uRut+sWet*0.6,0.0,1.0);
         diffuseColor.rgb*=1.0-0.4*sWet;                       // il bagnato scurisce il fondo`)
       .replace('#include <lights_phong_fragment>',`#include <lights_phong_fragment>
@@ -2043,6 +2138,17 @@ function patchRoadMat(m){
         vec3 sky=mix(uSkyHor,uSkyTop,pow(clamp(Rv.y,0.0,1.0),0.5));
         outgoingLight+=sky*fr*sGl*sGl*uReflI*(1.0-0.8*uTunnel);
         outgoingLight+=sparkleAt(vSWP,V,uSparkle*(1.0-sWet));
+        // gocce che cadono sul velo d'acqua: piccoli cerchi che si allargano e riflettono il cielo
+        if(uRain>0.0&&sRainZ>0.05){
+          float fadeR=smoothstep(28.0,6.0,length(cameraPosition-vSWP));
+          if(fadeR>0.0){
+            vec2 q=vSWP.xz*2.2,c=floor(q),f=fract(q)-0.5;
+            f-=(vec2(sHash(c+1.3),sHash(c+7.1))-0.5)*0.5;
+            float t=fract(uTime*(1.1+sHash(c)*0.7)+sHash(c+3.3)),d=length(f),r=t*0.45;
+            float ring=smoothstep(0.035,0.0,abs(d-r))*(1.0-t);
+            outgoingLight+=sky*ring*0.55*uRain*sRainZ*fadeR*(1.0-uTunnel);
+          }
+        }
       }
       #include <envmap_fragment>`);
   };
@@ -2505,7 +2611,11 @@ const railUnitGeo=new THREE.BoxGeometry(1,1,1);sharedRes.add(railUnitGeo);
 // --- pozzanghere ---
 // contorno: ellisse allungata lungo la strada deformata da armoniche → forma irregolare e morbida.
 // puddleEdge = 0 al centro, 1 sul bordo dell'acqua, >1 nell'alone di asfalto bagnato
-function puddleShape(p,th){return 1+0.16*Math.sin(3*th+p.ph[0])+0.09*Math.sin(5*th+p.ph[1])+0.05*Math.sin(7*th+p.ph[2]);}
+// (ogni pozza ha le sue armoniche: a fagiolo, a goccia, frastagliata…)
+function puddleShape(p,th){
+  const a=p.amp||[0.1,0.16,0.09,0.05];
+  return 1+a[0]*Math.sin(2*th+p.ph[0])+a[1]*Math.sin(3*th+p.ph[1])+a[2]*Math.sin(5*th+p.ph[2])+a[3]*Math.sin(7*th+(p.ph[3]||0));
+}
 function puddleEdge(p,x,y){
   const dx=x-p.x,dy=y-p.y,c=Math.cos(p.heading),s=Math.sin(p.heading);
   const u=(dx*c+dy*s)/(p.R*p.ax),v=(-dx*s+dy*c)/p.R;
@@ -2560,6 +2670,40 @@ function buildPuddleGeo(p){
   geo.setIndex(idx);
   geo.computeVertexNormals();
   // la normale "su" è quella giusta: se l'ordine dei triangoli la rovescia la giro
+  const nrm=geo.attributes.normal;
+  if(nrm.getY(0)<0){for(let i=0;i<nrm.count;i++) nrm.setXYZ(i,-nrm.getX(i),-nrm.getY(i),-nrm.getZ(i));}
+  return geo;
+}
+// --- cumuli di neve: cupola adagiata sulla strada, bordo che sfuma nella neve battuta ---
+const driftMat=new THREE.MeshPhongMaterial({color:0xf3f6fb,vertexColors:true,transparent:true,shininess:18,specular:0x33373d,
+  emissive:0x1a1d24,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-8});
+sharedRes.add(driftMat);
+const DRIFT_RINGS=[0,0.2,0.4,0.55,0.68,0.78,0.86,0.92,0.96,0.99,1.04];
+function buildDriftGeo(d){
+  const pos=[],col=[],idx=[],c=Math.cos(d.heading),s=Math.sin(d.heading);
+  const rr=mulberry32(Math.floor(d.dist*7)+13);
+  for(let j=0;j<DRIFT_RINGS.length;j++){
+    const e=DRIFT_RINGS[j],segs=j===0?1:PUD_SEG;
+    for(let k=0;k<segs;k++){
+      const th=k/PUD_SEG*Math.PI*2,q=e*puddleShape(d,th);
+      const u=Math.cos(th)*q*d.R*d.ax,v=Math.sin(th)*q*d.R;
+      const x=d.x+u*c-v*s,y=d.y+u*s+v*c;
+      // superficie mossa dal vento: piccole increspature sulla cupola
+      const hh=driftProfile(d,Math.min(1,e))*(1+(j>0&&e<0.95?(rr()-0.5)*0.15:0));
+      pos.push(x*S3,0.026+elevAt(d.dist+u)+hh,y*S3);
+      const sh=0.92+0.08*Math.min(1,1-e)+(rr()-0.5)*0.03;          // un filo più grigia verso il bordo
+      col.push(sh,sh,Math.min(1,sh*1.02),e<0.86?1:Math.max(0,1-(e-0.86)/0.18));
+    }
+  }
+  for(let k=0;k<PUD_SEG;k++) idx.push(0,1+(k+1)%PUD_SEG,1+k);
+  for(let j=1;j<DRIFT_RINGS.length-1;j++){
+    const a=1+(j-1)*PUD_SEG,b=1+j*PUD_SEG;
+    for(let k=0;k<PUD_SEG;k++){const k1=(k+1)%PUD_SEG;idx.push(a+k,a+k1,b+k, a+k1,b+k1,b+k);}
+  }
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  geo.setAttribute('color',new THREE.Float32BufferAttribute(col,4));
+  geo.setIndex(idx);geo.computeVertexNormals();
   const nrm=geo.attributes.normal;
   if(nrm.getY(0)<0){for(let i=0;i<nrm.count;i++) nrm.setXYZ(i,-nrm.getX(i),-nrm.getY(i),-nrm.getZ(i));}
   return geo;
@@ -2758,6 +2902,11 @@ function buildDecor(trees,posts,puddles,railRuns,props){
     m.receiveShadow=true;m.renderOrder=1;
     puddleGroup.add(m);
   }
+  for(const d of drifts){
+    const m=new THREE.Mesh(buildDriftGeo(d),driftMat);
+    m.receiveShadow=true;m.castShadow=false;m.renderOrder=1;
+    puddleGroup.add(m);
+  }
   scene.add(puddleGroup);
 }
 
@@ -2779,21 +2928,43 @@ function stdMat(o){const m=new THREE.MeshStandardMaterial(o);carEnvMats.push(m);
 const puddleMat=stdMat({color:0x2b3236,roughness:0.06,metalness:0.35,normalMap:puddleRipple,
   normalScale:new THREE.Vector2(0.16,0.16),transparent:true,depthWrite:false,
   polygonOffset:true,polygonOffsetFactor:-6,polygonOffsetUnits:-12});
+// Bordo naturale: contorno sfrangiato da rumore, acqua bassa verso il bordo (si vede il fondo, riflette meno),
+// alone di fondo bagnato del colore della strada (non un anello nero). Con la pioggia: gocce che fanno cerchi.
+const PUD_U={uRimCol:{value:new THREE.Color(0x1a1a1c)},uShallow:{value:new THREE.Color(0x3a3a3c)},uRainP:{value:0},uPTime:{value:0}};
 puddleMat.onBeforeCompile=sh=>{
+  Object.assign(sh.uniforms,PUD_U);
   sh.vertexShader=sh.vertexShader
     .replace('#include <common>','#include <common>\nattribute float aEdge;\nvarying float vEdge;')
     .replace('#include <begin_vertex>','#include <begin_vertex>\nvEdge=aEdge;');
   sh.fragmentShader=sh.fragmentShader
-    .replace('#include <common>','#include <common>\nvarying float vEdge;')
+    .replace('#include <common>',`#include <common>
+      varying float vEdge;uniform vec3 uRimCol;uniform vec3 uShallow;uniform float uRainP;uniform float uPTime;
+      float pH(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+      float pN(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);
+        return mix(mix(pH(i),pH(i+vec2(1.0,0.0)),f.x),mix(pH(i+vec2(0.0,1.0)),pH(i+vec2(1.0,1.0)),f.x),f.y);}`)
     .replace('#include <color_fragment>',`#include <color_fragment>
-      float wE=vEdge+0.025*sin(vUv.x*41.0+vUv.y*29.0)+0.02*sin(vUv.x*-23.0+vUv.y*47.0);
-      float wWater=1.0-smoothstep(0.9,1.0,wE);
-      float wRim=1.0-smoothstep(1.0,1.34,wE);
-      diffuseColor.rgb=mix(vec3(0.035,0.032,0.03),diffuseColor.rgb,wWater);
-      diffuseColor.a=max(wWater*0.94,wRim*0.45);`)
-    .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(0.8,roughnessFactor,wWater);')
-    .replace('#include <metalnessmap_fragment>','#include <metalnessmap_fragment>\nmetalnessFactor*=wWater;')
-    .replace('#include <normal_fragment_maps>','#include <normal_fragment_maps>\nnormal=normalize(mix(geometryNormal,normal,wWater));');
+      // contorno sfrangiato: rumore a due scale sul bordo (niente ellissi perfette)
+      float wE=vEdge+(pN(vUv*9.0)-0.5)*0.16+(pN(vUv*31.0)-0.5)*0.06;
+      float wWater=1.0-smoothstep(0.92,1.0,wE);
+      float wDeep=1.0-smoothstep(0.35,0.9,wE);              // acqua profonda al centro, bassa verso il bordo
+      float wRim=(1.0-smoothstep(1.0,1.32,wE))*(0.55+0.45*pN(vUv*5.0+3.7));
+      diffuseColor.rgb=mix(uShallow,diffuseColor.rgb,wDeep);
+      diffuseColor.rgb=mix(uRimCol,diffuseColor.rgb,wWater);
+      diffuseColor.a=max(wWater*(0.62+0.34*wDeep),wRim*0.6);`)
+    .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(0.55,roughnessFactor,wWater*(0.5+0.5*wDeep));')
+    .replace('#include <metalnessmap_fragment>','#include <metalnessmap_fragment>\nmetalnessFactor*=wWater*(0.4+0.6*wDeep);')
+    .replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
+      normal=normalize(mix(geometryNormal,normal,wWater));
+      // pioggia: ogni cella ha una goccia che cade a un istante a caso e allarga un cerchio
+      if(uRainP>0.0){
+        for(int k=0;k<2;k++){
+          vec2 q=vUv*(6.0+float(k)*3.7)+float(k)*0.37,c=floor(q),f=fract(q)-0.5;
+          vec2 o=vec2(pH(c+1.3),pH(c+7.1))-0.5;f-=o*0.5;
+          float t=fract(uPTime*(0.9+pH(c)*0.6)+pH(c+3.3)),d=length(f),r=t*0.42;
+          float ring=sin((d-r)*70.0)*smoothstep(0.05,0.0,abs(d-r))*(1.0-t);
+          normal=normalize(normal+vec3(f.x,f.y,0.0)/max(d,0.02)*ring*0.9*uRainP*wWater);
+        }
+      }`);
 };
 sharedRes.add(puddleMat);
 function makeCarEnv(L){
@@ -4826,6 +4997,9 @@ function musicScheduler(){
 
 function initAudio(){
   if(audioCtx) return;
+  // iPhone/iPad: l'audio del gioco è "riproduzione" (come la musica), non un suono di sistema: così si sente
+  // anche con l'interruttore del silenzioso attivo (Safari 16.4+; dove non c'è, non cambia nulla)
+  try{if(navigator.audioSession) navigator.audioSession.type='playback';}catch(e){}
   audioCtx=new (window.AudioContext||window.webkitAudioContext)();
   noiseBuf=makeNoiseBuffer(2);
   const comp=audioCtx.createDynamicsCompressor();
@@ -5101,6 +5275,7 @@ function recoverCar(){
   car.x=w.x;car.y=w.y;car.angle=w.heading;car.speed=0;car.vy=0;car.r=0;
   phys.laF=phys.laR=phys.spin=phys.lock=0;steerAng=0;
   carAirY=0;carVelY=0;carVisElev=w.elev;VB.init=false;
+  crashReset();
   recoveryReset();
   fsMsg('🔧 Auto rimessa in strada',1600);
 }
@@ -5141,6 +5316,7 @@ let keys={};
 // materiale di ogni elemento di contorno per il suono dell'urto
 const PROP_HIT={rock:'stone',house:'stone',farm:'stone',church:'stone',chalet:'wood',barn:'wood',shack:'wood',logs:'wood',cactus:'wood',
   bale:'soft',tyres:'soft',lamp:'metal',chevron:'metal',board:'metal',adcol:'metal'};
+let drifts=[];
 let propsList=[],wps=[],puddles=[],treesList=[],railsList=[],surface=SURFACES[0],lastIdx=0,offTrack=false,onPuddle=false;
 let running=false,elapsed=0,carVisElev=0,carAirY=0,carVelY=0,camShake=0,jumpAnticipation=0,hitCd=0;
 const GRAV_Y=13; // gravità verticale (unità mondo/s²)
@@ -5154,8 +5330,148 @@ const COURSES=[null,
 const COURSE_ORDER=[1,2,3,4,7,12,9,5,8,6,10,11];
 let stage=1,course=1,stageTimes=[],gameMode='career';   // gameMode: 'career' | 'ta' (time attack)
 
+// ================= METEO: PIOGGIA E NEVE =================
+// Gocce (strisce) e fiocchi (punti) in una scatola che segue la telecamera: ognuno cade dalla sua posizione
+// iniziale e "rientra" dall'alto quando esce (calcolato nello shader, niente lavoro per fotogramma sulla CPU).
+// Con la pioggia: cielo coperto, luce più fioca, nebbia più vicina, strada bagnata con zone d'acqua (rainZone),
+// pozzanghere più numerose con le gocce che fanno cerchi, meno aderenza, scroscio di sottofondo.
+let weather={rain:0,snow:0};
+const PRECIP_VS=`
+uniform float uT;uniform vec3 uCam;uniform vec3 uBox;uniform float uFall;uniform vec2 uWind;uniform float uLen;uniform float uSnow;uniform float uPx;
+attribute vec3 aSeed;attribute float aEnd;
+varying float vA;
+#include <fog_pars_vertex>
+void main(){
+  vec3 p=aSeed*uBox;
+  float sp=uFall*(0.8+0.4*aSeed.x);
+  p.y-=uT*sp;
+  p.x+=uT*uWind.x*(0.8+0.4*aSeed.z);p.z+=uT*uWind.y*(0.8+0.4*aSeed.z);
+  if(uSnow>0.0){p.x+=sin(uT*1.1+aSeed.y*40.0)*0.6;p.z+=cos(uT*0.9+aSeed.x*40.0)*0.6;}
+  vec3 rel=mod(p-uCam,uBox)-uBox*0.5;
+  vec3 wp=uCam+rel;
+  vec3 vel=normalize(vec3(uWind.x,-uFall,uWind.y));
+  wp-=vel*uLen*aEnd*(0.6+0.8*aSeed.z);
+  float r=length(rel.xz)/(uBox.x*0.5);
+  vA=(1.0-aEnd*0.85)*(1.0-smoothstep(0.7,1.0,r))*smoothstep(0.0,0.2,rel.y/uBox.y+0.5);
+  vec4 mvPosition=viewMatrix*vec4(wp,1.0);
+  gl_Position=projectionMatrix*mvPosition;
+  gl_PointSize=min(uPx*(0.6+0.8*aSeed.z)/max(0.6,-mvPosition.z),uPx*0.32);   // (i fiocchi vicinissimi non diventano dischi)
+  vA*=smoothstep(0.8,2.5,-mvPosition.z);
+  #include <fog_vertex>
+}`;
+const PRECIP_FS=`
+uniform vec3 uCol;uniform float uOp;uniform float uSnow;varying float vA;
+#include <fog_pars_fragment>
+void main(){
+  float a=vA*uOp;vec3 col=uCol;
+  // fiocco: centro bianco e bordo grigio-azzurro (si vede anche contro il cielo e la neve chiari)
+  if(uSnow>0.0){float d=length(gl_PointCoord-0.5);a*=smoothstep(0.5,0.12,d);col=mix(vec3(0.66,0.71,0.79),uCol,smoothstep(0.42,0.08,d));}
+  if(a<0.004) discard;
+  gl_FragColor=vec4(col,a);
+  #include <fog_fragment>
+}`;
+function makePrecip(n,snow){
+  const seed=new Float32Array(n*(snow?1:2)*3),end=new Float32Array(n*(snow?1:2)),rr=mulberry32(snow?911:577);
+  for(let i=0;i<n;i++){
+    const s=[rr(),rr(),rr()];
+    if(snow){seed.set(s,i*3);}
+    else{seed.set(s,i*6);seed.set(s,i*6+3);end[i*2+1]=1;}
+  }
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(seed.length),3));   // (non usata: posizione dallo shader)
+  geo.setAttribute('aSeed',new THREE.BufferAttribute(seed,3));
+  geo.setAttribute('aEnd',new THREE.BufferAttribute(end,1));
+  const mat=new THREE.ShaderMaterial({
+    uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.fog,{uT:{value:0},uCam:{value:new THREE.Vector3()},
+      uBox:{value:snow?new THREE.Vector3(26,16,26):new THREE.Vector3(30,18,30)},uFall:{value:snow?1.4:19},
+      uWind:{value:snow?new THREE.Vector2(0.7,0.3):new THREE.Vector2(1.6,0.9)},uLen:{value:snow?0:0.62},uSnow:{value:snow?1:0},
+      uPx:{value:30},uCol:{value:new THREE.Color(snow?0xffffff:0xc4ccd6)},uOp:{value:snow?0.9:0.3}}]),
+    vertexShader:PRECIP_VS,fragmentShader:PRECIP_FS,fog:true,transparent:true,depthWrite:false});
+  const mesh=snow?new THREE.Points(geo,mat):new THREE.LineSegments(geo,mat);
+  mesh.frustumCulled=false;mesh.visible=false;mesh.renderOrder=5;
+  scene.add(mesh);
+  return {mesh,mat,n,per:snow?1:2};
+}
+const rainFx=makePrecip(2600,false),snowFx=makePrecip(5000,true);
+const _hexMix=(a,b,t)=>new THREE.Color(a).lerp(new THREE.Color(b),t);
+// luce dello stage modificata dal tempo: cielo coperto e grigio, sole velato, nebbia più vicina
+function weatherLight(L,W){
+  const r=W.rain||0,s=W.snow||0;
+  if(!r&&!s) return L;
+  const o=Object.assign({},L),night=!!L.night;
+  if(r){
+    o.sunI=L.sunI*(night?0.8:0.42+0.2*(1-r));o.hI=L.hI*(night?1:0.95);
+    o.fog=_hexMix(L.fog,night?0x1a1e26:0x868d96,0.65*r).getHex();o.fogN=L.fogN*(1-0.45*r);o.fogF=L.fogF*(1-0.36*r);
+    o.sky=L.sky.map((c,i)=>'#'+_hexMix(c,night?'#1c2029':(i<2?'#6a727c':'#a0a7af'),0.72*r).getHexString());
+    o.hSky=_hexMix(L.hSky,0xb4bcc6,0.5*r).getHex();
+    o.cloud=night?'58,62,72':'146,152,160';o.clouds=L.clouds+2.2*r;o.overcast=r;
+    if(!night) o.glow='205,210,216';
+  }
+  if(s){o.fogN=L.fogN*0.72;o.fogF=L.fogF*0.8;o.overcast=Math.max(o.overcast||0,0.35);}
+  o.label=L.label+(r?(r>0.8?' · Pioggia forte':' · Pioggia'):' · Nevicata');
+  return o;
+}
+function applyWeather(W){
+  weather={rain:W.rain||0,snow:W.snow||0};
+  rainFx.mesh.visible=weather.rain>0;snowFx.mesh.visible=weather.snow>0;
+  rainFx.mesh.geometry.setDrawRange(0,Math.round(rainFx.n*(0.35+0.65*weather.rain))*2);
+  snowFx.mesh.geometry.setDrawRange(0,Math.round(snowFx.n*weather.snow));
+  const night=!!(curLight&&curLight.night);
+  rainFx.mat.uniforms.uCol.value.set(night?0x8c96a8:0xc4ccd6);
+  rainFx.mat.uniforms.uOp.value=(night?0.24:0.32)*(0.6+0.4*weather.rain);
+  SURF_U.uRain.value=weather.rain;SURF_U.uTrackV.value=TRACK_V;
+  PUD_U.uRainP.value=weather.rain;
+}
+// colore dell'acqua e dell'alone bagnato secondo il fondo (acqua fangosa sugli sterrati, scura sull'asfalto)
+function applyPuddleLook(surface){
+  const muddy={dirt:1,hard:0.8,mud:1.2,mixed:0.9,gravel:0.5,fine:0.5}[surface.fx]||0;
+  const b=surface.base;
+  puddleMat.color.setRGB(0.13+0.12*muddy*0.6,0.14+0.07*muddy*0.6,0.15-0.02*muddy);
+  puddleMat.roughness=0.05+0.08*muddy;puddleMat.metalness=0.35-0.12*Math.min(1,muddy);
+  PUD_U.uRimCol.value.setRGB(b[0]/255*0.5,b[1]/255*0.48,b[2]/255*0.46);
+  PUD_U.uShallow.value.setRGB(b[0]/255*0.62,b[1]/255*0.58,b[2]/255*0.54);
+}
+// aderenza con la pioggia: un po' meno ovunque, molto meno dove scorre l'acqua (zone bagnate)
+function rainGrip(){
+  if(!weather.rain) return 1;
+  if(offTrack) return 1-0.08*weather.rain;
+  const w=wps[lastIdx],b=wps[Math.min(wps.length-1,lastIdx+1)],c=Math.cos(w.heading),s=Math.sin(w.heading);
+  const dx=car.x-w.x,dy=car.y-w.y,along=dx*c+dy*s,lat=-dx*s+dy*c;
+  const u=Math.max(0,Math.min(1,(lat/w.half+1)/2));
+  return 1-weather.rain*(0.06+0.2*rainZone(w.dist+along,u));
+}
+let rainSnd=null;
+function weatherFrame(t){
+  for(const fx of [rainFx,snowFx]){
+    if(!fx.mesh.visible) continue;
+    const U=fx.mat.uniforms;
+    U.uT.value=t;
+    // scatola un po' davanti alla telecamera (le gocce dietro non si vedono)
+    camera.getWorldDirection(_wDir);
+    U.uCam.value.copy(camera.position).addScaledVector(_wDir,fx===snowFx?7:6);
+    U.uPx.value=(renderH||720)*(fx===snowFx?0.06:0.03);
+    U.uOp.value=(fx===snowFx?0.9:(curLight.night?0.24:0.32)*(0.6+0.4*weather.rain))*(1-0.92*tunnelT);
+  }
+  PUD_U.uPTime.value=t;
+  // scroscio della pioggia (sul canale degli effetti: tace nei menu e in pausa), attutito in galleria
+  if(audioCtx&&weather.rain>0&&!rainSnd){
+    const src=audioCtx.createBufferSource();src.buffer=noiseBuf;src.loop=true;
+    const hp=audioCtx.createBiquadFilter();hp.type='highpass';hp.frequency.value=700;
+    const lp=audioCtx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=7000;
+    const g=audioCtx.createGain();g.gain.value=0;
+    src.connect(hp);hp.connect(lp);lp.connect(g);g.connect(sfxBus);src.start();
+    rainSnd={g,lp};
+  }
+  if(rainSnd){
+    const v=weather.rain*0.08*(1-0.75*tunnelT);
+    rainSnd.g.gain.setTargetAtTime(v,audioCtx.currentTime,0.3);
+    rainSnd.lp.frequency.setTargetAtTime(1500+5500*(1-tunnelT),audioCtx.currentTime,0.3);
+  }
+}
+const _wDir=new THREE.Vector3();
 function applyLighting(L,theme){
   curLight=L;
+  sunDisc.material.opacity=1-0.92*(L.overcast||0);
   sunDir.set(Math.cos(L.el)*Math.cos(L.az),Math.sin(L.el),Math.cos(L.el)*Math.sin(L.az)).normalize();
   sun.color.setHex(L.sun);sun.intensity=L.sunI;
   hemi.color.setHex(L.hSky);hemi.intensity=L.hI;
@@ -5189,10 +5505,14 @@ function applyTunnelLight(){
 function loadStage(n,c){
   stage=n;course=c||COURSE_ORDER[(n-1)%COURSE_ORDER.length];
   const built=buildTrack(course);
-  wps=built.wps;puddles=built.puddles;treesList=built.trees;railsList=built.railPoints;surface=built.surface;
+  wps=built.wps;puddles=built.puddles;drifts=built.drifts||[];
+  // fiumi sotto i ponti (stessa quota dell'acqua disegnata in buildStructures)
+  bridgesList=built.structs.filter(s=>s.type!=='tunnel').map(s=>{const c=wps[Math.round((s.start+s.end)/2)];return {start:s.start,end:s.end,waterY:c.elev*0.4-RAVINE+1.6};});treesList=built.trees;railsList=built.railPoints;surface=built.surface;
   trackBumps=built.bumps;
-  applyLighting(LIGHTS[STAGE_LIGHT[(course-1)%STAGE_LIGHT.length]],surface.scene);
+  const W=weatherOf(course);
+  applyLighting(weatherLight(LIGHTS[STAGE_LIGHT[(course-1)%STAGE_LIGHT.length]],W),surface.scene);
   applySurfaceLook(surface,curLight);
+  applyWeather(W);applyPuddleLook(surface);
   const pre=10,post=10,visWps=[];
   const first=wps[0],last=wps[wps.length-1];
   for(let i=pre;i>=1;i--) visWps.push({x:first.x-Math.cos(first.heading)*STEP*i,y:first.y-Math.sin(first.heading)*STEP*i,heading:first.heading,dist:first.dist-STEP*i,half:first.half,elev:first.elev});
@@ -5228,6 +5548,7 @@ function loadStage(n,c){
   if(typeof phys!=='undefined'){phys.ax=phys.ay=phys.spin=phys.lock=phys.alphaF=phys.alphaR=phys.laF=phys.laR=0;}
   if(typeof sus!=='undefined') sus.init=false;
   clearTyreFX();Object.assign(WET,{gF:1,gR:1,drag:0,yaw:0,n:0,side:0});
+  crashReset();CARVIS.q=null;CARVIS.tip=0;
   lastIdx=0;offTrack=false;onPuddle=false;elapsed=0;tunnelT=0;progEl.textContent='0%';carVisElev=wps[0].elev;carAirY=0;carVelY=0;gear=1;rpm=IDLE_RPM;slipAmt=0;gearEl.textContent=1;
   stageNumEl.textContent=n;surfEl.textContent=COURSES[course].name+' · '+surface.name+' · '+curLight.label;
   updateHudMode();
@@ -5516,32 +5837,64 @@ const steerRate=v=>1.6/(1+Math.abs(v)/110);
 // l'acqua è solo da un lato (il lato frenato tira indietro) più i colpi irregolari dell'onda.
 const WET={gF:1,gR:1,drag:0,yaw:0,n:0,side:0,kick:0};
 let wetRumbleT=0;
+// Con la pioggia le pozze sono più profonde (deep): l'acqua toglie più tenuta, frena di più e l'onda dà
+// strattoni più forti; oltre una certa velocità l'avantreno galleggia (aquaplaning): lo sterzo non morde e
+// il muso "naviga" con piccole correzioni casuali.
+// Cumuli di neve fresca: la ruota che ci entra viene frenata (la neve va spostata: più si va forte, più
+// frena), perde tenuta e affonda; se succede da un lato solo l'auto viene tirata da quella parte, e la
+// neve irregolare dà colpi di sterzo e scossoni. Più alto il cumulo, più forte l'effetto.
+const SNOWD={n:0,kick:0,t:0};
 function updateWet(dt,airborne){
   const m=carModels[curCarId];
-  let fN=0,rN=0,lN=0,rtN=0;
+  let fN=0,rN=0,lN=0,rtN=0,sF=0,sR=0,sL=0,sRt=0;
   if(m&&!airborne) for(const w of m.wheels){
-    w.wet=false;
+    w.wet=false;w.snowD=0;
     if(w.gx===undefined) continue;
     for(const p of puddles){
       const dx=w.gx-p.x,dy=w.gy-p.y;
       if(dx*dx+dy*dy<p.r*p.r&&puddleEdge(p,w.gx,w.gy)<1){w.wet=true;break;}
+    }
+    if(drifts.length){
+      const h=driftAt(w.gx,w.gy,lastIdx);
+      if(h>0.005){
+        w.snowD=Math.min(1.5,h/0.15);
+        if(w.front) sF+=w.snowD;else sR+=w.snowD;
+        if(w.rest.x>0) sL+=w.snowD;else sRt+=w.snowD;
+      }
     }
     if(!w.wet) continue;
     if(w.front) fN++; else rN++;
     if(w.rest.x>0) lN++; else rtN++;
   }
   const spd=Math.abs(car.speed),aq=Math.max(0,Math.min(1,(spd-20)/110));
-  const loss=0.5+0.42*aq;
+  const deep=1+0.5*weather.rain;
+  const loss=Math.min(0.96,(0.5+0.42*aq)*(1+0.12*weather.rain));
   const wasN=WET.n;
   WET.gF=1-loss*fN/2;WET.gR=1-loss*rN/2;
   WET.n=fN+rN;
-  WET.drag=WET.n/4*(10+0.42*spd);
+  WET.drag=WET.n/4*(10+0.42*spd)*deep;
   WET.side=Math.sign(lN-rtN);
   // entrando in acqua l'onda e il fondo irregolare spingono il muso da una parte (prima dal lato che
   // tocca l'acqua per primo): la spinta dura finché si è in acqua e si somma alla perdita di tenuta
-  if(WET.n&&!wasN) WET.kick=(WET.side?-WET.side:(Math.random()<0.5?-1:1))*(0.6+Math.random()*0.4);
+  if(WET.n&&!wasN) WET.kick=(WET.side?-WET.side:(Math.random()<0.5?-1:1))*(0.6+Math.random()*0.4)*(1+0.4*weather.rain);
   const vs=Math.min(1.5,spd/100);
-  WET.yaw=WET.n?(WET.kick*1.9*vs*(0.5+WET.n/8)+(rtN-lN)/2*2.2*vs+(Math.random()-0.5)*2*vs):0;
+  WET.yaw=WET.n?(WET.kick*1.9*vs*(0.5+WET.n/8)+(rtN-lN)/2*2.2*vs*deep+(Math.random()-0.5)*2*vs*deep):0;
+  // aquaplaning: tutte e due le ruote anteriori in acqua e velocità alta → il muso naviga
+  if(fN===2&&aq>0.5) WET.yaw+=Math.sin(performance.now()*0.011)*1.6*(aq-0.5)*deep;
+  // --- cumuli di neve ---
+  const sN=sF+sR;
+  if(sN>0){
+    WET.gF*=1-Math.min(0.6,0.3*sF);WET.gR*=1-Math.min(0.6,0.3*sR);
+    WET.drag+=sN/4*(14+0.5*spd);
+    if(!SNOWD.n){SNOWD.kick=(sL>sRt?-1:sRt>sL?1:(Math.random()<0.5?-1:1))*(0.5+Math.random()*0.5);}
+    WET.yaw+=(sRt-sL)/2*3.6*vs+SNOWD.kick*2.2*vs*Math.min(1,sN/2)+(Math.random()-0.5)*3.6*vs*Math.min(1,sN/2);
+    // scossoni: la scocca sobbalza sulla neve compatta in modo irregolare
+    VB.vr+=(Math.random()-0.5)*5*vs*Math.min(1,sN/2)*dt;VB.vp+=(Math.random()-0.5)*3*vs*Math.min(1,sN/2)*dt;
+    camShake=Math.max(camShake,0.12*vs*Math.min(1,sN/2));
+    SNOWD.t-=dt;if(SNOWD.t<=0){SNOWD.t=0.1;rumble(0.25+0.35*vs,0.4,110);}
+    if(!SNOWD.n&&spd>30){sfxImpact(Math.min(0.6,0.15+spd/300),'soft');}
+  }
+  SNOWD.n=sN;
 }
 // terreno ai lati della pista per scenario: aderenza, resistenza al rotolamento, suono delle gomme
 const OFFROAD={
@@ -5684,7 +6037,7 @@ function update(dt){
   const P=CAR_PHYS[curCarId]||CAR_PHYS.hatch;
   // aderenza: superficie, auto, erba fuori pista, pozzanghere
   const OR=offroad();
-  let mu=(offTrack?OR.grip:surface.grip)*P.grip;
+  let mu=(offTrack?OR.grip:surface.grip)*P.grip*rainGrip();
   tyreK=TYRE[offTrack?OFFROAD_FX[surface.scene]:surface.fx]||TYRE.dirt;
   roughN+=((Math.random()*2-1)-roughN)*Math.min(1,dt*7);
   rollBase=offTrack?10+OR.roll:10+(1-surface.friction)*45;
@@ -5704,6 +6057,18 @@ function update(dt){
     if(!partyOn&&finishT>1.2&&Math.abs(car.speed)<3){startParty();partyT0=finishT;}
     if(finishT>11||(partyOn&&finishT-partyT0>3.4)) endFinish();
   }else engThr=ctl.thr;
+  // ribaltamento in corso: niente guida, la scocca rotola (vedi crashUpdate); il cronometro corre
+  if(CRASH.on){
+    crashUpdate(dt);
+    const n=findNearest();lastIdx=n.idx;offTrack=n.dist>wps[lastIdx].half;
+    tunnelT+=((wps[lastIdx].tunnel?1:0)-tunnelT)*Math.min(1,dt*3);
+    progEl.textContent=Math.min(100,Math.floor(lastIdx/finishIdx*100))+'%';
+    warn.classList.remove('show');
+    elapsed+=dt;timeEl.textContent=elapsed.toFixed(1)+'s';totalEl.textContent=(sumTimes()+elapsed).toFixed(1)+'s';
+    updateEngine(dt,ctl.thr);camShake*=0.9;
+    checkpointFrame();
+    return;
+  }
   const steerTarget=inSteer*maxSteer(car.speed);
   // il volante torna al centro molto più in fretta di quanto si sterzi (le ruote si riallineano da sole):
   // in uscita di curva l'auto smette di girare quando raddrizzi, invece di continuare a chiudere
@@ -5726,9 +6091,13 @@ function update(dt){
   // dinamica verticale della scocca. Senza ruote a terra le gomme non spingono: l'auto è in volo.
   const steps=Math.max(1,Math.ceil(dt/0.004)),h=dt/steps;
   for(let i=0;i<steps;i++){
-    const load=Math.max(0,Math.min(1.5,VB.load));
+    // su due ruote lavorano solo le gomme esterne: meno tenuta
+    const load=Math.max(0,Math.min(1.5,VB.load))*(TIP.a>0.02?0.82:1);
     physicsStep(h,P,mu*load,drive,brake,inHb,VB.contacts===0);
     verticalStep(h,phys.ax,phys.ay);
+    if(CRASH.on) break;
+    tipStep(h);
+    if(CRASH.on) break;
   }
   wheelSpin=phys.spin;
   const airborne=VB.contacts===0;
@@ -5860,11 +6229,26 @@ function update(dt){
   const drift=Math.max(0,(Math.max(Math.abs(phys.alphaF),Math.abs(phys.alphaR))-0.12)/0.3);
   slipAmt=airborne?0:Math.min(1,drift*Math.min(1,spd/60)+phys.spin*0.8+phys.lock*Math.min(1,spd/50)*0.8);
 
+  // finita nel fiume sotto un ponte (cadendo dal bordo o scendendo per la gola): fuori subito, con penalità
+  {const wy=waterLevelHere();
+   if(wy!==null&&running&&countdownT<=0&&!finishing&&VB.y<wy+0.45){waterT+=dt;if(waterT>0.3){waterT=0;sfxSplash(1);penaltyRecover('💦 In acqua!');}}
+   else waterT=0;}
   recoveryCheck(dt);
   checkpointFrame();
   if(running&&!stageDone&&countdownT<=0&&lastIdx>=finishIdx) beginFinish();
 }
 
+// altezza di un cumulo di neve in un punto della strada (mondo): profilo a cupola, nullo sul bordo del cumulo
+const driftProfile=(d,e)=>e>=1?0:d.h*Math.pow(1-e*e,1.4);
+function driftAt(x,y,near){
+  let hm=0;
+  for(const d of drifts){
+    if(d.idx<near-12) continue;if(d.idx>near+12) break;
+    const dx=x-d.x,dy=y-d.y;if(dx*dx+dy*dy>d.r*d.r) continue;
+    const h=driftProfile(d,puddleEdge(d,x,y));if(h>hm) hm=h;
+  }
+  return hm;
+}
 // ================= SOSPENSIONI E CONTATTO COL TERRENO =================
 // altezza del fondo in un punto (coordinate pista): sulla carreggiata interpola la quota lungo la pista
 function groundAt(x,y){
@@ -5880,7 +6264,7 @@ function groundAt(x,y){
   // quota stradale dal profilo esatto (la stessa usata per disegnare l'asfalto)
   const road=elevAt(a.dist+(b.dist-a.dist)*bt);
   const edge=Math.sqrt(best)-(a.half+(b.half-a.half)*bt);
-  if(edge<=0) return road;
+  if(edge<=0) return drifts.length?road+driftAt(x,y,bi):road;
   // sui ponti l'impalcato è più largo della carreggiata (fino al parapetto e oltre): lì sotto non c'è la gola
   if(edge<=6&&(a.bridgeF>0.3||b.bridgeF>0.3)) return road;
   // oltre il bordo si passa gradualmente dal piano stradale al terreno
@@ -5930,9 +6314,11 @@ function verticalStep(h,ax,ay){
   const c=Math.cos(car.angle),s=Math.sin(car.angle);
   const sag=GRAV_Y/(4*SUS.k);                // compressione statica: a riposo le molle reggono il peso
   const sp=Math.sin(VB.p),sr=Math.sin(VB.r);
-  let F=0,Mp=0,Mr=0,contacts=0,gSum=0,gvSum=0,maxX=-1,gvOk=0,nOk=0;
+  let F=0,Mp=0,Mr=0,contacts=0,gSum=0,gvSum=0,maxX=-1,gvOk=0,nOk=0,gF=0,gR=0,gL=0,gRt=0;
   for(const w of m.wheels){
     const g=wheelGround(w,c,s);
+    if(w.rest.z>0) gF+=g/2;else gR+=g/2;
+    if(w.rest.x>0) gL+=g/2;else gRt+=g/2;
     // velocità con cui sale il suolo sotto la ruota. Limitata a un valore da strada vera (gradini, cordoli,
     // rampe veloci): un salto di quota istantaneo (bordo di un ponte, auto spostata di lato da un urto,
     // riposizionamento) non deve diventare un colpo di smorzatore che catapulta l'auto
@@ -5962,7 +6348,15 @@ function verticalStep(h,ax,ay){
     Mr-=(ay/G_ACC)*GRAV_Y*SUS.hcg;
   }
   // atterraggio: velocità d'impatto rispetto al suolo (per suono, vibrazione e scossa della camera)
-  if(VB.contacts===0&&contacts>0) VB.land=Math.min(VB.land,VB.vy-gvSum/m.wheels.length);
+  if(VB.contacts===0&&contacts>0){
+    const vImp=VB.vy-gvSum/m.wheels.length;
+    VB.land=Math.min(VB.land,vImp);
+    // atterraggio storto: l'assetto rispetto al terreno (muso troppo giù, coda troppo giù, scocca inclinata
+    // di lato) con un impatto forte e in velocità fa piantare il muso o uno spigolo: l'auto si cappotta
+    const relP=VB.p-Math.atan2(gF-gR,m.wb),relR=VB.r-Math.atan2(gL-gRt,m.tw);
+    const spd=Math.abs(car.speed);
+    if(spd>40&&vImp<-2.5&&(relP<-0.42||relP>0.6||Math.abs(relR)>0.42)){startCrash('land');if(CRASH.on) return;}
+  }
   VB.vy+=(F-GRAV_Y)*h;VB.vp+=Mp/SUS.Ip*h;VB.vr+=Mr/SUS.Ir*h;
   if(contacts===0){VB.vp*=1-0.3*h;VB.vr*=1-0.8*h;}  // in volo solo un minimo smorzamento
   // Niente "trampolini": salendo con le ruote su una roccia ripida, su un cordolo o su un dislivello (bordi
@@ -5980,7 +6374,9 @@ function verticalStep(h,ax,ay){
   VB.y+=VB.vy*h;VB.p+=VB.vp*h;VB.r+=VB.vr*h;
   // suolo molto più alto della ruota (salto di quota improvviso): la scocca viene sollevata, non catapultata
   if(maxX>0.5){VB.y+=maxX-0.5;VB.vy=Math.min(VB.vy,4);}
-  VB.p=Math.max(-0.7,Math.min(0.7,VB.p));VB.r=Math.max(-0.5,Math.min(0.5,VB.r));
+  // (in volo la scocca può ruotare di più: un salto preso troppo forte la fa arrivare col muso giù)
+  const pl=contacts?0.7:1.2,rl=contacts?0.5:0.9;
+  VB.p=Math.max(-pl,Math.min(pl,VB.p));VB.r=Math.max(-rl,Math.min(rl,VB.r));
   VB.contacts=contacts;VB.load=F/GRAV_Y;
   VB.ground=gSum/m.wheels.length;VB.groundV=gvSum/m.wheels.length;
 }
@@ -5988,13 +6384,304 @@ function verticalStep(h,ax,ay){
 function placeWheels(){
   const m=carModels[curCarId];
   if(!m) return;
+  const ta=replayMode?CARVIS.tip:TIP.a*TIP.s,crash=CRASH.on||!!CARVIS.q;
   for(const w of m.wheels){
     if(w.susX===undefined) continue;
-    const yT=w.r+Math.max(-SUS.down,Math.min(SUS.up,w.susX));
+    let x=w.susX;
+    // ruote sollevate (lato alto su due ruote, o auto che rotola): sospensione a fine corsa
+    if(crash||(Math.abs(ta)>0.03&&Math.sign(w.rest.x)===Math.sign(ta))) x=-SUS.down;
+    const yT=w.r+Math.max(-SUS.down,Math.min(SUS.up,x));
     w.pivot.position.y+=(yT-w.pivot.position.y)*0.6;
   }
 }
 function updateSuspension(){} // sostituita da verticalStep (integrata nei sotto-passi della fisica)
+
+// ================= DUE RUOTE E RIBALTAMENTO =================
+// Oltre al rollio delle sospensioni la scocca può ruotare attorno alla linea di contatto delle ruote esterne
+// (TIP.a). Coppia che ribalta = spinta laterale × altezza del baricentro; coppia che raddrizza = peso × mezza
+// carreggiata (si tiene conto dell'angolo già raggiunto e della pendenza laterale del fondo). Sull'asfalto le
+// gomme da sole fanno al massimo alzare le ruote interne in una derapata violenta; di traverso su un fondo che
+// frena la scivolata (erba, sabbia, neve fresca, fango, bordo della strada) le gomme fanno da "inciampo":
+// l'auto va su due ruote e, se la spinta continua oltre il punto di equilibrio, si ribalta.
+// h: altezza del baricentro (mondo); stabilità statica = mezza carreggiata / h
+const ROLLOVER={hatch:{h:0.34},classic:{h:0.34},raid:{h:0.45},buggy:{h:0.3}};
+// quanto il fondo "inciampa" la gomma che scivola di traverso (g in più, a scivolata piena)
+// (l'asfalto asciutto tiene e fa leva; ghiaia, neve e bagnato lasciano scivolare; sabbia ed erba fanno inciampare)
+const TRIP={asphalt:0.3,wet:0.1,dirt:0.22,hard:0.26,gravel:0.18,fine:0.2,mixed:0.22,sand:0.4,mud:0.3,
+  snow:0.15,grass:0.45,redsand:0.45,powder:0.35};
+const TIP={a:0,w:0,s:1,g:0};   // a: angolo sopra le ruote esterne; s: +1 = si alza il lato sinistro; g: spinta (g)
+function tipReset(){TIP.a=TIP.w=TIP.g=0;}
+function tipStep(h){
+  const m=carModels[curCarId];
+  if(!m||!m.tw||VB.contacts===0){          // in volo: niente perno, l'angolo torna nel rollio della scocca
+    if(TIP.a>0){VB.r+=TIP.s*TIP.a;VB.vr+=TIP.s*TIP.w;}
+    TIP.a=TIP.w=0;return;
+  }
+  const R=ROLLOVER[curCarId]||ROLLOVER.hatch,d=m.tw/2,hh=R.h;
+  // spinta laterale delle gomme (in g) e verso: ay>0 (verso destra) carica le ruote di sinistra → si alza la destra
+  const latG=Math.abs(phys.ay)/G_ACC;
+  let side=phys.ay>0?-1:1;
+  // inciampo: l'auto scivola di traverso e il fondo trattiene le gomme (la spinta frena la scivolata)
+  // Cresce con l'angolo di deriva e col quadrato della velocità (l'energia della scivolata che si trasforma
+  // in rotazione): una derapata ampia e veloce alza le ruote interne, un testacoda in velocità ribalta.
+  let trip=0;
+  const vxa=Math.abs(car.speed),vya=Math.abs(car.vy),V=Math.hypot(vxa,vya),beta=Math.atan2(vya,Math.max(vxa,1));
+  if(V>60&&Math.sign(phys.ay)===-Math.sign(car.vy)){
+    const kind=offTrack?OFFROAD_FX[surface.scene]||'grass':surface.fx;
+    // (le derive del gioco: ~3° in curva normale, 8-10° in una derapata decisa, oltre 15° di traverso)
+    const sl=Math.max(0,Math.min(1.5,(beta-0.04)/0.2));
+    trip=((TRIP[kind]||0.25)+(offTrack?0.12:0))*4.8*sl*Math.min(2.2,(V/150)*(V/150));
+  }
+  const g=latG+trip;TIP.g=g;
+  if(TIP.a<=0.0005) TIP.s=side;            // il lato si sceglie quando le ruote sono ancora tutte giù
+  else if(side!==TIP.s) TIP.g=-g*0.5;      // spinta dall'altra parte: aiuta a ricadere
+  const gp=GRAV_Y,th=TIP.a+TIP.s*VB.r;     // angolo totale rispetto all'orizzontale (anche fondo inclinato)
+  const u=d*Math.cos(th)-hh*Math.sin(th),v=d*Math.sin(th)+hh*Math.cos(th);
+  const alpha=(TIP.g*gp*v-gp*u)/(1.35*(d*d+hh*hh));
+  if(TIP.a<=0&&alpha<=0){TIP.a=0;TIP.w=0;return;}
+  TIP.w+=alpha*h;TIP.w*=1-1.2*h;TIP.a+=TIP.w*h;
+  if(TIP.a<0){                                // ricade sulle quattro ruote
+    if(TIP.w<-0.8){const s=Math.min(1,-TIP.w/5);VB.land=Math.min(VB.land,-2-6*s);VB.vr-=TIP.s*TIP.w*0.3;}
+    TIP.a=0;TIP.w=0;return;
+  }
+  // oltre il punto di equilibrio (baricentro sopra le ruote esterne) e ancora in rotazione: si ribalta
+  // oltre il punto di equilibrio, oppure già molto inclinata mentre scivola ancora forte di lato (l'energia della
+  // scivolata non è finita: il corpo rigido la trasforma in capriole vere invece di un lento adagiarsi sul fianco)
+  if((th>Math.atan2(d,hh)+0.08&&TIP.w>0.3)||(TIP.a>0.5&&TIP.w>0.6&&Math.abs(car.vy)>35)) startCrash('roll');
+}
+// spostamento della scocca quando ruota sul perno delle ruote esterne (coordinate della scocca: x a sinistra)
+function tipOffset(a,s,d){
+  const cb=CAR_BASE_Y;
+  return {dx:-s*d*(1-Math.cos(a))-cb*s*Math.sin(a),dy:d*Math.sin(a)-cb*(1-Math.cos(a))};
+}
+
+// ---------- ribaltamento: la scocca diventa un corpo rigido che rotola e rimbalza sul terreno ----------
+// Punti di contatto: le quattro ruote (scorrono in avanti, trattengono di lato) e un guscio arrotondato della
+// carrozzeria (sezione a ottagono: rotola come un'auto vera, non come una scatola). Molla-smorzatore sul suolo,
+// attrito di strisciamento, gravità e inerzia della scocca. Quando si ferma: sulle ruote si riparte, sul
+// tetto o su un fianco gli spettatori la rimettono in strada (il cronometro intanto corre).
+// posa da disegnare nel replay: angolo su due ruote (con segno) e, durante un ribaltamento, posizione e rotazione
+const CARVIS={tip:0,q:null,p:new THREE.Vector3()};
+const HULL={ // mezza larghezza, muso, coda, fondo e tetto (coordinate del modello, suolo y=0)
+  hatch:{w:0.56,f:1.19,r:-1.18,b:0.14,t:0.86},classic:{w:0.53,f:1.2,r:-1.2,b:0.15,t:0.8},
+  raid:{w:0.6,f:1.3,r:-1.34,b:0.26,t:1.2},buggy:{w:0.72,f:1.14,r:-1.33,b:0.2,t:1.17}
+};
+const CRASH={on:false,t:0,okT:0,restT:0,hitCd:0,p:new THREE.Vector3(),v:new THREE.Vector3(),q:new THREE.Quaternion(),w:new THREE.Vector3()};
+const _cR=new THREE.Matrix4(),_cr=new THREE.Vector3(),_cpv=new THREE.Vector3(),_cF=new THREE.Vector3(),_cT=new THREE.Vector3(),
+  _cf=new THREE.Vector3(),_cs=new THREE.Vector3(),_cqi=new THREE.Quaternion(),_cdq=new THREE.Quaternion(),_ce=new THREE.Euler(0,0,0,'YXZ');
+function crashShape(id){
+  const m=carModels[id];if(m.crash) return m.crash;
+  const H=HULL[id]||HULL.hatch,my=-CAR_BASE_Y+0.02,pts=[];
+  const yb=H.b+my,yt=H.t+my,hy=yt-yb;
+  for(const z of [H.f*0.95,H.r*0.95]) for(const sx of [-1,1]){
+    pts.push([sx*H.w*0.82,yb,z],[sx*H.w,yb+0.3*hy,z],[sx*H.w,yb+0.68*hy,z],[sx*H.w*0.68,yt,z]);
+  }
+  for(const sx of [-1,1]) pts.push([sx*H.w*0.68,yt,0],[sx*H.w,yb+0.5*hy,0]);
+  const wheels=m.wheels.map(w=>[w.rest.x,my,w.rest.z]);
+  const L=H.f-H.r,W=2*H.w,Hh=H.t-H.b;
+  // inerzia di una scatola piena, un po' ridotta (massa concentrata in basso e al centro)
+  const I=[(Hh*Hh+L*L)/12*0.85,(W*W+L*L)/12*0.85,(W*W+Hh*Hh)/12*0.9];
+  return m.crash={pts:pts.map(p=>new THREE.Vector3(...p)),wheels:wheels.map(p=>new THREE.Vector3(...p)),I};
+}
+function startCrash(kind){
+  if(CRASH.on||!running||countdownT>0||finishing) return;
+  const m=carModels[curCarId];if(!m) return;
+  crashShape(curCarId);
+  const c=Math.cos(car.angle),s=Math.sin(car.angle),dirX=c,dirZ=s;
+  // posa attuale (comprese le due ruote, se c'erano)
+  const d=(m.tw||1)/2,off=tipOffset(TIP.a,TIP.s,d);
+  _ce.set(-VB.p,Math.atan2(dirX,dirZ),VB.r+TIP.s*TIP.a,'YXZ');
+  CRASH.q.setFromEuler(_ce);
+  const lx=dirZ,lz=-dirX;     // asse x della scocca (sinistra) nel mondo
+  CRASH.p.set(car.x*S3+lx*off.dx,CAR_BASE_Y+VB.y+off.dy,car.y*S3+lz*off.dx);
+  CRASH.v.set((car.speed*c-car.vy*s)*S3,VB.contacts===0?VB.vy:Math.max(0,VB.vy)+TIP.w*d*0.5,(car.speed*s+car.vy*c)*S3);
+  // velocità angolare: beccheggio e rollio della scocca (più la rotazione sul perno) + imbardata
+  CRASH.w.set(-VB.vp,0,VB.vr+TIP.s*TIP.w).applyQuaternion(CRASH.q);
+  CRASH.w.y+=-car.r;
+  CRASH.on=true;CRASH.t=0;CRASH.okT=0;CRASH.restT=0;CRASH.hitCd=0;CRASH.kind=kind;
+  // attrito della carrozzeria sul fondo: lamiera su asfalto scivola, su terra e erba scava; più forte in velocità
+  {const kindS=offTrack?'soft':surface.fx,hard=kindS==='asphalt'||kindS==='wet';
+   const vh=Math.hypot(CRASH.v.x,CRASH.v.z);
+   CRASH.mu=(hard?0.8:1.1)+0.55*Math.max(0,Math.min(1,(vh-14)/12));}
+  tipReset();
+  const sp=Math.min(1,Math.hypot(car.speed,car.vy)/160);
+  sfxImpact(0.5+0.5*sp,'metal');rumble(0.8,0.8,400);camShake=Math.max(camShake,0.7);
+}
+function crashReset(){CRASH.on=false;CRASH.right=null;tipReset();}
+function crashStep(h){
+  const sh=carModels[curCarId].crash;
+  _cR.makeRotationFromQuaternion(CRASH.q);
+  _cF.set(0,-GRAV_Y,0);_cT.set(0,0,0);
+  _cf.set(0,0,1).applyQuaternion(CRASH.q);_cs.set(1,0,0).applyQuaternion(CRASH.q);   // muso e fianco nel mondo
+  let wheelsDown=0,hit=0;
+  const contact=(l,isWheel)=>{
+    _cr.copy(l).applyMatrix4(_cR);
+    const px=CRASH.p.x+_cr.x,py=CRASH.p.y+_cr.y,pz=CRASH.p.z+_cr.z;
+    const pen=groundAt(px/S3,pz/S3)-py;
+    if(isWheel&&pen>-0.04) wheelsDown++;
+    if(pen<=0) return;
+    // velocità del punto = v + w × r
+    _cpv.copy(CRASH.w).cross(_cr).add(CRASH.v);
+    let fn=900*Math.min(pen,0.25)-30*_cpv.y;
+    if(fn<=0) return;
+    fn=Math.min(fn,600);
+    if(_cpv.y<-3) hit=Math.max(hit,-_cpv.y);
+    // attrito: le ruote rotolano in avanti e trattengono di lato; la carrozzeria striscia in ogni direzione
+    let fx,fz;
+    if(isWheel){
+      const vf=_cpv.x*_cf.x+_cpv.z*_cf.z,vs=_cpv.x*_cs.x+_cpv.z*_cs.z;
+      const ff=-Math.sign(vf)*Math.min(0.06*fn,Math.abs(vf)*40),fs=-Math.sign(vs)*Math.min(1.15*fn,Math.abs(vs)*60);
+      fx=_cf.x*ff+_cs.x*fs;fz=_cf.z*ff+_cs.z*fs;
+    }else{
+      // la carrozzeria che arriva veloce si pianta nel terreno (di più su terra, erba, sabbia e neve)
+      const vt=Math.hypot(_cpv.x,_cpv.z);
+      const k=vt>1e-4?Math.min(CRASH.mu*fn/vt,90):0;
+      fx=-_cpv.x*k;fz=-_cpv.z*k;
+    }
+    _cF.x+=fx;_cF.y+=fn;_cF.z+=fz;
+    // momento r × F
+    _cT.x+=_cr.y*fz-_cr.z*fn;_cT.y+=_cr.z*fx-_cr.x*fz;_cT.z+=_cr.x*fn-_cr.y*fx;
+  };
+  for(const l of sh.pts) contact(l,false);
+  for(const l of sh.wheels) contact(l,true);
+  CRASH.v.addScaledVector(_cF,h);
+  // rotazione: momento e velocità angolare nel sistema della scocca (inerzia diagonale), poi di nuovo nel mondo
+  _cqi.copy(CRASH.q).invert();
+  _cT.applyQuaternion(_cqi);CRASH.w.applyQuaternion(_cqi);
+  CRASH.w.x+=_cT.x/sh.I[0]*h;CRASH.w.y+=_cT.y/sh.I[1]*h;CRASH.w.z+=_cT.z/sh.I[2]*h;
+  CRASH.w.applyQuaternion(CRASH.q);
+  CRASH.w.multiplyScalar(1-0.12*h);
+  if(CRASH.w.length()>14) CRASH.w.setLength(14);
+  CRASH.p.addScaledVector(CRASH.v,h);
+  // orientamento: q += ½·(0,w)·q
+  _cdq.set(CRASH.w.x*h*0.5,CRASH.w.y*h*0.5,CRASH.w.z*h*0.5,0).multiply(CRASH.q);
+  CRASH.q.set(CRASH.q.x+_cdq.x,CRASH.q.y+_cdq.y,CRASH.q.z+_cdq.z,CRASH.q.w+_cdq.w).normalize();
+  CRASH.wheelsDown=wheelsDown;CRASH.hit=Math.max(CRASH.hit||0,hit);
+}
+// urti della scocca che rotola contro guard-rail, pareti e imbocchi delle gallerie, alberi, massi ed edifici
+// (come per la guida: niente compenetrazioni; la lamiera rimbalza poco e striscia lungo l'ostacolo)
+function crashCollide(){
+  const R=7.5;   // raggio della scocca in pianta (unità pista, ~0,9 m mondo)
+  let px=CRASH.p.x/S3,py=CRASH.p.z/S3,hitV=0,kind='metal';
+  const push=(cx,cy,rad,bounce,keep,k)=>{
+    const dx=px-cx,dy=py-cy,d=Math.hypot(dx,dy),min=R+rad;
+    if(d>=min||d<1e-6) return;
+    const nx=dx/d,ny=dy/d;px+=nx*(min-d);py+=ny*(min-d);
+    const vn=CRASH.v.x*nx+CRASH.v.z*ny;
+    if(vn>=0) return;
+    const tx=-ny,ty=nx,vt=CRASH.v.x*tx+CRASH.v.z*ty;
+    const vn2=-bounce*vn,vt2=vt*keep;
+    CRASH.v.x=nx*vn2+tx*vt2;CRASH.v.z=ny*vn2+ty*vt2;
+    CRASH.w.y+=(Math.random()-0.5)*Math.min(4,-vn*0.4);          // il colpo fa girare la scocca
+    CRASH.w.multiplyScalar(0.85);
+    if(-vn>hitV){hitV=-vn;kind=k;}
+  };
+  const gx=Math.floor(px/RG),gy=Math.floor(py/RG),seen=new Set();
+  for(let a=-1;a<=1;a++) for(let b=-1;b<=1;b++){
+    const cell=railGrid.get((gx+a)+','+(gy+b));if(!cell) continue;
+    for(const sg of cell){if(seen.has(sg)) continue;seen.add(sg);
+      const q=closestOnSeg(sg.ax,sg.ay,sg.bx,sg.by,px,py);push(q[0],q[1],RAIL_HALF,0.2,0.8,sg.k);}
+  }
+  for(const t of treesList){if(Math.abs(px-t.x)>20||Math.abs(py-t.y)>20) continue;push(t.x,t.y,TRUNK_R,0.2,0.55,'wood');}
+  for(const p of propsList){
+    if(Math.abs(px-p.x)>p.r+20||Math.abs(py-p.y)>p.r+20) continue;
+    const soft=p.type==='bale'||p.type==='tyres';push(p.x,p.y,p.r*0.8,soft?0.3:0.15,soft?0.75:0.55,PROP_HIT[p.type]||'stone');
+  }
+  CRASH.p.x=px*S3;CRASH.p.z=py*S3;
+  // in galleria la volta fa da tetto
+  const w=wps[lastIdx];
+  if(w&&w.tunnel&&CRASH.p.y>w.elev+TUN_CROWN-0.55){CRASH.p.y=w.elev+TUN_CROWN-0.55;if(CRASH.v.y>0) CRASH.v.y*=-0.2;}
+  if(hitV>2&&CRASH.hitCd<=0){const s=Math.min(1,hitV/12);sfxImpact(0.3+0.7*s,kind);rumble(0.4+0.6*s,0.6,200);camShake=Math.max(camShake,0.3+0.4*s);CRASH.hitCd=0.12;}
+}
+// acqua sotto i ponti: quota del fiume se l'auto è sopra la gola di un ponte (altrimenti null)
+let bridgesList=[],waterT=0;
+function waterLevelHere(){
+  for(const b of bridgesList) if(lastIdx>=b.start-2&&lastIdx<=b.end+2) return b.waterY;
+  return null;
+}
+// rimessa in strada con penalità (ribaltata in un punto irraggiungibile, o finita in acqua)
+const PENALTY_S=3;
+function penaltyRecover(msg){
+  CRASH.on=false;CRASH.right=null;
+  recoverCar();
+  if(running&&!finishing&&countdownT<=0) elapsed+=PENALTY_S;
+  fsMsg(msg+' · +'+PENALTY_S+' s',2600);
+  rumble(0.6,0.6,300);
+}
+// il pubblico può raggiungere l'auto e rimetterla sulle ruote? (all'aperto, vicino alla strada, su terreno
+// non troppo ripido; non in galleria, sui ponti o nella gola, né in acqua)
+function rightingOK(){
+  const w=wps[lastIdx];if(!w) return false;
+  for(let k=-5;k<=5;k++){const q=wps[Math.max(0,Math.min(wps.length-1,lastIdx+k))];if(q.struct) return false;}
+  if(Math.hypot(car.x-w.x,car.y-w.y)-w.half>32) return false;
+  const g=groundAt(car.x,car.y);if(Math.abs(g-w.elev)>2.2) return false;
+  const E=6,sx=(groundAt(car.x+E,car.y)-groundAt(car.x-E,car.y))/(2*E*S3),sy=(groundAt(car.x,car.y+E)-groundAt(car.x,car.y-E))/(2*E*S3);
+  return Math.hypot(sx,sy)<0.8;
+}
+// raddrizzamento: in ~1,5 s la scocca torna sulle ruote (sollevata e girata dal pubblico), nella direzione in cui guardava
+function startRighting(){
+  const f=_cf.set(0,0,1).applyQuaternion(CRASH.q);
+  let yaw=Math.atan2(f.x,f.z);
+  if(Math.hypot(f.x,f.z)<0.2) yaw=Math.atan2(Math.cos(car.angle),Math.sin(car.angle));
+  const q1=new THREE.Quaternion().setFromEuler(new THREE.Euler(0,yaw,0,'YXZ'));
+  const p1=CRASH.p.clone();p1.y=groundAt(car.x,car.y)+CAR_BASE_Y+0.02;
+  CRASH.right={t:0,q0:CRASH.q.clone(),q1,p0:CRASH.p.clone(),p1};
+  CRASH.v.set(0,0,0);CRASH.w.set(0,0,0);
+  fsMsg('🙌 Il pubblico rimette l\'auto sulle ruote',1800);
+}
+// un fotogramma di ribaltamento (al posto della guida): fisica, suoni, e quando si ferma si riparte
+function crashUpdate(dt){
+  if(CRASH.right){
+    const R=CRASH.right;R.t+=dt;
+    const k=Math.min(1,R.t/1.5),e=k*k*(3-2*k);
+    CRASH.q.slerpQuaternions(R.q0,R.q1,e);
+    CRASH.p.lerpVectors(R.p0,R.p1,e);CRASH.p.y+=Math.sin(Math.PI*e)*0.45;
+    car.x=CRASH.p.x/S3;car.y=CRASH.p.z/S3;car.speed=0;car.vy=0;carVisElev=CRASH.p.y-CAR_BASE_Y;VB.contacts=0;slipAmt=0;
+    if(R.t>=1.65){CRASH.right=null;CRASH.v.set(0,0,0);CRASH.w.set(0,0,0);exitCrash();}
+    return;
+  }
+  const steps=Math.max(1,Math.ceil(dt/0.004)),h=dt/steps;
+  CRASH.hit=0;
+  for(let i=0;i<steps;i++) crashStep(h);
+  crashCollide();
+  CRASH.t+=dt;CRASH.hitCd-=dt;
+  // finita nel fiume sotto un ponte
+  {const wy=waterLevelHere();if(wy!==null&&CRASH.p.y-CAR_BASE_Y<wy+0.3){sfxSplash(1);penaltyRecover('💦 In acqua!');return;}}
+  if(CRASH.hit>2.5&&CRASH.hitCd<=0){
+    const s=Math.min(1,CRASH.hit/9);
+    sfxImpact(0.3+0.7*s,'metal');rumble(0.4+0.6*s,0.6,200);camShake=Math.max(camShake,0.25+0.5*s);CRASH.hitCd=0.12;
+  }
+  // l'auto (e la telecamera) seguono la scocca: posizione, e direzione di marcia se si muove ancora
+  car.x=CRASH.p.x/S3;car.y=CRASH.p.z/S3;
+  const vh=Math.hypot(CRASH.v.x,CRASH.v.z);
+  if(vh>1.5){let da=Math.atan2(CRASH.v.z,CRASH.v.x)-car.angle;da=Math.atan2(Math.sin(da),Math.cos(da));car.angle+=da*Math.min(1,dt*2);}
+  car.speed=vh/S3;car.vy=0;car.r=0;
+  carVisElev=CRASH.p.y-CAR_BASE_Y;carAirY=0;carVelY=0;
+  VB.contacts=0;slipAmt=0;phys.ay=phys.ax=0;
+  const up=_cs.set(0,1,0).applyQuaternion(CRASH.q).y,wl=CRASH.w.length(),vl=CRASH.v.length();
+  // di nuovo sulle ruote e senza più rotolare: si riparte con la velocità che resta
+  if(up>0.85&&CRASH.wheelsDown>=3&&wl<2.2) CRASH.okT+=dt;else CRASH.okT=0;
+  if(CRASH.okT>0.25){exitCrash();return;}
+  // fermo sul tetto o su un fianco (o rotolamento infinito): si rimette in strada
+  if(vl<0.7&&wl<0.7) CRASH.restT+=dt;else CRASH.restT=0;
+  // ferma sul tetto o su un fianco: la raddrizza il pubblico se può arrivarci, altrimenti si torna in strada
+  // con la penalità (anche se continua a rotolare troppo a lungo, o finisce fuori dal mondo)
+  if(CRASH.restT>0.8||CRASH.t>9){
+    if(CRASH.restT>0.8&&rightingOK()) startRighting();
+    else penaltyRecover('💥 Ribaltato! Auto rimessa in strada');
+  }
+}
+function exitCrash(){
+  CRASH.on=false;
+  const f=_cf.set(0,0,1).applyQuaternion(CRASH.q);
+  car.angle=Math.atan2(f.z,f.x);
+  const c=Math.cos(car.angle),s=Math.sin(car.angle);
+  car.x=CRASH.p.x/S3;car.y=CRASH.p.z/S3;
+  car.speed=(CRASH.v.x*c+CRASH.v.z*s)/S3;car.vy=(-CRASH.v.x*s+CRASH.v.z*c)/S3;
+  car.r=-CRASH.w.y;
+  phys.laF=phys.laR=phys.spin=phys.lock=0;
+  VB.init=false;tipReset();recoveryReset();
+}
 
 // ================= EFFETTI DELLE GOMME: segni sul fondo e scia =================
 // Per fondo: mark = colore del segno, slide = intensità quando la gomma striscia, roll = traccia lasciata
@@ -6135,7 +6822,10 @@ function updateTyreFX(dt,active){
       if(w.gx===undefined) continue;
       const onGround=VB.contacts>0&&w.susX!==undefined&&w.susX>-SUS.down*0.9;
       const off=offTrack&&!wps[lastIdx].struct;
-      const fx=TYRE_FX[off?OFFROAD_FX[surface.scene]||'grass':surface.fx]||TYRE_FX.dirt;
+      // con la pioggia niente polvere: sull'asfalto spruzzi d'acqua, sulla terra zolle di fango
+      let fxk=off?OFFROAD_FX[surface.scene]||'grass':surface.fx;
+      if(weather.rain>0.3&&!off) fxk=fxk==='asphalt'||fxk==='wet'?'wet':'mud';
+      const fx=TYRE_FX[fxk]||TYRE_FX.dirt;
       const slip=Math.min(1,(w.front?slideF+lockA*0.8:slideR+lockA+phys.spin));
       // --- segno ---
       const a=onGround&&!w.wet?Math.min(0.85,fx.roll*Math.min(1,spd/25)+fx.slide*slip):0;
@@ -6156,16 +6846,19 @@ function updateTyreFX(dt,active){
       }
       // --- scia ---
       if(!onGround) continue;
-      const src=w.wet?TYRE_FX.water:fx;
+      // (nei cumuli di neve: nuvola di neve fresca sollevata dalla gomma)
+      const inSnow=!w.wet&&w.snowD>0.05;
+      const src=w.wet?TYRE_FX.water:inSnow?TYRE_FX.powder:fx;
       let rate=(w.front?0.45:1)*(src.rate*vs+src.slip*slip*Math.min(1,spd/30+0.3));
       if(w.wet) rate=src.rate*Math.min(1,spd/90);
+      if(inSnow) rate=src.rate*2.2*Math.min(1,spd/50)*Math.min(1,w.snowD);
       w.emitAcc=(w.emitAcc||0)+rate*dt;
       while(w.emitAcc>=1){
         w.emitAcc-=1;
         const px=gx*S3+(Math.random()-0.5)*0.15,pz=gy*S3+(Math.random()-0.5)*0.15;
         const side=w.rest.x>0?1:-1;               // lato sinistro dell'auto = (s,-c)
-        const lat=(Math.random()*0.8+0.2)*side*(w.wet?1.6:0.5);
-        const back=w.wet?0.35:0.15+Math.random()*0.2;
+        const lat=(Math.random()*0.8+0.2)*side*(w.wet||inSnow?1.6:0.5);
+        const back=w.wet||inSnow?0.35:0.15+Math.random()*0.2;
         emitParticle(px,h+0.05,pz,
           wvx*back+s*lat*S3*8+(Math.random()-0.5)*0.6,
           src.kick*(0.5+Math.random()*0.7),
@@ -6252,11 +6945,24 @@ function updateScene(){
   grassUniforms.uTime.value=tw;
   const dirX=Math.cos(car.angle), dirZ=Math.sin(car.angle);
   // scocca: quota, beccheggio (muso su +) e rollio (sinistra su +) dalla dinamica verticale
-  carGroup.position.set(cx,CAR_BASE_Y+(VB.init?VB.y:carVisElev),cz);
-  carGroup.rotation.order='YXZ';
-  carGroup.rotation.y=Math.atan2(dirX,dirZ);
-  carGroup.rotation.x=-VB.p;
-  carGroup.rotation.z=VB.r;
+  if(CRASH.on||CARVIS.q){
+    // ribaltamento: posa del corpo rigido (in gara) o quella registrata (replay)
+    carGroup.position.copy(CRASH.on?CRASH.p:CARVIS.p);
+    carGroup.quaternion.copy(CRASH.on?CRASH.q:CARVIS.q);
+  }else{
+    carGroup.position.set(cx,CAR_BASE_Y+(VB.init?VB.y:carVisElev),cz);
+    carGroup.rotation.order='YXZ';
+    carGroup.rotation.y=Math.atan2(dirX,dirZ);
+    carGroup.rotation.x=-VB.p;
+    carGroup.rotation.z=VB.r;
+    // su due ruote: la scocca ruota sul perno delle ruote esterne
+    const ta=replayMode?CARVIS.tip:TIP.a*TIP.s;
+    if(Math.abs(ta)>0.0005){
+      const m=carModels[curCarId],s=Math.sign(ta),o=tipOffset(Math.abs(ta),s,((m&&m.tw)||1)/2);
+      carGroup.rotation.z+=ta;
+      carGroup.position.x+=dirZ*o.dx;carGroup.position.z+=-dirX*o.dx;carGroup.position.y+=o.dy;
+    }
+  }
   placeWheels();
 
   // il sole ha una direzione fissa per lo stage; la "scatola" delle ombre segue l'auto
@@ -6266,7 +6972,8 @@ function updateScene(){
   sun.position.copy(sun.target.position).addScaledVector(sunDir,150);
   sun.target.updateMatrixWorld();
 
-  const onboard=!demoMode&&!replayMode&&!(countdownT>0||finishing)&&(camMode==='hood'||camMode==='bumper');
+  // (durante un ribaltamento la camera esce dall'abitacolo e inquadra l'auto da fuori)
+  const onboard=!demoMode&&!replayMode&&!CRASH.on&&!(countdownT>0||finishing)&&(camMode==='hood'||camMode==='bumper');
   {const tb=tunnelCamBlend();tunCamS+=(tb-tunCamS)*(tb>tunCamS?0.18:0.05);if(tunCamS<0.002) tunCamS=0;}   // (si esce più piano di come si entra)
   if(demoMode) demoCamera(cx,cz,dirX,dirZ);
   else if(replayMode) replayCamera(cx,cz,dirX,dirZ);
@@ -6302,7 +7009,8 @@ function updateScene(){
     const cdx=Math.cos(camYaw),cdz=Math.sin(camYaw);
     const airPull=carAirY*0.4, zoomIn=jumpAnticipation*1.6;
     // distanza e altezza secondo la telecamera scelta
-    let D=camMode==='far'?11:camMode==='heli'?17:7;const Hc=camMode==='far'?5.2:camMode==='heli'?12:3.6;
+    let D=camMode==='far'?11:camMode==='heli'?17:7;let Hc=camMode==='far'?5.2:camMode==='heli'?12:3.6;
+    if(CRASH.on){D+=2.5;Hc+=2.2;}   // ribaltamento: un po' più lontano e in alto, per vedere tutta la scena
     const camY=Hc+carVisElev+carAirY*0.6-jumpAnticipation*0.3;
     // davanti alla tribuna di partenza la telecamera si avvicina invece di finirci dentro
     while(D>4&&(inStand(cx-cdx*D,-1e4,cz-cdz*D)||standBlocks(cx-cdx*D,camY,cz-cdz*D,cx,carVisElev+0.8,cz))) D-=1;
@@ -6341,6 +7049,7 @@ function updateScene(){
   sunDisc.position.copy(camera.position).addScaledVector(sunDir,360);
   applyTunnelLight();
   lightFxFrame();
+  weatherFrame(tw);
 
   renderer.render(scene,camera);
   renderFlare();
@@ -6409,7 +7118,7 @@ function updateFlare(dt){
   flareCheckT-=dt;if(flareCheckT<=0){flareCheckT=0.1;flareOcc=front&&sunOccluded();}   // (controllo 10 volte al secondo)
   const lowSun=1-Math.min(1,Math.max(0,sunDir.y)/0.8);       // più forte con il sole basso (alba, tramonto)
   let target=front&&!flareOcc?Math.max(0,Math.min(1,(1.3-edge)/0.5)):0;
-  target*=(curLight&&curLight.moon?0.25:0.6+0.4*lowSun)*(1-tunnelT)*Math.min(1,sun.intensity/0.8);
+  target*=(curLight&&curLight.moon?0.25:0.6+0.4*lowSun)*(1-tunnelT)*Math.min(1,sun.intensity/0.8)*(1-0.95*((curLight&&curLight.overcast)||0));
   flareVis+=(target-flareVis)*Math.min(1,dt*(target>flareVis?6:3));
   const sx=_fxV.x*aspect,sy=_fxV.y;
   for(const e of FLARE_EL){
@@ -6560,7 +7269,8 @@ function recFrame(dt){
   const m=carModels[curCarId];
   rec.push([recT,car.x,car.y,car.angle,car.speed,VB.y,VB.p,VB.r,steerAng,rpm,throttleS,slipAmt,carAirY,
     m?m.wheels.map(w=>w.susX||0):[0,0,0,0],carVisElev,car.vy,
-    HUD.tyres.slice(),ctl.brk,ctl.hb?1:0,HUD.air.slice()]);   // (HUD: gomme, freno, freno a mano, ruote sollevate)
+    HUD.tyres.slice(),ctl.brk,ctl.hb?1:0,HUD.air.slice(),   // (HUD: gomme, freno, freno a mano, ruote sollevate)
+    TIP.a*TIP.s,CRASH.on?[CRASH.q.x,CRASH.q.y,CRASH.q.z,CRASH.q.w,CRASH.p.x,CRASH.p.y,CRASH.p.z]:0]);   // due ruote, ribaltamento
 }
 function startReplay(){
   if(rec.length<10) return;
@@ -6572,6 +7282,7 @@ function exitReplay(){
   if(!replayMode) return;
   replayMode=false;replayEl.style.display='none';
   const f=rec[rec.length-1];if(f) applyRecFrame(f,f,0);
+  CARVIS.q=null;CARVIS.tip=0;
   slipAmt=0;throttleS=0;
   overlay.classList.remove('hide');navPrev.ok=navPrev.back=true;padPrev.menu=true;
 }
@@ -6582,6 +7293,13 @@ function applyRecFrame(a,b,t){
   VB.y=L(5);VB.p=L(6);VB.r=L(7);steerAng=L(8);rpm=L(9);throttleS=L(10);slipAmt=L(11);carAirY=L(12);carVisElev=L(14);
   const m=carModels[curCarId];if(m) m.wheels.forEach((w,i)=>{w.susX=a[13][i]+(b[13][i]-a[13][i])*t;});
   if(a[16]){for(let i=0;i<4;i++){HUD.tyres[i]=a[16][i]+(b[16][i]-a[16][i])*t;HUD.air[i]=a[19][i];}HUD.brk=L(17);HUD.hb=a[18]>0;}
+  CARVIS.tip=(a[20]||0)+((b[20]||0)-(a[20]||0))*t;
+  if(a[21]){
+    const qa=a[21],qb=b[21]||qa;
+    CARVIS.q=CARVIS.q||new THREE.Quaternion();
+    CARVIS.q.set(qa[0],qa[1],qa[2],qa[3]).slerp(_cqi.set(qb[0],qb[1],qb[2],qb[3]),t);
+    CARVIS.p.set(qa[4]+(qb[4]-qa[4])*t,qa[5]+(qb[5]-qa[5])*t,qa[6]+(qb[6]-qa[6])*t);
+  }else CARVIS.q=null;
   // pseudo derive per la scia e la polvere (derivate dallo slittamento registrato)
   phys.alphaF=phys.alphaR=0.1+0.25*slipAmt;phys.spin=0;phys.lock=0;
 }
@@ -7193,7 +7911,7 @@ function renderTAList(){
   let h='';
   for(let c=1;c<COURSES.length;c++){
     const s=SURFACES[(c-1)%SURFACES.length],L=LIGHTS[STAGE_LIGHT[(c-1)%STAGE_LIGHT.length]];
-    h+='<button data-act="course" data-c="'+c+'"><span>'+COURSES[c].name+'<br><small>'+s.name+' · '+L.label+'</small></span><span>'+(taBest[c]?'🏆 '+fmtTime(taBest[c]):'--')+'</span></button>';
+    h+='<button data-act="course" data-c="'+c+'"><span>'+COURSES[c].name+'<br><small>'+s.name+' · '+L.label+(WEATHER[c]?(WEATHER[c].snow?' · ❄ Neve':' · 🌧 Pioggia'):'')+'</small></span><span>'+(taBest[c]?'🏆 '+fmtTime(taBest[c]):'--')+'</span></button>';
   }
   titleTA.innerHTML=h+'<button data-act="back">← Indietro</button>';
 }
