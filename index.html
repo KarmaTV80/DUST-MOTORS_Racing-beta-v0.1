@@ -89,6 +89,8 @@
   .hint{text-align:center;color:var(--text);opacity:.75;font-size:12px;margin-top:8px;}
   .overlay{position:fixed;inset:0;background:rgba(5,10,5,0.75);display:flex;align-items:center;justify-content:center;z-index:10;}
   .overlay.hide{display:none;}
+  .overlay.result{background:rgba(5,10,5,0.28);}          /* fine tappa: dietro al riquadro si vede la festa */
+  .card .secondary.warn2{background:#c0392b;color:#fff;}
   .card{background:var(--card);border-radius:16px;padding:28px 30px;text-align:center;box-shadow:0 14px 34px rgba(0,0,0,.5);max-width:360px;width:90%;}
   .card h2{color:var(--text);margin-bottom:6px;font-size:24px;}
   .card p{color:var(--text);opacity:.85;margin-bottom:12px;font-size:14px;}
@@ -395,6 +397,7 @@
     <button id="oB">Inizia</button><br>
     <button id="oReplay" style="display:none;">🎬 Replay</button>
     <button class="secondary" id="oMenu" style="display:none;">⏱ Scegli un'altra pista (Esc / B)</button>
+    <button class="secondary" id="oQuit" style="display:none;">⏏ Menu principale</button>
     <button class="secondary" id="oSet">⚙ Comandi</button>
   </div>
 </div>
@@ -3722,9 +3725,11 @@ function buildSpectators(){
   ensureHumanMats();
   disposeObject(crowdGroup);
   crowdGroup=new THREE.Group();crowd=[];officials={};people=[];fences=[];
+  partyOn=false;partyProps.length=0;
   const rng=mulberry32(4242+course*31);
   const shadows=[];
-  const zones=[{c:1,from:-4,to:14},{c:finishIdx,from:-12,to:9}];
+  // (all'arrivo il pubblico prosegue lungo tutto il rettilineo di frenata, dove l'auto si ferma)
+  const zones=[{c:1,from:-4,to:14},{c:finishIdx,from:-12,to:Math.max(9,wps.length-4-finishIdx)}];
   const put=(x,y,mats,scale,extra)=>{
     const sp=new THREE.Sprite(mats[0]);
     // piedi sul terreno; lo sprite è più alto della persona per lasciare spazio a braccia alzate e bandiere
@@ -3771,6 +3776,22 @@ function buildSpectators(){
           }
         });
       }
+    }
+  }
+  // in fondo al rettilineo d'arrivo, davanti alla tribuna: pubblico di traverso sulla strada, dietro un nastro
+  {
+    const l=wps[wps.length-1],hx=Math.cos(l.heading),hy=Math.sin(l.heading),nx=-hy,ny=hx,W=l.half+10;
+    const p0=[l.x+hx*12+nx*W,l.y+hy*12+ny*W],p1=[l.x+hx*12-nx*W,l.y+hy*12-ny*W];
+    for(const [px,py] of [p0,p1]){const gy=terrainAt(px,py);const post=new THREE.Mesh(railPostGeo,railPostMat);post.position.set(px*S3,gy+0.3,py*S3);crowdGroup.add(post);}
+    {const gy=(terrainAt(p0[0],p0[1])+terrainAt(p1[0],p1[1]))/2,len=Math.hypot(p1[0]-p0[0],p1[1]-p0[1])*S3;
+     const tape=new THREE.Mesh(new THREE.PlaneGeometry(len,0.07),tapeMat);tape.material.side=THREE.DoubleSide;
+     tape.position.set((p0[0]+p1[0])/2*S3,gy+0.52,(p0[1]+p1[1])/2*S3);tape.rotation.y=-Math.atan2((p1[1]-p0[1]),(p1[0]-p0[0]));crowdGroup.add(tape);
+     fences.push({ax:p0[0],ay:p0[1],bx:p1[0],by:p1[1],tape,broken:false});}
+    for(let row=0;row<4;row++) for(let lat=-W+3;lat<=W-3;lat+=4.2){
+      if(rng()>(row<2?0.95:0.7)) continue;
+      const d=16+row*5.5+rng()*2.5,ll=lat+(rng()-0.5)*2;
+      const x=l.x+hx*d+nx*ll,y=l.y+hy*d+ny*ll,v=Math.floor(rng()*CROWD_VARIANTS);
+      crowd.push(put(x,y,crowdMats[v],0.9+rng()*0.16,{zone:finishIdx}));
     }
   }
   // centro storico: pubblico lungo i marciapiedi per tutta la prova, fra i lampioni e le facciate
@@ -3847,26 +3868,42 @@ function updateCrowdCollisions(dt){
     // (p.x, p.yy) = posizione sulla mappa; p.y è la quota del terreno sotto i piedi
     const dx=p.x-car.x,dy=p.yy-car.y,dist=Math.hypot(dx,dy);
     // pericolo: la persona è sulla traiettoria dell'auto nel prossimo secondo e mezzo
-    if(spd>15&&(p.state==='idle'||p.state==='return'||p.state==='wait')&&dist<spd*1.5+40){
+    if(spd>15&&(p.state==='idle'||p.state==='return'||p.state==='wait'||p.state==='party'||p.state==='party_walk')&&dist<spd*1.5+40){
       const tca=Math.max(0,Math.min(1.5,(dx*cvx+dy*cvy)/(spd*spd)));
       const miss=Math.hypot(car.x+cvx*tca-p.x,car.y+cvy*tca-p.yy);
       if(miss<14&&(dx*cvx+dy*cvy)>-spd*5){
         // scappa di lato, allontanandosi dalla linea dell'auto, dopo un breve tempo di reazione;
         // più il pericolo è vicino, più lontano corre (chi è al margine fa solo qualche passo indietro)
         const nx=-cvy/spd,ny=cvx/spd,side=Math.sign(dx*nx+dy*ny)||1;
-        p.fdx=nx*side;p.fdy=ny*side;p.state='react';p.react=0.08+(p.phase%1)*0.3;
+        // di lato rispetto alla traiettoria, ma sempre anche un po' lontano dall'auto (mai verso di lei,
+        // nemmeno se l'auto sta girando nella loro direzione)
+        let fx=nx*side*0.65+dx/(dist||1)*0.35,fy=ny*side*0.65+dy/(dist||1)*0.35;const fl=Math.hypot(fx,fy)||1;
+        p.fdx=fx/fl;p.fdy=fy/fl;p.state='react';p.react=0.08+(p.phase%1)*0.3;
         p.fleeDur=0.35+(14-miss)/14*1.1+(p.phase%1)*0.3;
       }
     }
-    if(p.state==='react'){p.react-=dt;if(p.react<=0){p.state='flee';p.fleeT=p.fleeDur||1.2;}}
+    if(p.state==='party_walk'){
+      // festa: dopo una breve attesa si va verso l'auto ferma, fino al proprio posto nel cerchio intorno
+      if(p.partyDelay>0) p.partyDelay-=dt;
+      else{
+        const tx=p.tx-p.x,ty=p.ty-p.yy,td=Math.hypot(tx,ty);
+        if(td<1){p.state='party';}
+        else{const k=Math.min(td,PARTY_SPEED*dt)/td;p.x+=tx*k;p.yy+=ty*k;p.moved=true;}
+      }
+    }
+    else if(p.state==='react'){p.react-=dt;if(p.react<=0){p.state='flee';p.fleeT=p.fleeDur||1.2;}}
     else if(p.state==='flee'){
+      // se nel frattempo l'auto è finita dalla parte verso cui si corre, si cambia direzione
+      if(p.fdx*-dx+p.fdy*-dy>0){const l=dist||1;p.fdx=dx/l;p.fdy=dy/l;}
       p.x+=p.fdx*RUN_SPEED*dt;p.yy+=p.fdy*RUN_SPEED*dt;p.moved=true;
       p.fleeT-=dt;if(p.fleeT<=0) p.state='return';
     }else if(p.state==='return'||p.state==='wait'){
       // si torna al proprio posto camminando, ma mai verso l'auto: se è ferma vicino al posto
       // (arrivo, uscita di pista) o sulla strada del ritorno, si resta fermi ad aspettare che se ne vada
       const hx=p.hx-p.x,hy=p.hy-p.yy,hd=Math.hypot(hx,hy);
-      const towardCar=(dist<CAR_R+14||(spd<20&&dist<60))&&(hx*-dx+hy*-dy)>0;
+      // (dopo il traguardo, finché l'auto non si è fermata e non parte la festa, nessuno le va incontro)
+      const afterFinish=(finishing||stageDone)&&!partyOn&&!replayMode&&dist<220;
+      const towardCar=(dist<CAR_R+14||(spd<20&&dist<60)||afterFinish)&&(hx*-dx+hy*-dy)>0;
       if(hd<1.5){p.x=p.hx;p.yy=p.hy;p.state='idle';p.moved=true;}
       else if(Math.hypot(p.hx-car.x,p.hy-car.y)<CAR_R+12||towardCar) p.state='wait';
       else{p.state='return';const k=Math.min(hd,WALK_SPEED*dt)/hd;p.x+=hx*k;p.yy+=hy*k;p.moved=true;}
@@ -3883,7 +3920,74 @@ function updateCrowdCollisions(dt){
       p.y=terrainAt(p.x,p.yy);
       p.sp.position.set(p.x*S3,p.y,p.yy*S3);
       if(crowdShadow){_shM.makeTranslation(p.x*S3,p.y+0.02,p.yy*S3);crowdShadow.setMatrixAt(p.sh,_shM);crowdShadow.instanceMatrix.needsUpdate=true;}
-      if(p.state==='idle'||p.state==='wait') p.moved=false;
+      if(p.state==='idle'||p.state==='wait'||p.state==='party') p.moved=false;
+    }
+  }
+}
+// ---------- festa all'arrivo ----------
+// Quando l'auto si è fermata dopo il traguardo, il pubblico vicino le si raduna intorno (due cerchi) e
+// fa festa saltando, con bandiere e striscioni.
+const PARTY_SPEED=15;   // ≈ 3 m/s: corsetta
+let partyOn=false;const partyProps=[];
+let PARTY_TEX=null;
+function partyTextures(){
+  if(PARTY_TEX) return PARTY_TEX;
+  const flag=(draw)=>{const c=document.createElement('canvas');c.width=64;c.height=128;const g=c.getContext('2d');
+    g.fillStyle='#d8d8d8';g.fillRect(4,10,4,118);draw(g);const t=new THREE.CanvasTexture(c);sharedRes.add(t);return t;};
+  const cloth=(g,cols)=>{const w=52/cols.length;cols.forEach((col,i)=>{g.fillStyle=col;g.fillRect(8+i*w,10,w+0.5,36);});};
+  const flags=[
+    flag(g=>cloth(g,['#009246','#ffffff','#ce2b37'])),                                    // tricolore
+    flag(g=>{for(let i=0;i<6;i++)for(let j=0;j<3;j++){g.fillStyle=(i+j)%2?'#111':'#fff';g.fillRect(8+i*8.7,10+j*12,8.8,12);}}),   // a scacchi
+    flag(g=>{g.fillStyle='#ffcf5c';g.fillRect(8,10,52,36);g.fillStyle='#1b2418';g.font='bold 15px sans-serif';g.fillText('D&M',14,34);}),
+    flag(g=>cloth(g,['#1f5fae','#ffffff'])),
+    flag(g=>cloth(g,['#e8564f','#ffcf5c']))
+  ];
+  const banner=(txt,bg,fg)=>{const c=document.createElement('canvas');c.width=256;c.height=64;const g=c.getContext('2d');
+    g.fillStyle=bg;g.fillRect(0,4,256,56);g.strokeStyle=fg;g.lineWidth=3;g.strokeRect(4,8,248,48);
+    g.fillStyle=fg;g.font='bold 30px Segoe UI, sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(txt,128,34);
+    const t=new THREE.CanvasTexture(c);sharedRes.add(t);return t;};
+  const banners=[banner('GRANDE!','#ffffff','#c0392b'),banner('CAMPIONE!','#ffcf5c','#1b2418'),banner('DUST & MOTORS','#1f5fae','#ffffff'),banner('BRAVO!','#2e8b57','#ffffff')];
+  PARTY_TEX={flags,banners};return PARTY_TEX;
+}
+function startParty(){
+  if(partyOn) return;
+  partyOn=true;
+  const T=partyTextures();
+  const cand=people.filter(p=>!p.official&&p.zone===finishIdx&&Math.hypot(p.x-car.x,p.yy-car.y)<200);
+  cand.sort((a,b)=>Math.hypot(a.x-car.x,a.yy-car.y)-Math.hypot(b.x-car.x,b.yy-car.y));
+  const sel=cand.slice(0,44),n1=Math.min(22,sel.length);
+  sel.forEach((p,k)=>{
+    const ring=k<n1?0:1,idx=ring?k-n1:k,cnt=ring?Math.max(1,sel.length-n1):n1;
+    const a=idx/cnt*Math.PI*2+ring*(Math.PI/cnt)+(Math.random()-0.5)*0.08;
+    const rad=(ring?24:16.5)+Math.random()*2.5;
+    p.tx=car.x+Math.cos(a)*rad;p.ty=car.y+Math.sin(a)*rad;p.ring=ring;p.ringIdx=idx;
+    p.state='party_walk';p.partyDelay=0.15+Math.random()*0.5+Math.hypot(p.x-car.x,p.yy-car.y)/400;
+    // bandiere per circa metà del pubblico in festa
+    if(Math.random()<0.5){
+      const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:T.flags[Math.floor(Math.random()*T.flags.length)],transparent:true,depthWrite:false}));
+      sp.center.set(0.08,0);sp.scale.set(0.45,0.9,1);sp.renderOrder=2;crowdGroup.add(sp);
+      partyProps.push({kind:'flag',sp,p,ph:Math.random()*6});
+    }
+  });
+  // striscioni retti da due persone vicine del primo cerchio
+  for(let k=0;k+1<n1;k+=4){
+    if(Math.random()<0.25) continue;
+    const a=sel[k],b=sel[k+1];
+    const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:T.banners[Math.floor(Math.random()*T.banners.length)],transparent:true,depthWrite:false}));
+    sp.center.set(0.5,0);sp.renderOrder=2;crowdGroup.add(sp);
+    partyProps.push({kind:'banner',sp,a,b,ph:Math.random()*6});
+  }
+}
+function partyFrame(){
+  for(const pr of partyProps){
+    if(pr.kind==='flag'){
+      const p=pr.p,y=p.sp.position.y+HUMAN_H*0.72;
+      pr.sp.position.set(p.x*S3+0.12,y,p.yy*S3);
+      pr.sp.material.rotation=Math.sin(crowdT*5+pr.ph)*0.25;              // la bandiera si agita
+    }else{
+      const a=pr.a,b=pr.b,mx=(a.x+b.x)/2,my=(a.yy+b.yy)/2,w=Math.max(1.4,Math.min(2.6,Math.hypot(a.x-b.x,a.yy-b.yy)*S3+0.6));
+      pr.sp.position.set(mx*S3,(a.sp.position.y+b.sp.position.y)/2+HUMAN_H*0.78,my*S3);
+      pr.sp.scale.set(w,w*0.25,1);
     }
   }
 }
@@ -3900,6 +4004,16 @@ function updateSpectators(dt){
   excite[1]=near(1)&&(countdownT>0||elapsed<4);
   excite[finishIdx]=near(finishIdx)||finishing;
   for(const p of crowd){
+    if(p.state==='party'){                                    // festa: salti e braccia che si agitano
+      p.sp.material=p.mats[Math.abs(Math.floor((crowdT+p.phase)/0.12))%2];
+      p.sp.position.y=p.y+Math.abs(Math.sin((crowdT*1.15+p.phase)*5.5))*0.22;
+      continue;
+    }
+    if(p.state==='party_walk'&&p.partyDelay<=0){              // corsetta verso l'auto
+      p.sp.material=p.mats[Math.abs(Math.floor((crowdT+p.phase)/0.14))%2];
+      p.sp.position.y=p.y+Math.abs(Math.sin((crowdT+p.phase)*11))*0.05;
+      continue;
+    }
     if(p.state==='flee'||p.state==='return'){                 // corsa: passo rapido e saltellante
       const fr=Math.abs(Math.floor((crowdT+p.phase)/(p.state==='flee'?0.09:0.22)))%2;
       p.sp.material=p.mats[fr];
@@ -3918,7 +4032,8 @@ function updateSpectators(dt){
   // starter: bandiera abbassata durante il conto alla rovescia, alzata al VIA
   if(officials.starter&&!running_(officials.starter)) officials.starter.sp.material=officials.starter.mats[countdownT<=0&&elapsed<3?1:0];
   // bandiera a scacchi: sventola quando l'auto si avvicina all'arrivo
-  if(officials.checker&&!running_(officials.checker)){const wv=excite[finishIdx]?Math.floor(crowdT/0.14)%2:0;officials.checker.sp.material=officials.checker.mats[wv];}
+  if(officials.checker&&!running_(officials.checker)){const wv=excite[finishIdx]||partyOn?Math.floor(crowdT/0.14)%2:0;officials.checker.sp.material=officials.checker.mats[wv];}
+  if(partyProps.length) partyFrame();
 }
 let finishGate=null;
 
@@ -5079,7 +5194,18 @@ function finishSplits(total){
 }
 function saveTA(){try{localStorage.setItem(TA_KEY,JSON.stringify(taBest));}catch(e){}}
 const hudStage=document.getElementById('hudStage'),hudTA=document.getElementById('hudTA'),hudTotal=document.getElementById('hudTotal'),bestLbl=document.getElementById('bestLbl');
-const oMenu=document.getElementById('oMenu'),oBoard=document.getElementById('oBoard');
+const oMenu=document.getElementById('oMenu'),oBoard=document.getElementById('oBoard'),oQuit=document.getElementById('oQuit');
+// "Menu principale" a fine tappa, con doppia conferma: il primo tocco chiede conferma, il secondo (entro 4 s) esce
+let quitPending=false,quitTimer=null;
+function resetQuitBtn(){quitPending=false;clearTimeout(quitTimer);oQuit.textContent='⏏ Menu principale';oQuit.classList.remove('warn2');}
+oQuit.addEventListener('click',()=>{
+  oQuit.blur();
+  if(!quitPending){
+    quitPending=true;oQuit.textContent='⚠ Sicuro? Premi di nuovo per uscire';oQuit.classList.add('warn2');
+    clearTimeout(quitTimer);quitTimer=setTimeout(resetQuitBtn,4000);return;
+  }
+  resetQuitBtn();overlay.classList.add('hide');overlay.classList.remove('result');oQuit.style.display='none';showTitle();
+});
 const oReplay=document.getElementById('oReplay');
 oReplay.addEventListener('click',()=>startReplay());
 function updateHudMode(){
@@ -5099,7 +5225,7 @@ function sumTimes(){return stageTimes.reduce((a,b)=>a+b,0);}
 // ================= SEQUENZE DI PARTENZA E ARRIVO =================
 const FINISH_RUNOFF=26;          // waypoint di rettilineo dopo il traguardo
 const COUNT_TOTAL=4.2;           // secondi della sequenza di partenza (fino al VIA)
-let finishIdx=0,countdownT=0,finishing=false,finishT=0,engineFree=false,lastCountShown='',stageDone=false;
+let finishIdx=0,countdownT=0,finishing=false,finishT=0,engineFree=false,lastCountShown='',stageDone=false,partyT0=0;
 let engThr=0; // gas "effettivo" per motore e suono (include le sgasate automatiche della partenza)
 const countdownEl=document.getElementById('countdown'),finishEl=document.getElementById('finishBanner');
 const fmtTime=t=>{const m=Math.floor(t/60),s=t-m*60;return (m?m+':'+(s<10?'0':''):'')+s.toFixed(2)+(m?'':'s');};
@@ -5168,7 +5294,8 @@ function finishAutopilot(){
   const w=wps[lastIdx],half=w.half;
   // scostamento laterale attuale lungo la destra della pista, R=(-sin h, cos h)
   const e=(car.x-w.x)*(-Math.sin(w.heading))+(car.y-w.y)*Math.cos(w.heading);
-  const target=half*0.62;
+  // (si ferma al centro della strada: il pubblico è su entrambi i lati e poi le si raduna intorno)
+  const target=0;
   let hdErr=w.heading+Math.atan((target-e)*0.035)-car.angle;
   hdErr=Math.atan2(Math.sin(hdErr),Math.cos(hdErr));
   const v=Math.abs(car.speed);
@@ -5189,6 +5316,7 @@ function showResultBoard(title,list,entry,pos,time){
 function showStageResult(){
   running=false;
   oReplay.style.display=rec.length>10?'':'none';
+  resetQuitBtn();oQuit.style.display='';overlay.classList.add('result');   // (sfondo leggero: si vede la festa dietro)
   showResultBoard('Classifica · '+COURSES[course].name,board.stages[course],lastStageEntry,lastStagePos,lastStageTime);
   if(gameMode==='ta'){
     const prev=taBest[course],rec=!prev||elapsed<prev;
@@ -5452,7 +5580,9 @@ function update(dt){
     finishT+=dt;
     const ap=finishAutopilot();
     inSteer=ap.steer;inThr=0;inBrk=ap.brk;inHb=false;engThr=0;
-    if(finishT>5||(finishT>2.6&&Math.abs(car.speed)<3)) endFinish();
+    // auto ferma: parte la festa del pubblico, e dopo qualche istante compare il risultato
+    if(!partyOn&&finishT>1.2&&Math.abs(car.speed)<3){startParty();partyT0=finishT;}
+    if(finishT>11||(partyOn&&finishT-partyT0>3.4)) endFinish();
   }else engThr=ctl.thr;
   const steerTarget=inSteer*maxSteer(car.speed);
   // il volante torna al centro molto più in fretta di quanto si sterzi (le ruote si riallineano da sole):
@@ -6785,6 +6915,7 @@ function closePause(){
 function showMainMenu(){
   oT.textContent=INTRO_TITLE;oP.textContent=INTRO_TEXT;
   legend.style.display='';oList.style.display='none';oReplay.style.display='none';oBoard.style.display='none';
+  oQuit.style.display='none';overlay.classList.remove('result');
   oB.textContent='Inizia';oB.onclick=startGame;
   warn.classList.remove('show');
   overlay.classList.remove('hide');
@@ -7632,7 +7763,7 @@ const visible=el=>el&&el.offsetParent!==null&&!el.disabled&&el.style.display!=='
 function navRows(which){
   const rows=[];
   const push=list=>{const l=[...list].filter(visible);if(l.length) rows.push(l);};
-  if(which==='overlay'){push([oB]);push([oReplay]);push([oMenu]);push([document.getElementById('oSet')]);return rows;}
+  if(which==='overlay'){push([oB]);push([oReplay]);push([oMenu]);push([oQuit]);push([document.getElementById('oSet')]);return rows;}
   for(const id of ['segMode','segProfile','segTab']) push(document.querySelectorAll('#'+id+' button'));
   if(setTab==='kb') for(const tr of document.querySelectorAll('#kbTable tr')) push(tr.querySelectorAll('button'));
   else{
