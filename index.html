@@ -173,7 +173,7 @@
   /* ---- HUD di gara ---- */
   /* stile da gioco di corse: pannelli scuri "a vetro" tagliati in diagonale, numeri Teko, scritte
      Saira condensato; giallo del gioco per il tempo, viola (come il giro più veloce in TV) per il record */
-  :root{--hudBg:rgba(9,11,15,.48);--hudBg2:rgba(9,11,15,.22);--hudLine:rgba(255,255,255,.16);--hudPurple:#b768ff;--hudPurpleHi:#d4a6ff;
+  :root{--hudBg:rgba(9,11,15,.64);--hudBg2:rgba(9,11,15,.36);--hudLine:rgba(255,255,255,.16);--hudPurple:#b768ff;--hudPurpleHi:#d4a6ff;
     --hudNum:'Teko','Saira Semi Condensed','Segoe UI',sans-serif;--hudTxt:'Saira Semi Condensed','Segoe UI',Tahoma,sans-serif;}
   .hud{padding-left:max(16px,min(230px,22vw));padding-right:max(16px,min(230px,22vw));font-family:var(--hudTxt);font-weight:600;letter-spacing:.02em;}
   .hud .hOld,.hud .hBest{display:none !important;}
@@ -483,20 +483,20 @@ const TRACK_WIDTH={asphalt:0.35,wet:0.36,snow:0.41,mud:0.42,sand:0.43};
 const MIN_HALF=9;   // semicarreggiata minima (unità pista): l'auto ci passa sempre con un po' di margine
 
 const SURFACES=[
- {name:'Asfalto',friction:1.0,grip:1.0,base:[105,105,112],spk:'70,70,78',scene:'city',fx:'asphalt'},
+ {name:'Asfalto',friction:1.0,grip:1.0,base:[62,62,68],spk:'40,40,47',scene:'city',fx:'asphalt'},
  {name:'Sterrato',friction:0.9,grip:0.85,base:[142,110,72],spk:'60,42,26',scene:'mountain',fx:'dirt'},
  {name:'Ghiaia',friction:0.8,grip:0.75,base:[150,145,130],spk:'95,88,76',scene:'mountain',fx:'gravel'},
  {name:'Sabbia',friction:0.62,grip:0.58,base:[150,116,76],spk:'108,80,50',scene:'desert',fx:'sand'},
  {name:'Fango',friction:0.5,grip:0.5,base:[86,66,42],spk:'48,34,20',scene:'mountain',fx:'mud'},
  {name:'Neve',friction:0.68,grip:0.48,base:[156,165,186],spk:'118,128,154',scene:'snow',fx:'snow'}, // neve battuta, più scura di quella fresca ai lati
- {name:'Asfalto bagnato',friction:0.8,grip:0.75,base:[70,70,80],spk:'40,40,50',scene:'city',fx:'wet'},
+ {name:'Asfalto bagnato',friction:0.8,grip:0.75,base:[48,48,56],spk:'28,28,36',scene:'city',fx:'wet'},
  {name:'Sterrato duro',friction:0.94,grip:0.9,base:[122,96,66],spk:'72,50,30',scene:'mountain',fx:'hard'},
  {name:'Ghiaia fine',friction:0.76,grip:0.7,base:[160,150,135],spk:'100,92,80',scene:'mountain',fx:'fine'},
  {name:'Misto',friction:0.72,grip:0.66,base:[130,114,94],spk:'80,65,50',scene:'mountain',fx:'mixed'},
  // stage 11: asfalto di montagna "alla spagnola", stretto e tortuoso, parete di roccia da un lato e vuoto dall'altro
- {name:'Asfalto di montagna',friction:1.0,grip:0.97,base:[96,96,102],spk:'62,62,70',scene:'mountain',fx:'asphalt',cliff:true,width:0.37,ovw:0.42},
+ {name:'Asfalto di montagna',friction:1.0,grip:0.97,base:[60,60,66],spk:'38,38,45',scene:'mountain',fx:'asphalt',cliff:true,width:0.37,ovw:0.42},
  // stage 12: centro storico in stile Monaco di Baviera, strade tra i palazzi, curve ad angolo tra gli isolati
- {name:'Asfalto cittadino',friction:1.0,grip:0.95,base:[84,84,90],spk:'56,56,64',scene:'town',fx:'asphalt',town:true,width:0.37,ovw:0.58}
+ {name:'Asfalto cittadino',friction:1.0,grip:0.95,base:[56,56,62],spk:'36,36,42',scene:'town',fx:'asphalt',town:true,width:0.37,ovw:0.58}
 ];
 
 function mulberry32(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
@@ -1136,12 +1136,22 @@ function dirtTexture(surface){
       g.fillStyle='rgba(255,255,255,0.2)';g.beginPath();g.ellipse(-r*0.3,-r*0.25,r*0.45,r*0.3,0,0,6.2832);g.fill();
       g.restore();});
   }};
-  // carreggiate: le due fasce dove passano le ruote (battute, più scure o più lucide)
-  const lanes=(k,a,w)=>{for(const u of [0.35,0.65]){const x=u*W,gr=g.createLinearGradient(x-w,0,x+w,0);
-    gr.addColorStop(0,rgba(k,0));gr.addColorStop(0.5,rgba(k,a));gr.addColorStop(1,rgba(k,0));g.fillStyle=gr;g.fillRect(x-w,0,2*w,H);}};
-  // righe sottili lungo la pista (battistrada, solchi)
-  const treads=(n,k,a,spread)=>{for(let i=0;i<n;i++){const u=(rr()<0.5?0.35:0.65)+(rr()-0.5)*spread;
-    g.fillStyle=rgba(k,a*(0.4+rr()*0.6));g.fillRect(u*W,0,1+rr()*1.5,H);}};
+  // carreggiate: le due fasce dove passano le ruote (battute, più scure o più lucide). Non sono righe
+  // dritte: serpeggiano, cambiano intensità e a tratti quasi spariscono (periodiche sull'altezza della
+  // texture, che si ripete lungo la pista, così non si vede la giunta)
+  const ph=[0,0,0,0,0,0].map(()=>rr()*6.28);
+  const wander=(u,li,y)=>u*W+Math.sin(y/H*6.2832+ph[li])*14+Math.sin(y/H*6.2832*3+ph[li+2])*4;
+  const patchy=(li,y)=>0.15+0.85*Math.pow(0.5+0.5*Math.sin(y/H*6.2832*2+ph[li]*1.7)*Math.cos(y/H*6.2832+ph[li+2]),1.5);
+  const lanes=(k,a,w)=>{[0.35,0.65].forEach((u,li)=>{
+    for(let y=0;y<H;y+=3){const x=wander(u,li,y)+(rr()-0.5)*w*0.8;blot(x,y+(rr()-0.5)*8,w*(0.5+rr()*0.8),10+rr()*16,k,a*0.6*patchy(li,y)*(0.4+rr()*0.6));}
+  });};
+  // segni del battistrada e solchi: tratti brevi che seguono le fasce, non righe lunghe tutta la pista
+  const treads=(n,k,a,spread)=>{g.lineCap='round';for(let i=0;i<n;i++){
+    const li=rr()<0.5?0:1,u=li?0.65:0.35,off=(rr()-0.5)*spread*W,y0=rr()*H,len=20+rr()*80,al=a*(0.35+rr()*0.65),lw=0.8+rr()*1.4;
+    wrap(oy=>{g.strokeStyle=rgba(k,al);g.lineWidth=lw;g.beginPath();
+      for(let y=y0;y<=y0+len;y+=8) (y===y0?g.moveTo.bind(g):g.lineTo.bind(g))(wander(u,li,y)+off,y+oy);g.stroke();});}};
+  // materiale smosso: chiazze allungate sparse a caso (non più una fascia al centro della strada)
+  const loose=(n,k)=>{for(let i=0;i<n;i++) blot(rr()*W,rr()*H,8+rr()*26,24+rr()*70,k,0.16+rr()*0.18);};
   const cracks=(n,a)=>{g.lineCap='round';for(let i=0;i<n;i++){
     let x=rr()*W,y=rr()*H,d=rr()*6.28;const segs=6+Math.floor(rr()*14),lw=0.6+rr()*1.1;
     wrap(oy=>{let px=x,py=y,dd=d;g.strokeStyle='rgba(12,12,14,'+a+')';g.lineWidth=lw;g.beginPath();g.moveTo(px,py+oy);
@@ -1155,9 +1165,10 @@ function dirtTexture(surface){
     grain(9000,1,2,0.55,1.45,0.25,0.55);
     grain(900,1.5,3,1.25,1.6,0.25,0.5);            // inerti chiari
     cracks(6,0.28);
-    // una sigillatura di bitume lucido
-    {const x=rr()*W;wrap(oy=>{g.strokeStyle='rgba(15,15,18,0.3)';g.lineWidth=2;g.beginPath();g.moveTo(x,oy);
-      for(let y=0;y<=H;y+=16) g.lineTo(x+Math.sin(y*0.049)*8,y+oy);g.stroke();});}
+    // qualche tratto di sigillatura di bitume lucido (spezzoni storti, non una riga continua)
+    for(let i=0;i<3;i++){const x=W*(0.15+rr()*0.7),y0=rr()*H,len=30+rr()*90,f=0.03+rr()*0.06,p=rr()*6.28;
+      wrap(oy=>{g.strokeStyle='rgba(15,15,18,0.26)';g.lineWidth=1.5+rr();g.beginPath();g.moveTo(x+Math.sin(p)*8,y0+oy);
+        for(let y=y0;y<=y0+len;y+=6) g.lineTo(x+Math.sin(y*f+p)*8+(y-y0)*0.15,y+oy);g.stroke();});}
     if(kind==='asphalt'){lanes(0.72,0.38,34);treads(40,0.55,0.2,0.1);}
     else{lanes(1.25,0.16,30);lanes(0.7,0.25,14);
       for(let i=0;i<24;i++) blot(rr()*W,rr()*H,8+rr()*30,5+rr()*16,1.9,0.12+rr()*0.12);}   // velo d'acqua lucido
@@ -1166,8 +1177,8 @@ function dirtTexture(surface){
     grain(7000,1,2.5,0.5,1.4,0.3,0.6);
     stones(kind==='gravel'?1000:1600,kind==='gravel'?1.4:0.9,kind==='gravel'?3.6:2.1,0.6,1.35);
     lanes(0.8,0.45,30);treads(60,0.6,0.25,0.12);
-    // cordoli di ghiaia smossa al centro e ai bordi
-    stones(260,1,2.4,0.9,1.4);
+    // ghiaia smossa sparsa
+    stones(260,1,2.4,0.9,1.4);loose(16,1.12);
   }else if(kind==='sand'){
     blots(40,0.9,1.08,0.2,0.3,1.3);
     // increspature del vento: onde attraverso la strada
@@ -1179,22 +1190,22 @@ function dirtTexture(surface){
   }else if(kind==='mud'){
     blots(60,0.7,1.15,0.25,0.4,1);
     grain(5000,1,3,0.5,1.3,0.25,0.5);
-    lanes(0.58,0.55,26);treads(80,0.45,0.35,0.12);
-    // creste di fango ai lati dei solchi e riflessi dell'acqua nei solchi
-    for(const u of [0.27,0.43,0.57,0.73]){g.fillStyle=rgba(1.22,0.25);g.fillRect(u*W-4,0,8,H);}
-    for(let i=0;i<40;i++) blot((rr()<0.5?0.35:0.65)*W+(rr()-0.5)*30,rr()*H,4+rr()*10,10+rr()*30,2.2,0.12+rr()*0.15);
+    lanes(0.58,0.55,26);treads(70,0.5,0.22,0.16);
+    // creste di fango ai lati dei solchi (che seguono i solchi e si interrompono) e acqua nei solchi
+    [0.35,0.65].forEach((u,li)=>{for(const side of [-1,1]) for(let y=0;y<H;y+=4){if(patchy(li+1,y)<0.55) continue;
+      blot(wander(u,li,y)+side*(22+rr()*5),y,4+rr()*3,7,1.22,0.22);}});
+    for(let i=0;i<40;i++){const li=rr()<0.5?0:1,y=rr()*H;blot(wander(li?0.65:0.35,li,y)+(rr()-0.5)*24,y,4+rr()*10,10+rr()*30,2.2,0.12+rr()*0.15);}
   }else if(kind==='snow'){
     blots(40,0.92,1.08,0.2,0.3,1.2);
     grain(4000,1,2,0.85,1.2,0.25,0.5);
-    lanes(0.84,0.42,30);treads(90,0.72,0.3,0.1);
+    lanes(0.84,0.42,30);treads(90,0.76,0.2,0.16);
     for(let i=0;i<700;i++){g.fillStyle='rgba(255,255,255,'+(0.3+rr()*0.5)+')';g.fillRect(rr()*W,rr()*H,1,1);}  // cristalli
   }else{ // sterrato, sterrato duro, misto
     blots(70,0.8,1.15,0.2,0.38,1);
     grain(6000,1,3,0.5,1.35,0.25,0.55);
     stones(kind==='mixed'?420:180,1,2.8,0.7,1.5);
     lanes(0.8,0.45,30);treads(70,0.62,0.28,0.12);
-    for(const u of [0.1,0.5,0.9]){const x=u*W,gr=g.createLinearGradient(x-26,0,x+26,0);   // materiale smosso
-      gr.addColorStop(0,rgba(1.14,0));gr.addColorStop(0.5,rgba(1.14,0.3));gr.addColorStop(1,rgba(1.14,0));g.fillStyle=gr;g.fillRect(x-26,0,52,H);}
+    loose(22,1.14);
   }
   // bordi scuri (carreggiata consumata/bordo rialzato) per separare la pista dal terreno
   for(const [x0,x1] of [[0,22],[W,W-22]]){
@@ -1581,15 +1592,15 @@ function townStyles(){
 }
 // terreno ai lati della pista per scenario
 const GROUND_STYLE={
-  city:{base:[74,140,68],spk:['58,120,50','90,160,80']},                        // prato curato
+  city:{base:[30,64,25],spk:['20,48,18','46,82,34'],minDist:45},                // prato fitto e scuro
   mountain:{base:[82,136,62],spk:['60,110,46','104,158,80','118,108,88']},      // prato alpino con sassi
   desert:{base:[184,132,82],spk:['150,98,58','206,160,106','128,116,62']},      // terra rossa e arbusti secchi
   snow:{base:[244,247,252],spk:['208,218,236','255,255,255','188,198,220']},    // neve fresca
   town:{base:[176,170,160],spk:[]}                                               // marciapiedi e piazze lastricate
 };
 // garantisce una distanza di colore minima tra terreno e pista schiarendo o scurendo il terreno
-function contrastBase(base,trackBase){
-  const MIN_DIST=80;
+function contrastBase(base,trackBase,minDist){
+  const MIN_DIST=minDist||80;
   const dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
   if(dist(base,trackBase)>=MIN_DIST) return base;
   const lum=c=>0.2126*c[0]+0.7152*c[1]+0.0722*c[2];
@@ -1605,7 +1616,7 @@ function contrastBase(base,trackBase){
 const GROUND_UV=40;   // unità pista per ripetizione della texture del terreno (~4,8 m)
 function groundTexture(scene,trackBase){
   const st=GROUND_STYLE[scene]||GROUND_STYLE.mountain;
-  const base=contrastBase(st.base,trackBase);
+  const base=contrastBase(st.base,trackBase,st.minDist);
   let tex,alt,rock;
   if(scene==='desert'){
     tex=canvasTex(256,(g,S,rr)=>{g.fillStyle=rgbS(base,1);g.fillRect(0,0,S,S);softBlots(g,S,rr,base,50,15,60,0.85,1.12,0.3,0.5);
@@ -1644,8 +1655,8 @@ function groundTexture(scene,trackBase){
           g.fillStyle='rgba(255,255,255,0.12)';g.beginPath();g.ellipse(px+5.5,py+5.5,3,2.5,0,0,6.28);g.fill();});}});
     rock=canvasTex(256,(g,S,rr)=>drawRock(g,S,rr,[160,156,150]));
   }else{ // city
-    tex=canvasTex(256,(g,S,rr)=>drawGrass(g,S,rr,base,{blades:8000,len:5,tint:[100,170,70],flowers:40}));
-    alt=canvasTex(256,(g,S,rr)=>{drawGrass(g,S,rr,[132,138,76],{blades:5000,len:6,tint:[160,150,90]});softBlots(g,S,rr,[120,96,66],25,8,30,1,1.1,0.4,0.7);});
+    tex=canvasTex(256,(g,S,rr)=>drawGrass(g,S,rr,base,{blades:16000,len:6,tint:[46,90,30],flowers:25}));
+    alt=canvasTex(256,(g,S,rr)=>{drawGrass(g,S,rr,[44,70,28],{blades:12000,len:7,tint:[62,88,36]});softBlots(g,S,rr,[84,66,44],25,8,30,1,1.1,0.4,0.7);});
     rock=canvasTex(256,(g,S,rr)=>drawRock(g,S,rr,[160,158,152],{lichen:[150,160,110]}));
   }
   return {tex,alt,rock,base};
@@ -1989,9 +2000,17 @@ function patchRoadMat(m){
     sh.fragmentShader=sh.fragmentShader
       .replace('#include <common>','#include <common>\nvarying vec3 vSWP;\nuniform float uGloss;uniform float uRut;uniform float uWet;uniform float uWetPatch;uniform float uReflI;uniform float uSpecMax;\n'+SURF_GLSL)
       .replace('#include <map_fragment>',`#include <map_fragment>
-        // chiazze grandi (umido, fango lucido) e grana fine; corsie consumate dalle gomme a ±22% della carreggiata
+        // chiazze grandi (umido, fango lucido) e grana fine
         float sN1=sNoise(vSWP.xz*0.35),sN2=sNoise(vSWP.xz*2.7);
-        float sTr=smoothstep(0.1,0.0,abs(abs(vUv.x-0.5)-0.22));
+        // contro la ripetizione: un secondo campione della texture (specchiato, spostato e stirato) che
+        // prende il posto del primo a chiazze, più variazioni di tono larghe → niente motivo che si ripete
+        float sMx=smoothstep(0.35,0.65,sNoise(vSWP.xz*0.045+vec2(13.1,5.7)));
+        vec4 sT2=mapTexelToLinear(texture2D(map,vec2(1.0-vUv.x,vUv.y*0.61+0.37)));
+        diffuseColor.rgb=mix(diffuseColor.rgb,diffuse*sT2.rgb,sMx*0.85);
+        diffuseColor.rgb*=0.84+0.3*sNoise(vSWP.xz*0.07+vec2(3.3,9.1))+0.08*(sNoise(vSWP.xz*0.6)-0.5);
+        // corsie consumate dalle gomme: serpeggiano e a tratti spariscono (niente righe dritte)
+        float sOff=(sNoise(vSWP.xz*0.04)-0.5)*0.1;
+        float sTr=smoothstep(0.1,0.0,abs(abs(vUv.x-0.5+sOff)-0.22))*smoothstep(0.25,0.7,sNoise(vSWP.xz*0.09+vec2(7.0,2.0)));
         float sWet=clamp(uWet+uWetPatch*smoothstep(0.55,0.8,sN1+0.12*sN2),0.0,1.0);
         float sGl=clamp(uGloss*(0.7+0.6*sN2)+sTr*uRut+sWet*0.6,0.0,1.0);
         diffuseColor.rgb*=1.0-0.4*sWet;                       // il bagnato scurisce il fondo`)
@@ -2221,7 +2240,7 @@ const tuftGeo=(()=>{
 const tuftMat=grassMat(tuftTexture(false)),flowerMat=grassMat(tuftTexture(true));
 [tuftGeo,tuftMat,flowerMat,tuftMat.map,flowerMat.map].forEach(r=>sharedRes.add(r));
 const GRASS_STYLE={
-  city:{p:1,cols:[0x6fae4c,0x5e9e40,0x80b858,0x74a848],flowers:0.1},
+  city:{p:1,n:13,near:2.3,cols:[0x3f7a2c,0x346a24,0x4a8634,0x2e5e20,0x557f30],flowers:0.05},
   mountain:{p:1,cols:[0x5f9a44,0x72a650,0x8aa858,0x6a8a40],flowers:0.16},
   desert:{p:0.45,cols:[0xc8b070,0xb89c5c,0xd4c080,0xa89050],flowers:0},
   snow:{p:0.16,cols:[0xb0a078,0x9c8c66,0x8a8a60],flowers:0},
@@ -2234,9 +2253,9 @@ function buildGrass(wps,theme){
   for(let i=2;i<wps.length-2;i++){
     const w=wps[i];if(w.struct) continue;
     const n=w.heading+Math.PI/2;
-    for(const side of [-1,1]) for(let k=0;k<5;k++){
+    for(const side of [-1,1]) for(let k=0;k<(st.n||5);k++){
       if(rr()>st.p) continue;
-      const e=SHOULDER-3+Math.pow(rr(),1.6)*85,along=(rr()-0.5)*STEP;
+      const e=SHOULDER-3+Math.pow(rr(),st.near||1.6)*85,along=(rr()-0.5)*STEP;
       const x=w.x+Math.cos(n)*(w.half+e)*side+Math.cos(w.heading)*along,y=w.y+Math.sin(n)*(w.half+e)*side+Math.sin(w.heading)*along;
       const near=nearestTrack(x,y);
       if(near.d-near.half<SHOULDER-4) continue;               // mai sulla strada (neanche su un altro tratto)
