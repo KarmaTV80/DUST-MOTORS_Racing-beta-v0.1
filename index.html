@@ -291,6 +291,19 @@
   .hudDelta.slower{border-top-color:#ff4757;}.hudDelta.slower .hdVal{color:#ff6b78;}
   .hudDelta.best{border-top-color:var(--hudPurple);}.hudDelta.best .hdVal{color:var(--hudPurple);}
   body.titleMode .hudDelta{display:none !important;}
+  /* penalità: in alto al centro (sotto i tempi degli intermedi), rossa, entra con un "colpo" e lampeggia */
+  .hudPen{position:fixed;top:calc(max(10px,env(safe-area-inset-top)) + 92px);left:50%;transform:translateX(-50%);z-index:7;pointer-events:none;text-align:center;
+    padding:6px 38px 8px;background:linear-gradient(180deg,rgba(150,16,24,.94),rgba(70,8,12,.9));clip-path:polygon(0 0,100% 0,calc(100% - 18px) 100%,18px 100%);
+    border-top:3px solid #ffcf5c;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.6);}
+  .hudPen[hidden]{display:none !important;}
+  .hudPen.pop{animation:penPop .55s cubic-bezier(.2,1.4,.4,1) both,penFlash .9s ease-in-out .55s 2;}
+  @keyframes penPop{0%{transform:translateX(-50%) scale(1.8);opacity:0;}60%{transform:translateX(-50%) scale(.94);opacity:1;}100%{transform:translateX(-50%) scale(1);}}
+  @keyframes penFlash{0%,100%{filter:none;}50%{filter:brightness(1.45);}}
+  .hpVal{font-family:var(--hudNum);font-weight:700;font-size:clamp(34px,3.2vw,46px);line-height:.95;color:#ffdf6b;letter-spacing:.02em;}
+  .hpLbl{font-family:var(--hudTxt);font-weight:700;font-size:12px;letter-spacing:.18em;text-transform:uppercase;margin-top:2px;}
+  .hpTot{font-family:var(--hudNum);font-size:14px;opacity:.85;margin-top:1px;}
+  body.titleMode .hudPen{display:none !important;}
+  @media (prefers-reduced-motion:reduce){.hudPen.pop{animation:none;}}
   /* ---- comandi touch (telefono/tablet) ---- */
   body{touch-action:manipulation;}
   #touchUI{position:fixed;inset:0;z-index:8;display:none;pointer-events:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;}
@@ -388,6 +401,7 @@
       <div class="htSplits" id="htSplits"></div>
     </div>
   </div>
+  <div class="hudPen" id="hudPen" hidden><div class="hpVal" id="hpVal"></div><div class="hpLbl" id="hpLbl"></div><div class="hpTot" id="hpTot"></div></div>
   <div class="hudDelta" id="hudDelta" hidden><div class="hdLbl" id="hdLbl"></div><div class="hdVal" id="hdVal"></div><div class="hdSub" id="hdSub"></div></div>
   <div class="hudRec" id="hudRecBox" hidden><div class="htLbl" id="hrLbl">Record</div><div class="htVal" id="hrVal">0:00.00</div></div>
   <canvas class="hudGauge" id="hudGauge" width="240" height="240" aria-label="Contagiri, marcia, velocità, acceleratore e freno"></canvas>
@@ -414,7 +428,9 @@
     <button data-act="showroom">🚗 Showroom</button>
     <button data-act="board">🏆 Classifica</button>
     <button data-act="options">⚙ Opzioni</button>
+    <button data-act="lang" id="langBtn" data-noi18n="1">🌐 Lingua · Language</button>
   </div>
+  <div class="menuList titleMenu" id="titleLang" style="display:none;"></div>
   <div class="menuList titleMenu" id="titleGarage" style="display:none;"></div>
   <div class="carCard" id="carCard" style="display:none;"></div>
   <div class="menuList titleMenu" id="titleTA" style="display:none;"></div>
@@ -481,6 +497,9 @@
       <button data-act="vol" data-k="music" class="volRow"><span class="vLbl">🎵 Musica</span><span class="vBar"><i></i></span><span class="vPct">100%</span></button>
       <button data-act="vol" data-k="sfx" class="volRow"><span class="vLbl">🔊 Effetti</span><span class="vBar"><i></i></span><span class="vPct">100%</span></button>
       <button data-act="cam" id="pCam">🎥 Telecamera: Inseguimento</button>
+      <button data-act="cock" data-k="h" class="volRow"><span class="vLbl">💺 Altezza sedile</span><span class="vBar"><i></i></span><span class="vPct">0 cm</span></button>
+      <button data-act="cock" data-k="z" class="volRow"><span class="vLbl">💺 Posizione sedile</span><span class="vBar"><i></i></span><span class="vPct">0 cm</span></button>
+      <button data-act="cock" data-k="fov" class="volRow"><span class="vLbl">🔭 Campo visivo</span><span class="vBar"><i></i></span><span class="vPct">72°</span></button>
       <button data-act="res">🖥 Risoluzione: Nativa</button>
       <button data-act="fs">⛶ Schermo intero: no</button>
       <button data-act="controls">🎮 Comandi</button>
@@ -530,6 +549,335 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 (function(){
+// ======================= LINGUE =======================
+// Il gioco è scritto in italiano; per le altre lingue ogni testo mostrato (menu, HUD, messaggi, schermi in pista)
+// passa da un dizionario: frase intera, oppure etichetta + valore ("Telecamera: Abitacolo"), oppure parole e gruppi
+// di parole noti dentro testi composti. Il DOM viene tradotto da solo mentre il gioco lo aggiorna (MutationObserver).
+const LANGS=[{id:'it',name:'Italiano'},{id:'en',name:'English'},{id:'es',name:'Español'},{id:'fr',name:'Français'},{id:'de',name:'Deutsch'},
+  {id:'pt',name:'Português'},{id:'ru',name:'Русский'},{id:'zh',name:'中文'},{id:'ja',name:'日本語'}];
+// it | en | es | fr | de | pt | ru | zh | ja
+const I18N_SRC=`
+Carriera|Career|Carrera|Carrière|Karriere|Carreira|Карьера|生涯模式|キャリア
+Time Attack|Time Attack|Contrarreloj|Contre-la-montre|Zeitfahren|Contrarrelógio|Гонка на время|计时赛|タイムアタック
+Showroom|Showroom|Exposición|Showroom|Showroom|Showroom|Автосалон|展厅|ショールーム
+Classifica|Leaderboard|Clasificación|Classement|Rangliste|Classificação|Таблица рекордов|排行榜|ランキング
+Opzioni|Options|Opciones|Options|Optionen|Opções|Настройки|选项|オプション
+Indietro|Back|Atrás|Retour|Zurück|Voltar|Назад|返回|戻る
+Conferma|Confirm|Confirmar|Confirmer|Bestätigen|Confirmar|Подтвердить|确认|決定
+Il tuo nome|Your name|Tu nombre|Ton nom|Dein Name|Seu nome|Ваше имя|你的名字|あなたの名前
+Nome del pilota|Driver name|Nombre del piloto|Nom du pilote|Fahrername|Nome do piloto|Имя гонщика|车手名字|ドライバー名
+Pilota|Driver|Piloto|Pilote|Fahrer|Piloto|Гонщик|车手|ドライバー
+Comandi|Controls|Controles|Commandes|Steuerung|Controles|Управление|操作|操作設定
+Risoluzione|Resolution|Resolución|Résolution|Auflösung|Resolução|Разрешение|分辨率|解像度
+Nativa|Native|Nativa|Native|Nativ|Nativa|Родное|原生|ネイティブ
+Schermo intero|Fullscreen|Pantalla completa|Plein écran|Vollbild|Tela cheia|Полный экран|全屏|フルスクリーン
+sì|yes|sí|oui|ja|sim|да|是|オン
+no|no|no|non|nein|não|нет|否|オフ
+Azzera record|Reset records|Borrar récords|Réinitialiser les records|Rekorde löschen|Apagar recordes|Сбросить рекорды|重置纪录|記録をリセット
+Musica|Music|Música|Musique|Musik|Música|Музыка|音乐|音楽
+Muto|Muted|Silencio|Muet|Stumm|Mudo|Без звука|静音|ミュート
+Effetti|Effects|Efectos|Effets|Effekte|Efeitos|Эффекты|音效|効果音
+Record|Record|Récord|Record|Rekord|Recorde|Рекорд|纪录|記録
+▲▼ scegli · ◀▶ regola · Invio / A conferma · Esc / B indietro|▲▼ select · ◀▶ adjust · Enter / A confirm · Esc / B back|▲▼ elegir · ◀▶ ajustar · Intro / A confirmar · Esc / B atrás|▲▼ choisir · ◀▶ régler · Entrée / A valider · Échap / B retour|▲▼ wählen · ◀▶ einstellen · Enter / A bestätigen · Esc / B zurück|▲▼ escolher · ◀▶ ajustar · Enter / A confirmar · Esc / B voltar|▲▼ выбор · ◀▶ настройка · Enter / A подтвердить · Esc / B назад|▲▼ 选择 · ◀▶ 调节 · Enter / A 确认 · Esc / B 返回|▲▼ 選択 · ◀▶ 調整 · Enter / A 決定 · Esc / B 戻る
+▲▼ scegli · ◀▶ volume · Invio / A conferma · Esc / B indietro|▲▼ select · ◀▶ volume · Enter / A confirm · Esc / B back|▲▼ elegir · ◀▶ volumen · Intro / A confirmar · Esc / B atrás|▲▼ choisir · ◀▶ volume · Entrée / A valider · Échap / B retour|▲▼ wählen · ◀▶ Lautstärke · Enter / A bestätigen · Esc / B zurück|▲▼ escolher · ◀▶ volume · Enter / A confirmar · Esc / B voltar|▲▼ выбор · ◀▶ громкость · Enter / A подтвердить · Esc / B назад|▲▼ 选择 · ◀▶ 音量 · Enter / A 确认 · Esc / B 返回|▲▼ 選択 · ◀▶ 音量 · Enter / A 決定 · Esc / B 戻る
+Scegli l'auto|Choose your car|Elige el coche|Choisis ta voiture|Wähle dein Auto|Escolha o carro|Выберите машину|选择赛车|車を選ぶ
+Trazione|Drivetrain|Tracción|Transmission|Antrieb|Tração|Привод|驱动|駆動方式
+Integrale 4x4|All-wheel drive 4x4|Integral 4x4|Intégrale 4x4|Allrad 4x4|Integral 4x4|Полный привод 4x4|四驱 4x4|四輪駆動 4x4
+Posteriore|Rear-wheel drive|Trasera|Propulsion|Heckantrieb|Traseira|Задний привод|后驱|後輪駆動
+Motore|Engine|Motor|Moteur|Motor|Motor|Двигатель|引擎|エンジン
+Tenuta|Grip|Agarre|Adhérence|Grip|Aderência|Сцепление|抓地力|グリップ
+Agilità|Agility|Agilidad|Agilité|Agilität|Agilidade|Манёвренность|灵活性|俊敏性
+Stabilità|Stability|Estabilidad|Stabilité|Stabilität|Estabilidade|Устойчивость|稳定性|安定性
+Baricentro basso|Low centre of gravity|Centro de gravedad bajo|Centre de gravité bas|Tiefer Schwerpunkt|Centro de gravidade baixo|Низкий центр тяжести|低重心|低重心
+Carreggiata|Track width|Ancho de vía|Voie|Spurweite|Bitola|Колея|轮距|トレッド幅
+Ultima auto usata|Last car used|Último coche usado|Dernière voiture utilisée|Zuletzt gefahren|Último carro usado|Последняя машина|上次使用的赛车|前回使用した車
+4 cilindri turbo|4-cylinder turbo|4 cilindros turbo|4 cylindres turbo|4-Zylinder-Turbo|4 cilindros turbo|4 цилиндра, турбо|四缸涡轮|直列4気筒ターボ
+4 cilindri aspirato|4-cylinder, naturally aspirated|4 cilindros atmosférico|4 cylindres atmosphérique|4-Zylinder-Saugmotor|4 cilindros aspirado|4 цилиндра, атмосферный|四缸自然吸气|直列4気筒NA
+boxer ad aria|air-cooled boxer|bóxer refrigerado por aire|flat refroidi par air|luftgekühlter Boxer|boxer refrigerado a ar|оппозитный с воздушным охлаждением|风冷水平对置|空冷ボクサー
+Compatta da rally moderna: precisa e facile da tenere in traiettoria, va forte su ogni fondo.|Modern compact rally car: precise and easy to keep on line, fast on every surface.|Compacto de rally moderno: preciso y fácil de mantener en la trazada, rápido en cualquier superficie.|Compacte de rallye moderne : précise et facile à garder en trajectoire, rapide sur tous les revêtements.|Moderner Rallye-Kompaktwagen: präzise, leicht auf Linie zu halten und schnell auf jedem Untergrund.|Compacto de rali moderno: preciso e fácil de manter na trajetória, rápido em qualquer piso.|Современный компактный раллийный автомобиль: точный, легко держит траекторию, быстр на любом покрытии.|现代紧凑型拉力车：精准、易于保持走线，在任何路面上都很快。|現代のコンパクトラリーカー。正確でラインを保ちやすく、どんな路面でも速い。
+Coupé da rally anni '70: leggera di coda, si guida di traverso e va dosata con il gas.|1970s rally coupé: light at the rear, driven sideways, needs a careful right foot.|Coupé de rally de los años 70: ligera de atrás, se conduce de lado y hay que dosificar el gas.|Coupé de rallye des années 70 : arrière léger, se conduit en glisse et demande un gaz dosé.|Rallye-Coupé der 70er: leichtes Heck, wird quer gefahren und verlangt Gefühl am Gaspedal.|Cupê de rali dos anos 70: traseira leve, guia-se de lado e exige dosar o acelerador.|Раллийное купе 70-х: лёгкая корма, едет боком, газ нужно дозировать.|70年代拉力轿跑：车尾轻盈，适合横向漂移，需要细腻控制油门。|70年代のラリークーペ。リアが軽く横向きで走らせるため、繊細なアクセルワークが必要。
+Fuoristrada da raid: alta e robusta, digerisce salti e buche ma è più pigra nei cambi di direzione.|Rally-raid off-roader: tall and tough, shrugs off jumps and bumps but is lazier changing direction.|Todoterreno de raid: alto y robusto, digiere saltos y baches pero es más perezoso en los cambios de dirección.|Tout-terrain de rallye-raid : haut et robuste, encaisse sauts et bosses mais plus paresseux dans les changements de direction.|Rallye-Raid-Geländewagen: hoch und robust, schluckt Sprünge und Schlaglöcher, ist aber träger bei Richtungswechseln.|Todo-o-terreno de raide: alto e robusto, aguenta saltos e buracos mas é mais preguiçoso nas mudanças de direção.|Внедорожник для ралли-рейдов: высокий и крепкий, легко переносит прыжки и ямы, но медленнее меняет направление.|越野拉力车：高大坚固，能应对跳跃和坑洼，但变向较迟缓。|ラリーレイド用オフローダー。背が高く頑丈でジャンプや凹凸に強いが、切り返しは鈍い。
+Buggy leggero con carreggiata larghissima: agilissimo e reattivo, nervoso sullo sterrato veloce.|Light buggy with a very wide track: extremely agile and responsive, twitchy on fast gravel.|Buggy ligero con vía anchísima: agilísimo y reactivo, nervioso en tierra rápida.|Buggy léger à voie très large : très agile et réactif, nerveux sur la terre rapide.|Leichter Buggy mit sehr breiter Spur: extrem wendig und reaktionsfreudig, nervös auf schnellem Schotter.|Buggy leve com bitola larguíssima: agilíssimo e reativo, nervoso na terra rápida.|Лёгкий багги с очень широкой колеёй: очень вёрткий и отзывчивый, нервный на быстрой грунтовке.|轻量化越野车，轮距极宽：极其灵活敏捷，在高速碎石路上较难驾驭。|超ワイドトレッドの軽量バギー。抜群に俊敏だが、高速グラベルでは神経質。
+Carriera completa|Full career|Carrera completa|Carrière complète|Komplette Karriere|Carreira completa|Вся карьера|完整生涯|キャリア全体
+Classifica carriera|Career leaderboard|Clasificación de carrera|Classement carrière|Karriere-Rangliste|Classificação da carreira|Таблица карьеры|生涯排行榜|キャリアランキング
+Nessun tempo ancora: finisci la tappa per entrare in classifica.|No times yet: finish the stage to get on the leaderboard.|Aún no hay tiempos: termina el tramo para entrar en la clasificación.|Aucun temps pour l'instant : termine la spéciale pour entrer au classement.|Noch keine Zeiten: Beende die Etappe, um in die Rangliste zu kommen.|Ainda sem tempos: termine a etapa para entrar na classificação.|Пока нет результатов: пройдите этап, чтобы попасть в таблицу.|暂无成绩：完成赛段即可进入排行榜。|まだタイムがありません。ステージを完走してランキングに入ろう。
+posto|place|puesto|place|Platz|lugar|место|名|位
+scegli la pista|choose the track|elige la pista|choisis la piste|wähle die Strecke|escolha a pista|выберите трассу|选择赛道|コースを選択
+12 stage a difficoltà crescente: strettoie, dossi, pozzanghere e superfici diverse da sentire alla guida.|12 stages of increasing difficulty: narrow sections, crests, puddles and different surfaces you can feel at the wheel.|12 tramos de dificultad creciente: estrechamientos, cambios de rasante, charcos y superficies distintas que se notan al volante.|12 spéciales de difficulté croissante : passages étroits, bosses, flaques et revêtements différents à ressentir au volant.|12 Etappen mit steigender Schwierigkeit: Engstellen, Kuppen, Pfützen und verschiedene Beläge, die man am Lenkrad spürt.|12 etapas de dificuldade crescente: estreitamentos, lombas, poças e pisos diferentes para sentir ao volante.|12 этапов возрастающей сложности: сужения, трамплины, лужи и разные покрытия, которые чувствуются за рулём.|12个难度递增的赛段：狭窄路段、坡顶、水坑以及驾驶时能感受到的各种路面。|難易度が上がる12ステージ。狭い区間、ジャンプ、水たまり、ハンドルで感じる様々な路面。
+Inizia|Start|Empezar|Commencer|Start|Começar|Начать|开始|スタート
+Replay|Replay|Repetición|Replay|Wiederholung|Replay|Повтор|回放|リプレイ
+Scegli un'altra pista|Choose another track|Elige otra pista|Choisis une autre piste|Andere Strecke wählen|Escolha outra pista|Другая трасса|选择其他赛道|別のコースを選ぶ
+Menu principale|Main menu|Menú principal|Menu principal|Hauptmenü|Menu principal|Главное меню|主菜单|メインメニュー
+Nuovo record della pista|New track record|Nuevo récord de la pista|Nouveau record de la piste|Neuer Streckenrekord|Novo recorde da pista|Новый рекорд трассы|新的赛道纪录|コースレコード更新
+Primo record della pista|First track record|Primer récord de la pista|Premier record de la piste|Erster Streckenrekord|Primeiro recorde da pista|Первый рекорд трассы|首个赛道纪录|初のコースレコード
+Tempo|Time|Tiempo|Temps|Zeit|Tempo|Время|时间|タイム
+Totale|Total|Total|Total|Gesamt|Total|Итого|总计|合計
+Tempo totale|Total time|Tiempo total|Temps total|Gesamtzeit|Tempo total|Общее время|总时间|合計タイム
+Tutti gli stage completati|All stages completed|Todos los tramos completados|Toutes les spéciales terminées|Alle Etappen geschafft|Todas as etapas concluídas|Все этапы пройдены|所有赛段已完成|全ステージ完走
+Tutti gli stage|All stages|Todos los tramos|Toutes les spéciales|Alle Etappen|Todas as etapas|Все этапы|全部赛段|全ステージ
+Nuovo record|New record|Nuevo récord|Nouveau record|Neuer Rekord|Novo recorde|Новый рекорд|新纪录|新記録
+Nuova gara|New race|Nueva carrera|Nouvelle course|Neues Rennen|Nova corrida|Новая гонка|新比赛|新しいレース
+Riprova|Retry|Reintentar|Réessayer|Nochmal|Tentar de novo|Ещё раз|重试|リトライ
+Stage|Stage|Tramo|Spéciale|Etappe|Etapa|Этап|赛段|ステージ
+STAGE|STAGE|TRAMO|SPÉCIALE|ETAPPE|ETAPA|ЭТАП|赛段|ステージ
+completato|complete|completado|terminée|geschafft|concluída|пройден|完成|完走
+Sicuro? Premi di nuovo per uscire|Sure? Press again to quit|¿Seguro? Pulsa de nuevo para salir|Sûr ? Appuie encore pour quitter|Sicher? Nochmal drücken zum Beenden|Tem certeza? Pressione de novo para sair|Уверены? Нажмите ещё раз для выхода|确定吗？再按一次退出|本当に？もう一度押すと終了
+Sicuro? Premi di nuovo|Sure? Press again|¿Seguro? Pulsa de nuevo|Sûr ? Appuie encore|Sicher? Nochmal drücken|Tem certeza? Pressione de novo|Уверены? Нажмите ещё раз|确定吗？再按一次|本当に？もう一度押す
+Sei sicuro? Premi di nuovo|Are you sure? Press again|¿Estás seguro? Pulsa de nuevo|Tu es sûr ? Appuie encore|Bist du sicher? Nochmal drücken|Tem certeza? Pressione de novo|Вы уверены? Нажмите ещё раз|你确定吗？再按一次|本当に？もう一度押す
+Cambio automatico a 5 marce · Esc / P / Start: pausa|Automatic 5-speed gearbox · Esc / P / Start: pause|Cambio automático de 5 marchas · Esc / P / Start: pausa|Boîte automatique 5 rapports · Échap / P / Start : pause|5-Gang-Automatik · Esc / P / Start: Pause|Câmbio automático de 5 marchas · Esc / P / Start: pausa|Автомат, 5 передач · Esc / P / Start: пауза|5速自动变速箱 · Esc / P / Start：暂停|5速オートマ · Esc / P / Start：ポーズ
+sterzo|steering|dirección|direction|Lenkung|direção|руль|转向|ステア
+acceleratore|throttle|acelerador|accélérateur|Gas|acelerador|газ|油门|アクセル
+freno|brake|freno|frein|Bremse|freio|тормоз|刹车|ブレーキ
+gas|throttle|gas|gaz|Gas|acelerador|газ|油门|アクセル
+Sterzo|Steering|Dirección|Direction|Lenkung|Direção|Руль|转向|ステア
+Gas|Throttle|Gas|Gaz|Gas|Acelerador|Газ|油门|アクセル
+Freno|Brake|Freno|Frein|Bremse|Freio|Тормоз|刹车|ブレーキ
+Menu|Menu|Menú|Menu|Menü|Menu|Меню|菜单|メニュー
+joypad disattivato|gamepad disabled|mando desactivado|manette désactivée|Gamepad deaktiviert|controle desativado|геймпад отключён|手柄已禁用|ゲームパッド無効
+Dispositivo|Device|Dispositivo|Appareil|Gerät|Dispositivo|Устройство|设备|デバイス
+Pausa|Paused|Pausa|Pause|Pause|Pausa|Пауза|暂停|ポーズ
+Percorso|Progress|Recorrido|Parcours|Fortschritt|Percurso|Пройдено|进度|進行度
+Pista|Track|Pista|Piste|Strecke|Pista|Трасса|赛道|コース
+Riprendi|Resume|Reanudar|Reprendre|Weiter|Continuar|Продолжить|继续|再開
+Ricomincia stage|Restart stage|Reiniciar tramo|Recommencer la spéciale|Etappe neu starten|Reiniciar etapa|Перезапустить этап|重新开始赛段|ステージをやり直す
+Cambia stage|Change stage|Cambiar tramo|Changer de spéciale|Etappe wechseln|Mudar etapa|Сменить этап|更换赛段|ステージ変更
+Telecamera|Camera|Cámara|Caméra|Kamera|Câmera|Камера|视角|カメラ
+Inseguimento|Chase|Persecución|Poursuite|Verfolger|Perseguição|Сзади|追尾|追従
+Inseguimento ravvicinato|Close chase|Persecución cercana|Poursuite rapprochée|Verfolger nah|Perseguição próxima|Сзади, близко|近距离追尾|追従・近
+Inseguimento lontano|Far chase|Persecución lejana|Poursuite éloignée|Verfolger weit|Perseguição distante|Сзади, далеко|远距离追尾|追従・遠
+Aerea|Aerial|Aérea|Aérienne|Luftansicht|Aérea|Сверху|空中|空撮
+Cofano|Bonnet|Capó|Capot|Motorhaube|Capô|Капот|引擎盖|ボンネット
+Abitacolo|Cockpit|Cabina|Cockpit|Cockpit|Cockpit|Из кабины|驾驶舱|コックピット
+Torna al risultato|Back to result|Volver al resultado|Retour au résultat|Zurück zum Ergebnis|Voltar ao resultado|К результату|返回成绩|結果に戻る
+Altezza sedile|Seat height|Altura del asiento|Hauteur du siège|Sitzhöhe|Altura do banco|Высота сиденья|座椅高度|シート高さ
+Posizione sedile|Seat position|Posición del asiento|Position du siège|Sitzposition|Posição do banco|Положение сиденья|座椅前后|シート前後
+Campo visivo|Field of view|Campo de visión|Champ de vision|Sichtfeld|Campo de visão|Поле зрения|视野|視野角
+Automatico|Automatic|Automático|Automatique|Automatisch|Automático|Авто|自动|自動
+Tastiera|Keyboard|Teclado|Clavier|Tastatur|Teclado|Клавиатура|键盘|キーボード
+Joypad|Gamepad|Mando|Manette|Gamepad|Controle|Геймпад|手柄|ゲームパッド
+Profilo|Profile|Perfil|Profil|Profil|Perfil|Профиль|配置|プロファイル
+Predefinito|Default|Predeterminado|Par défaut|Standard|Padrão|По умолчанию|默认|デフォルト
+Personalizzato|Custom|Personalizado|Personnalisé|Benutzerdefiniert|Personalizado|Свой|自定义|カスタム
+Clicca un comando e premi il nuovo tasto. Esc annulla, Canc/Backspace svuota lo slot.|Click a control and press the new key. Esc cancels, Del/Backspace clears the slot.|Haz clic en un control y pulsa la nueva tecla. Esc cancela, Supr/Retroceso vacía la casilla.|Clique sur une commande et appuie sur la nouvelle touche. Échap annule, Suppr/Retour arrière vide l'emplacement.|Klicke auf eine Aktion und drücke die neue Taste. Esc bricht ab, Entf/Rücktaste leert den Platz.|Clique num comando e pressione a nova tecla. Esc cancela, Del/Backspace limpa o espaço.|Нажмите на действие, затем новую клавишу. Esc — отмена, Del/Backspace — очистить.|点击一个操作，然后按下新按键。Esc 取消，Del/退格 清空。|操作をクリックして新しいキーを押す。Escで取消、Del/Backspaceで消去。
+Clicca un comando e premi un pulsante o muovi uno stick sul joypad. Esc annulla, Canc/Backspace svuota lo slot.|Click a control and press a button or move a stick on the gamepad. Esc cancels, Del/Backspace clears the slot.|Haz clic en un control y pulsa un botón o mueve un stick del mando. Esc cancela, Supr/Retroceso vacía la casilla.|Clique sur une commande et appuie sur un bouton ou bouge un stick de la manette. Échap annule, Suppr/Retour arrière vide l'emplacement.|Klicke auf eine Aktion und drücke eine Taste oder bewege einen Stick am Gamepad. Esc bricht ab, Entf/Rücktaste leert den Platz.|Clique num comando e pressione um botão ou mova um analógico do controle. Esc cancela, Del/Backspace limpa o espaço.|Нажмите на действие, затем кнопку или стик геймпада. Esc — отмена, Del/Backspace — очистить.|点击一个操作，然后按下手柄按键或推动摇杆。Esc 取消，Del/退格 清空。|操作をクリックしてボタンを押すかスティックを動かす。Escで取消、Del/Backspaceで消去。
+Diagnostica joypad (valori letti in tempo reale)|Gamepad diagnostics (live values)|Diagnóstico del mando (valores en tiempo real)|Diagnostic de la manette (valeurs en temps réel)|Gamepad-Diagnose (Live-Werte)|Diagnóstico do controle (valores em tempo real)|Диагностика геймпада (значения в реальном времени)|手柄诊断（实时数值）|ゲームパッド診断（リアルタイム値）
+Sensibilità sterzo|Steering sensitivity|Sensibilidad de dirección|Sensibilité de direction|Lenkempfindlichkeit|Sensibilidade da direção|Чувствительность руля|转向灵敏度|ステア感度
+Zona morta stick|Stick dead zone|Zona muerta del stick|Zone morte du stick|Stick-Totzone|Zona morta do analógico|Мёртвая зона стика|摇杆死区|スティックのデッドゾーン
+Vibrazione|Vibration|Vibración|Vibration|Vibration|Vibração|Вибрация|振动|振動
+Attiva|On|Activada|Activée|An|Ligada|Вкл.|开|オン
+Disattiva|Off|Desactivada|Désactivée|Aus|Desligada|Выкл.|关|オフ
+Ripristina predefiniti|Restore defaults|Restaurar predeterminados|Rétablir par défaut|Standard wiederherstellen|Restaurar padrões|Сбросить настройки|恢复默认|初期設定に戻す
+Chiudi|Close|Cerrar|Fermer|Schließen|Fechar|Закрыть|关闭|閉じる
+Sterza a sinistra|Steer left|Girar a la izquierda|Tourner à gauche|Links lenken|Virar à esquerda|Руль влево|向左转|左に切る
+Sterza a destra|Steer right|Girar a la derecha|Tourner à droite|Rechts lenken|Virar à direita|Руль вправо|向右转|右に切る
+Acceleratore|Throttle|Acelerador|Accélérateur|Gas|Acelerador|Газ|油门|アクセル
+retromarcia|reverse|marcha atrás|marche arrière|Rückwärtsgang|marcha à ré|задний ход|倒车|バック
+Conferma nei menu|Confirm in menus|Confirmar en menús|Valider dans les menus|Bestätigen in Menüs|Confirmar nos menus|Подтверждение в меню|菜单确认|メニューで決定
+Cambia telecamera|Change camera|Cambiar cámara|Changer de caméra|Kamera wechseln|Mudar câmera|Сменить камеру|切换视角|カメラ切替
+Premi un tasto|Press a key|Pulsa una tecla|Appuie sur une touche|Taste drücken|Pressione uma tecla|Нажмите клавишу|按下按键|キーを押す
+Premi sul joypad|Press on the gamepad|Pulsa en el mando|Appuie sur la manette|Am Gamepad drücken|Pressione no controle|Нажмите на геймпаде|在手柄上按键|ゲームパッドで押す
+Spazio|Space|Espacio|Espace|Leertaste|Espaço|Пробел|空格|スペース
+Invio|Enter|Intro|Entrée|Enter|Enter|Enter|回车|Enter
+Num Invio|Num Enter|Num Intro|Num Entrée|Num Enter|Num Enter|Num Enter|小键盘回车|テンキーEnter
+Profilo predefinito (non modificabile): cambiando un comando viene creato il profilo personalizzato.|Default profile (read-only): changing a control creates the custom profile.|Perfil predeterminado (no editable): al cambiar un control se crea el perfil personalizado.|Profil par défaut (non modifiable) : modifier une commande crée le profil personnalisé.|Standardprofil (nicht änderbar): Wenn du eine Aktion änderst, wird das benutzerdefinierte Profil erstellt.|Perfil padrão (não editável): ao mudar um comando é criado o perfil personalizado.|Профиль по умолчанию (не изменяется): при изменении действия создаётся свой профиль.|默认配置（不可修改）：更改任意操作将创建自定义配置。|デフォルト（変更不可）：操作を変更するとカスタムプロファイルが作成されます。
+Profilo personalizzato: le modifiche vengono salvate automaticamente.|Custom profile: changes are saved automatically.|Perfil personalizado: los cambios se guardan automáticamente.|Profil personnalisé : les modifications sont enregistrées automatiquement.|Benutzerdefiniertes Profil: Änderungen werden automatisch gespeichert.|Perfil personalizado: as alterações são salvas automaticamente.|Свой профиль: изменения сохраняются автоматически.|自定义配置：更改会自动保存。|カスタム：変更は自動保存されます。
+Nessun joypad rilevato: collegalo, clicca sulla pagina del gioco e premi un pulsante del joypad (il browser lo mostra solo dopo una pressione).|No gamepad detected: connect it, click on the game page and press a gamepad button (the browser only shows it after a press).|No se detecta ningún mando: conéctalo, haz clic en la página del juego y pulsa un botón (el navegador solo lo muestra tras una pulsación).|Aucune manette détectée : branche-la, clique sur la page du jeu et appuie sur un bouton (le navigateur ne l'affiche qu'après un appui).|Kein Gamepad erkannt: Schließe es an, klicke auf die Spielseite und drücke eine Taste (der Browser zeigt es erst nach einem Tastendruck).|Nenhum controle detectado: conecte-o, clique na página do jogo e pressione um botão (o navegador só o mostra após um toque).|Геймпад не найден: подключите его, щёлкните по странице игры и нажмите кнопку (браузер показывает его только после нажатия).|未检测到手柄：请连接手柄，点击游戏页面并按下任意按键（浏览器只在按键后才会识别）。|ゲームパッドが見つかりません。接続してゲーム画面をクリックし、ボタンを押してください（押すまで表示されません）。
+Joypad collegato|Gamepad connected|Mando conectado|Manette connectée|Gamepad verbunden|Controle conectado|Геймпад подключён|手柄已连接|ゲームパッド接続済み
+generico|generic|genérico|générique|generisch|genérico|обычный|通用|汎用
+Record tappa|Stage record|Récord del tramo|Record de la spéciale|Etappenrekord|Recorde da etapa|Рекорд этапа|赛段纪录|ステージ記録
+Record pista|Track record|Récord de la pista|Record de la piste|Streckenrekord|Recorde da pista|Рекорд трассы|赛道纪录|コース記録
+Intermedio|Split|Intermedio|Intermédiaire|Zwischenzeit|Parcial|Отсечка|分段|スプリット
+Arrivo|Finish|Meta|Arrivée|Ziel|Chegada|Финиш|终点|フィニッシュ
+Primo passaggio|First pass|Primer paso|Premier passage|Erste Durchfahrt|Primeira passagem|Первый проход|首次通过|初通過
+Primo tempo sulla tappa|First time on this stage|Primer tiempo en el tramo|Premier temps sur la spéciale|Erste Zeit auf der Etappe|Primeiro tempo na etapa|Первое время на этапе|该赛段首个成绩|このステージ初タイム
+Primo tempo sulla pista|First time on this track|Primer tiempo en la pista|Premier temps sur la piste|Erste Zeit auf der Strecke|Primeiro tempo na pista|Первое время на трассе|该赛道首个成绩|このコース初タイム
+Nuovo miglior tempo|New best time|Nuevo mejor tiempo|Nouveau meilleur temps|Neue Bestzeit|Novo melhor tempo|Новое лучшее время|新的最佳成绩|ベストタイム更新
+FUORI PISTA|OFF TRACK|FUERA DE PISTA|HORS PISTE|NEBEN DER STRECKE|FORA DA PISTA|ВНЕ ТРАССЫ|冲出赛道|コースアウト
+VIA|GO|YA|PARTEZ|LOS|JÁ|МАРШ|出发|GO
+VIA!|GO!|¡YA!|PARTEZ !|LOS!|JÁ!|МАРШ!|出发！|GO!
+Asfalto|Asphalt|Asfalto|Asphalte|Asphalt|Asfalto|Асфальт|柏油|アスファルト
+Sterrato|Dirt|Tierra|Terre|Schotter|Terra|Грунт|土路|ダート
+Ghiaia|Gravel|Grava|Gravier|Kies|Cascalho|Гравий|碎石|グラベル
+Sabbia|Sand|Arena|Sable|Sand|Areia|Песок|沙地|サンド
+Fango|Mud|Barro|Boue|Schlamm|Lama|Грязь|泥地|マッド
+Neve|Snow|Nieve|Neige|Schnee|Neve|Снег|雪地|スノー
+Asfalto bagnato|Wet asphalt|Asfalto mojado|Asphalte mouillé|Nasser Asphalt|Asfalto molhado|Мокрый асфальт|湿滑柏油|ウェットアスファルト
+Sterrato duro|Hard dirt|Tierra dura|Terre dure|Harter Schotter|Terra dura|Твёрдый грунт|硬土路|ハードダート
+Ghiaia fine|Fine gravel|Grava fina|Gravier fin|Feiner Kies|Cascalho fino|Мелкий гравий|细碎石|細かいグラベル
+Misto|Mixed|Mixto|Mixte|Gemischt|Misto|Смешанное|混合路面|ミックス
+Asfalto di montagna|Mountain asphalt|Asfalto de montaña|Asphalte de montagne|Bergasphalt|Asfalto de montanha|Горный асфальт|山地柏油|山岳アスファルト
+Asfalto cittadino|City asphalt|Asfalto urbano|Asphalte urbain|Stadtasphalt|Asfalto urbano|Городской асфальт|城市柏油|市街地アスファルト
+Mezzogiorno|Midday|Mediodía|Midi|Mittag|Meio-dia|Полдень|正午|真昼
+Mattino|Morning|Mañana|Matin|Morgen|Manhã|Утро|上午|朝
+Pomeriggio|Afternoon|Tarde|Après-midi|Nachmittag|Tarde|День|下午|午後
+Caldo torrido|Scorching heat|Calor abrasador|Chaleur torride|Glühende Hitze|Calor escaldante|Знойная жара|酷热|猛暑
+Tramonto|Sunset|Atardecer|Coucher de soleil|Sonnenuntergang|Pôr do sol|Закат|日落|夕暮れ
+Cielo velato|Hazy sky|Cielo velado|Ciel voilé|Diesiger Himmel|Céu encoberto|Пасмурно|薄云|薄曇り
+Notte|Night|Noche|Nuit|Nacht|Noite|Ночь|夜晚|夜
+Crepuscolo|Dusk|Crepúsculo|Crépuscule|Dämmerung|Crepúsculo|Сумерки|黄昏|薄暮
+Alba|Dawn|Amanecer|Aube|Morgengrauen|Amanhecer|Рассвет|黎明|夜明け
+Pioggia|Rain|Lluvia|Pluie|Regen|Chuva|Дождь|雨|雨
+Pioggia forte|Heavy rain|Lluvia fuerte|Forte pluie|Starkregen|Chuva forte|Ливень|大雨|大雨
+Nevicata|Snowfall|Nevada|Chute de neige|Schneefall|Nevasca|Снегопад|降雪|降雪
+Colline di campagna|Countryside hills|Colinas campestres|Collines de campagne|Hügelland|Colinas do campo|Сельские холмы|乡村丘陵|田園の丘
+Sentiero nel bosco|Forest trail|Sendero del bosque|Sentier forestier|Waldweg|Trilha na floresta|Лесная тропа|林间小道|森の小道
+Cave di pietra|Stone quarries|Canteras de piedra|Carrières de pierre|Steinbrüche|Pedreiras|Каменные карьеры|采石场|石切り場
+Dune rosse|Red dunes|Dunas rojas|Dunes rouges|Rote Dünen|Dunas vermelhas|Красные дюны|红色沙丘|赤い砂丘
+Palude al tramonto|Sunset swamp|Pantano al atardecer|Marais au couchant|Sumpf im Abendrot|Pântano ao pôr do sol|Болото на закате|日落沼泽|夕暮れの湿地
+Passo innevato|Snowy pass|Puerto nevado|Col enneigé|Verschneiter Pass|Passo nevado|Снежный перевал|雪山垭口|雪の峠
+Periferia di notte|Suburbs at night|Afueras de noche|Banlieue de nuit|Vorstadt bei Nacht|Periferia à noite|Окраина ночью|夜色郊区|夜の郊外
+Pineta al crepuscolo|Pine forest at dusk|Pinar al anochecer|Pinède au crépuscule|Kiefernwald in der Dämmerung|Pinhal ao crepúsculo|Сосновый бор в сумерках|黄昏松林|薄暮の松林
+Altopiano all'alba|Plateau at dawn|Meseta al amanecer|Plateau à l'aube|Hochebene im Morgengrauen|Planalto ao amanhecer|Плато на рассвете|黎明高原|夜明けの高原
+Foresta notturna|Night forest|Bosque nocturno|Forêt nocturne|Nachtwald|Floresta noturna|Ночной лес|夜间森林|夜の森
+Penalità totali|Total penalties|Penalizaciones totales|Pénalités totales|Strafen gesamt|Penalidades totais|Всего штрафов|总罚时|合計ペナルティ
+Troppo tempo fuori pista|Too long off track|Demasiado tiempo fuera de pista|Trop longtemps hors piste|Zu lange neben der Strecke|Tempo demais fora da pista|Слишком долго вне трассы|离开赛道过久|コース外が長すぎる
+Motore esploso|Engine blown|Motor reventado|Moteur explosé|Motorschaden|Motor explodiu|Двигатель взорвался|引擎爆炸|エンジンブロー
+auto rimessa in pista|car put back on track|coche devuelto a la pista|voiture remise en piste|Auto zurück auf der Strecke|carro recolocado na pista|машина возвращена на трассу|赛车已放回赛道|車をコースに復帰
+Auto rimessa in strada|Car put back on the road|Coche devuelto a la carretera|Voiture remise sur la route|Auto zurück auf der Straße|Carro recolocado na estrada|Машина возвращена на дорогу|赛车已放回路面|車を道に復帰
+Ribaltato|Rolled over|Volcado|Retourné|Überschlagen|Capotou|Переворот|翻车|横転
+In acqua|In the water|En el agua|Dans l'eau|Im Wasser|Na água|В воде|落水|水没
+Arriva il pubblico a rimettere l'auto sulle ruote|The crowd is coming to put the car back on its wheels|El público viene a poner el coche sobre sus ruedas|Le public arrive pour remettre la voiture sur ses roues|Die Zuschauer stellen das Auto wieder auf die Räder|O público vem colocar o carro de volta nas rodas|Зрители спешат поставить машину на колёса|观众正赶来把赛车翻正|観客が車を起こしに来る
+Il motore si sta surriscaldando|The engine is overheating|El motor se está sobrecalentando|Le moteur surchauffe|Der Motor überhitzt|O motor está superaquecendo|Двигатель перегревается|引擎过热|エンジンがオーバーヒート中
+torna in strada|get back on the road|vuelve a la carretera|reviens sur la route|zurück auf die Straße|volte para a estrada|вернитесь на дорогу|回到路面|道に戻れ
+Schermo intero non supportato|Fullscreen not supported|Pantalla completa no compatible|Plein écran non pris en charge|Vollbild nicht unterstützt|Tela cheia não suportada|Полный экран не поддерживается|不支持全屏|フルスクリーン非対応
+usa F11|use F11|usa F11|utilise F11|nutze F11|use F11|используйте F11|请使用 F11|F11を使用
+Premi un tasto o clicca per lo schermo intero (oppure F11)|Press a key or click for fullscreen (or F11)|Pulsa una tecla o haz clic para pantalla completa (o F11)|Appuie sur une touche ou clique pour le plein écran (ou F11)|Taste drücken oder klicken für Vollbild (oder F11)|Pressione uma tecla ou clique para tela cheia (ou F11)|Нажмите клавишу или щёлкните для полного экрана (или F11)|按任意键或点击进入全屏（或按 F11）|キーを押すかクリックでフルスクリーン（またはF11）
+Tocca lo schermo per giocare a schermo intero|Tap the screen to play fullscreen|Toca la pantalla para jugar a pantalla completa|Touche l'écran pour jouer en plein écran|Tippe auf den Bildschirm für Vollbild|Toque na tela para jogar em tela cheia|Коснитесь экрана, чтобы играть на весь экран|轻触屏幕以全屏游戏|画面をタップしてフルスクリーンでプレイ
+Clicca o premi un tasto per giocare a schermo intero|Click or press a key to play fullscreen|Haz clic o pulsa una tecla para jugar a pantalla completa|Clique ou appuie sur une touche pour jouer en plein écran|Klicke oder drücke eine Taste für Vollbild|Clique ou pressione uma tecla para jogar em tela cheia|Щёлкните или нажмите клавишу, чтобы играть на весь экран|点击或按任意键以全屏游戏|クリックかキーでフルスクリーンでプレイ
+Record azzerato|Records reset|Récords borrados|Records réinitialisés|Rekorde gelöscht|Recordes apagados|Рекорды сброшены|纪录已重置|記録をリセットしました
+Nessun record da azzerare|No records to reset|No hay récords que borrar|Aucun record à réinitialiser|Keine Rekorde zum Löschen|Nenhum recorde para apagar|Нет рекордов для сброса|没有可重置的纪录|リセットする記録なし
+Ruota il telefono in orizzontale per giocare|Turn your phone sideways to play|Gira el teléfono en horizontal para jugar|Tourne ton téléphone à l'horizontale pour jouer|Dreh dein Handy quer, um zu spielen|Gire o telefone na horizontal para jogar|Поверните телефон горизонтально, чтобы играть|请横屏游玩|横向きにしてプレイ
+FRENO|BRAKE|FRENO|FREIN|BREMSE|FREIO|ТОРМОЗ|刹车|ブレーキ
+GAS|GAS|GAS|GAZ|GAS|ACEL.|ГАЗ|油门|アクセル
+● REPLAY · Invio / Esc / A / B per uscire|● REPLAY · Enter / Esc / A / B to exit|● REPETICIÓN · Intro / Esc / A / B para salir|● REPLAY · Entrée / Échap / A / B pour quitter|● WIEDERHOLUNG · Enter / Esc / A / B zum Beenden|● REPLAY · Enter / Esc / A / B para sair|● ПОВТОР · Enter / Esc / A / B — выход|● 回放 · Enter / Esc / A / B 退出|● リプレイ · Enter / Esc / A / B で終了
+● REPLAY · tocca per uscire|● REPLAY · tap to exit|● REPETICIÓN · toca para salir|● REPLAY · touche pour quitter|● WIEDERHOLUNG · tippen zum Beenden|● REPLAY · toque para sair|● ПОВТОР · коснитесь для выхода|● 回放 · 轻触退出|● リプレイ · タップで終了
+TIME ATTACK|TIME ATTACK|CONTRARRELOJ|CONTRE-LA-MONTRE|ZEITFAHREN|CONTRARRELÓGIO|НА ВРЕМЯ|计时赛|タイムアタック
+PRONTI|READY|LISTOS|PRÊTS|BEREIT|PRONTOS|ГОТОВЫ|准备|レディ
+PARTENZA|START|SALIDA|DÉPART|START|LARGADA|СТАРТ|起点|スタート
+BUONA PROVA|GOOD LUCK|BUENA SUERTE|BONNE CHANCE|VIEL GLÜCK|BOA SORTE|УДАЧИ|祝你好运|グッドラック
+IN PROVA|ON STAGE|EN TRAMO|EN COURSE|AUF DER ETAPPE|EM PROVA|НА ЭТАПЕ|比赛中|走行中
+ARRIVATO|FINISHED|EN META|ARRIVÉ|IM ZIEL|CHEGOU|ФИНИШ|已完赛|完走
+PROVA SPECIALE|SPECIAL STAGE|TRAMO CRONOMETRADO|SPÉCIALE|WERTUNGSPRÜFUNG|PROVA ESPECIAL|СПЕЦУЧАСТОК|特殊赛段|スペシャルステージ
+POSIZIONE|POSITION|POSICIÓN|POSITION|PLATZ|POSIÇÃO|МЕСТО|名次|順位
+TEMPO FINALE|FINAL TIME|TIEMPO FINAL|TEMPS FINAL|ENDZEIT|TEMPO FINAL|ИТОГОВОЕ ВРЕМЯ|最终成绩|最終タイム
+TEMPO IN DIRETTA|LIVE TIME|TIEMPO EN DIRECTO|TEMPS EN DIRECT|LIVE-ZEIT|TEMPO AO VIVO|ТЕКУЩЕЕ ВРЕМЯ|实时成绩|ライブタイム
+ARRIVO|FINISH|META|ARRIVÉE|ZIEL|CHEGADA|ФИНИШ|终点|フィニッシュ
+INTERMEDIO|SPLIT|INTERMEDIO|INTERMÉDIAIRE|ZWISCHENZEIT|PARCIAL|ОТСЕЧКА|分段|スプリット
+GRANDE!|GREAT!|¡GRANDE!|GÉNIAL !|SUPER!|GRANDE!|МОЛОДЕЦ!|太棒了！|すごい！
+CAMPIONE!|CHAMPION!|¡CAMPEÓN!|CHAMPION !|CHAMPION!|CAMPEÃO!|ЧЕМПИОН!|冠军！|チャンピオン！
+BRAVO!|BRAVO!|¡BRAVO!|BRAVO !|BRAVO!|BRAVO!|БРАВО!|好样的！|ブラボー！
+`;
+// frasi con un numero dentro ({0})
+const I18N_PAT_SRC=`
+Stage {0} completato!|Stage {0} complete!|¡Tramo {0} completado!|Spéciale {0} terminée !|Etappe {0} geschafft!|Etapa {0} concluída!|Этап {0} пройден!|第{0}赛段完成！|ステージ{0}完走！
+`;
+const LANG_IDX={};LANGS.forEach((l,i)=>LANG_IDX[l.id]=i);
+const i18nNorm=s=>s.replace(/\s+/g,' ').trim();
+const I18N={},I18N_PAT={};
+for(const l of LANGS){I18N[l.id]=Object.create(null);I18N_PAT[l.id]=[];}
+for(const row of I18N_SRC.split('\n')){
+  const p=row.split('|');if(p.length<LANGS.length) continue;
+  const k=i18nNorm(p[0]);LANGS.forEach((l,i)=>{if(i) I18N[l.id][k]=p[i];});
+}
+for(const row of I18N_PAT_SRC.split('\n')){
+  const p=row.split('|');if(p.length<LANGS.length) continue;
+  const re=new RegExp(p[0].replace(/[.*+?^$()[\]\\|]/g,'\\$&').replace('{0}','([^\\s]+)'));
+  LANGS.forEach((l,i)=>{if(i) I18N_PAT[l.id].push([re,p[i].replace('{0}','$1')]);});
+}
+const I18N_MAXW=8;   // parole al massimo in un gruppo cercato nel dizionario
+let LANG=(()=>{
+  try{const s=localStorage.getItem('rallyDriftLang');if(s&&LANG_IDX[s]!==undefined) return s;}catch(e){}
+  const n=((navigator.languages&&navigator.languages[0])||navigator.language||'it').slice(0,2).toLowerCase();
+  return LANG_IDX[n]!==undefined?n:'en';
+})();
+let i18nCache=new Map();
+// traduzione di un testo (stringa intera, etichetta: valore, oppure gruppi di parole noti)
+function translate(s){
+  if(LANG==='it'||!s||!/\p{L}/u.test(s)) return s;
+  const hit=i18nCache.get(s);if(hit!==undefined) return hit;
+  const D=I18N[LANG],n=i18nNorm(s),lead=s.match(/^\s*/)[0],trail=s.match(/\s*$/)[0];
+  let out=null;
+  if(D[n]) out=D[n];
+  else{
+    const m=n.match(/^([^\p{L}\d]*)(.*?)([^\p{L}\d]*)$/u);
+    if(m&&m[2]&&D[m[2]]) out=m[1]+D[m[2]]+m[3];
+  }
+  if(out===null){
+    let t=n,pat=false;
+    for(const [re,rep] of I18N_PAT[LANG]) if(re.test(t)){t=t.replace(re,rep);pat=true;}
+    // gruppi di parole: si cerca il gruppo più lungo presente nel dizionario, da sinistra a destra
+    out=t.replace(/[\p{L}][\p{L}'’]*(?: [\p{L}][\p{L}'’]*)*/gu,run=>{
+      if(D[run]) return D[run];
+      const w=run.split(' ');let r=[],i=0;
+      while(i<w.length){
+        let j=Math.min(w.length,i+I18N_MAXW),f=null;
+        for(;j>i;j--){const g=w.slice(i,j).join(' ');if(D[g]){f=D[g];break;}}
+        if(f){r.push(f);i=j;}else{r.push(w[i]);i++;}
+      }
+      return r.join(' ');
+    });
+    if(!pat&&out===n) out=null;
+  }
+  const res=out===null?s:lead+out+trail;
+  if(i18nCache.size>4000) i18nCache.clear();
+  i18nCache.set(s,res);return res;
+}
+const T=translate;
+// ---- traduzione automatica del DOM ----
+const I18N_ATTRS=['placeholder','title','aria-label'];
+const i18nOrig=new WeakMap(),i18nShown=new WeakMap(),i18nAttrOrig=new WeakMap();
+const i18nSkip=el=>!el||el.closest('script,style,textarea,[data-noi18n]');
+function i18nText(node){
+  if(i18nSkip(node.parentElement)) return;
+  const v=node.nodeValue;
+  if(i18nShown.get(node)!==v) i18nOrig.set(node,v);      // testo nuovo scritto dal gioco: è la sorgente italiana
+  const out=translate(i18nOrig.get(node));
+  if(out!==v) node.nodeValue=out;
+  i18nShown.set(node,out);
+}
+function i18nAttrs(el){
+  if(i18nSkip(el)) return;
+  let o=i18nAttrOrig.get(el);if(!o){o={};i18nAttrOrig.set(el,o);}
+  for(const a of I18N_ATTRS){
+    if(!el.hasAttribute(a)) continue;
+    const v=el.getAttribute(a);
+    if(!o[a]||o[a].shown!==v) o[a]={src:v};
+    const out=translate(o[a].src);o[a].shown=out;
+    if(out!==v) el.setAttribute(a,out);
+  }
+}
+function i18nWalk(root){
+  if(root.nodeType===3){i18nText(root);return;}
+  if(root.nodeType!==1) return;
+  i18nAttrs(root);
+  const tw=document.createTreeWalker(root,NodeFilter.SHOW_TEXT|NodeFilter.SHOW_ELEMENT);
+  let n;while((n=tw.nextNode())){if(n.nodeType===3) i18nText(n);else i18nAttrs(n);}
+}
+let i18nObs=null;
+function installI18n(){
+  document.documentElement.lang=LANG;
+  i18nWalk(document.body);
+  i18nObs=new MutationObserver(list=>{
+    for(const m of list){
+      if(m.type==='characterData') i18nText(m.target);
+      else if(m.type==='attributes') i18nAttrs(m.target);
+      else for(const n of m.addedNodes) i18nWalk(n);
+    }
+  });
+  i18nObs.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:I18N_ATTRS});
+}
+function setLang(id){
+  if(LANG_IDX[id]===undefined||id===LANG) return;
+  LANG=id;i18nCache=new Map();
+  try{localStorage.setItem('rallyDriftLang',id);}catch(e){}
+  document.documentElement.lang=id;
+  i18nWalk(document.body);
+}
+function renderLangList(){
+  const el=document.getElementById('titleLang');
+  el.innerHTML=LANGS.map(l=>'<button data-act="setlang" data-l="'+l.id+'" data-noi18n="1">'+(l.id===LANG?'✓ ':'')+l.name+'</button>').join('')+
+    '<button data-act="back">← Indietro</button>';
+}
 const W=760,H=380;
 const timeEl=document.getElementById('time'),totalEl=document.getElementById('totalTime');
 const bestEl=document.getElementById('best'),stageNumEl=document.getElementById('stageNum');
@@ -720,15 +1068,21 @@ function buildProps(wps,stage,theme,trees,nearStruct,railPoints){
   // griglia per evitare sovrapposizioni con alberi e altri elementi
   const G=24,grid=new Map(),key=(x,y)=>Math.floor(x/G)+','+Math.floor(y/G);
   const occ=(x,y,r)=>{grid.set(key(x,y),(grid.get(key(x,y))||[]).concat([[x,y,r]]));};
-  const free=(x,y,r)=>{
+  // (ignT: gli alberi non contano, l'edificio ha la precedenza e quelli sul suo terreno si tolgono)
+  const free=(x,y,r,ignT)=>{
     const gx=Math.floor(x/G),gy=Math.floor(y/G);
     for(let i=-2;i<=2;i++) for(let j=-2;j<=2;j++){
       const c=grid.get((gx+i)+','+(gy+j));if(!c) continue;
-      for(const o of c) if(Math.hypot(o[0]-x,o[1]-y)<o[2]+r) return false;
+      for(const o of c) if(!(ignT&&o[3])&&Math.hypot(o[0]-x,o[1]-y)<o[2]+r) return false;
     }
     return true;
   };
-  for(const t of trees) occ(t.x,t.y,9);
+  for(const t of trees) grid.set(key(t.x,t.y),(grid.get(key(t.x,t.y))||[]).concat([[t.x,t.y,9,1]]));
+  const clearTrees=(x,y,r)=>{
+    for(let i=trees.length-1;i>=0;i--) if(Math.hypot(trees[i].x-x,trees[i].y-y)<r) trees.splice(i,1);
+    const gx=Math.floor(x/G),gy=Math.floor(y/G);
+    for(let a=-2;a<=2;a++) for(let b=-2;b<=2;b++){const k=(gx+a)+','+(gy+b),c=grid.get(k);if(c) grid.set(k,c.filter(o=>!(o[3]&&Math.hypot(o[0]-x,o[1]-y)<r)));}
+  };
   // lontano da ogni tratto di strada (non solo quello di riferimento)
   const offRoad=(x,y,m)=>{
     for(let k=0;k<N;k+=2){const w=wps[k],dx=w.x-x,dy=w.y-y,l=w.half+m;if(dx*dx+dy*dy<l*l) return false;}
@@ -736,10 +1090,12 @@ function buildProps(wps,stage,theme,trees,nearStruct,railPoints){
   };
   const at=(i,side,lat,along)=>{const w=wps[i],n=w.heading+Math.PI/2,o=(w.half+lat)*side,a=along||0;
     return [w.x+Math.cos(n)*o+Math.cos(w.heading)*a,w.y+Math.sin(n)*o+Math.sin(w.heading)*a];};
+  const BUILDING={farm:1,barn:1,chalet:1,shack:1,house:1};
   const add=(p,margin)=>{
     if(!offRoad(p.x,p.y,margin===undefined?4:margin)) return false;
-    const fr=Math.max(3,p.fp||p.r||3);
-    if(!free(p.x,p.y,fr)) return false;
+    const fr=Math.max(3,p.fp||p.r||3),bld=!!BUILDING[p.type];
+    if(!free(p.x,p.y,fr,bld)) return false;
+    if(bld) clearTrees(p.x,p.y,fr+8);   // (il cortile attorno resta libero)
     occ(p.x,p.y,fr);props.push(p);return true;
   };
   const skip=i=>wps[i].noTree||wps[i].struct||nearStruct(i,i,6);
@@ -865,9 +1221,21 @@ function buildProps(wps,stage,theme,trees,nearStruct,railPoints){
       add({type,x,y,rot:rng()*6.28,s,r,fp:Math.max(4,7*s)},8);
     }
   }
+  // --- speroni di roccia sui versanti (montagna e neve): gruppi di massi grandi e spigolosi ---
+  if(theme==='mountain'||theme==='snow'){
+    for(let i=14;i<N-14;i+=5){
+      if(skip(i)) continue;
+      for(const side of [-1,1]){
+        if(rng()>0.3||voidSide(side)) continue;
+        const lat=80+rng()*200,[x,y]=at(i,side,lat,(rng()-0.5)*30);
+        const s=1.3+rng()*1.9;
+        add({type:'crag',x,y,rot:rng()*6.28,s,r:6*s,fp:5*s},6*s);
+      }
+    }
+  }
   // --- edifici lontani dalla strada (casolari, baite, capanni) ---
   const bType={city:'farm',mountain:'barn',snow:'chalet',desert:'shack'}[theme]||'house';
-  const bProb={city:0.12,mountain:0.025,snow:0.025,desert:0.015}[theme]||0.02;
+  const bProb={city:0.05,mountain:0.025,snow:0.025,desert:0.015}[theme]||0.02;
   for(let i=20;i<N-20;i+=4){
     if(skip(i)) continue;
     for(const side of [-1,1]){
@@ -903,17 +1271,17 @@ function buildProps(wps,stage,theme,trees,nearStruct,railPoints){
 // dal ciglio, scala delle macchie di bosco, quota di terreno a bosco, probabilità in radura/nel bosco,
 // taglia (min-max) e limite del bosco (metri sopra la strada, oltre i quali gli alberi si diradano)
 const FLORA={
-  1:{mix:[['oak',3],['poplar',2],['cypress',1.5],['umbrella',0.8],['birch',0.7],['bush',2]],cand:4,reach:220,patch:260,forest:0.22,base:0.22,dense:0.8,size:[0.8,1.25]},
+  1:{mix:[['oak',3],['poplar',2],['cypress',1.5],['umbrella',0.8],['birch',0.7],['bush',2]],cand:7,reach:260,patch:260,forest:0.34,base:0.32,dense:0.88,size:[0.8,1.25]},
   2:{mix:[['oak',2.5],['birch',1.5],['fir',2.5],['spruce',1.5],['bush',1.6]],cand:8,reach:330,patch:220,forest:0.55,base:0.3,dense:0.95,size:[0.75,1.35],treeline:30},
-  3:{mix:[['oak',1.5],['birch',2],['pine',2],['dead',1],['bush',3.5]],cand:4,reach:240,patch:200,forest:0.25,base:0.2,dense:0.75,size:[0.6,1.1],treeline:22},
-  4:{mix:[['palm',3],['acacia',3.5],['dead',1.2],['drybush',2.5]],cand:3,reach:260,patch:300,forest:0.12,base:0.08,dense:0.7,size:[0.7,1.2]},
-  5:{mix:[['willow',3],['poplar',2],['dead',1.5],['birch',1],['bush',2.5]],cand:5,reach:260,patch:200,forest:0.35,base:0.22,dense:0.85,size:[0.7,1.2]},
+  3:{mix:[['oak',1.5],['birch',2],['pine',2],['dead',1],['bush',3.5]],cand:6,reach:260,patch:200,forest:0.32,base:0.28,dense:0.82,size:[0.6,1.1],treeline:22},
+  4:{mix:[['palm',3],['acacia',3.5],['dead',1.2],['drybush',2.5]],cand:5,reach:260,patch:300,forest:0.18,base:0.13,dense:0.75,size:[0.7,1.2]},
+  5:{mix:[['willow',3],['poplar',2],['dead',1.5],['birch',1],['bush',2.5]],cand:7,reach:280,patch:200,forest:0.42,base:0.3,dense:0.9,size:[0.7,1.2]},
   6:{mix:[['fir',4.5],['spruce',3.5],['larch',1],['dead',0.3],['bush',0.7]],cand:9,reach:360,patch:200,forest:0.6,base:0.25,dense:0.97,size:[0.6,1.4],treeline:26,snow:true},
-  7:{mix:[['poplar',3],['oak',2.5],['birch',1.5],['cypress',1],['bush',2]],cand:3,reach:200,patch:240,forest:0.15,base:0.2,dense:0.75,size:[0.8,1.2]},
+  7:{mix:[['poplar',3],['oak',2.5],['birch',1.5],['cypress',1],['bush',2]],cand:6,reach:240,patch:240,forest:0.28,base:0.3,dense:0.85,size:[0.8,1.2]},
   8:{mix:[['pine',4.5],['umbrella',1.5],['fir',1.5],['bush',2.5]],cand:8,reach:340,patch:220,forest:0.62,base:0.3,dense:0.95,size:[0.8,1.4],treeline:34},
-  9:{mix:[['larch',3],['birch',2],['pine',1.5],['spruce',1.5],['bush',2]],cand:6,reach:320,patch:240,forest:0.38,base:0.2,dense:0.9,size:[0.65,1.25],treeline:24},
+  9:{mix:[['larch',3],['birch',2],['pine',1.5],['spruce',1.5],['bush',2]],cand:7,reach:330,patch:240,forest:0.44,base:0.26,dense:0.92,size:[0.65,1.25],treeline:24},
   10:{mix:[['spruce',3],['fir',3],['oak',1.5],['birch',1],['bush',1.5]],cand:9,reach:360,patch:200,forest:0.7,base:0.35,dense:0.97,size:[0.8,1.5],treeline:36},
-  11:{mix:[['umbrella',3.5],['cypress',2],['olive',2],['palm',1],['bush',1.5]],cand:5,reach:260,patch:220,forest:0.32,base:0.2,dense:0.85,size:[0.75,1.2]},
+  11:{mix:[['umbrella',3.5],['cypress',2],['olive',2],['palm',1],['bush',1.5]],cand:7,reach:280,patch:220,forest:0.4,base:0.28,dense:0.9,size:[0.75,1.2]},
   12:{mix:[['oak',1]],cand:0,reach:0,patch:200,forest:0,base:0,dense:0,size:[1,1]}
 };
 // un albero sta ad almeno ~2 m dal ciglio di qualunque tratto di strada (larghezza reale del tratto)
@@ -1897,9 +2265,33 @@ function drawGrass(g,S,rr,base,opt){
 }
 // roccia: strati orizzontali (sulle pareti si vedono come stratificazioni), crepe, macchie di licheni
 function drawRock(g,S,rr,col,opt){
-  g.fillStyle=rgbS(col,1);g.fillRect(0,0,S,S);
-  softBlots(g,S,rr,col,60,10,50,0.7,1.25,0.3,0.55);
-  for(let y=0;y<S;y+=3+rr()*9){g.fillStyle=rgbS(col,rr()<0.5?0.82:1.12,0.18+rr()*0.18);g.fillRect(0,y,S,1+rr()*3);}
+  // 1) blocchi di frattura (celle di Voronoi che si ripetono senza giunte): ogni blocco ha la sua tinta e una
+  //    faccia inclinata verso la luce; fra un blocco e l'altro una fessura scura con il bordo appena illuminato
+  {
+    // (blocchi allungati in orizzontale, come gli strati della roccia; distanza "schiacciata" in verticale)
+    const P=[];for(let i=0;i<46;i++) P.push([rr()*S,rr()*S,0.8+rr()*0.4,rr()*6.28,0.35+rr()*0.5,0.45+rr()*0.5]);
+    const img=g.createImageData(S,S),D=img.data;
+    for(let y=0;y<S;y++) for(let x=0;x<S;x++){
+      let d1=1e9,d2=1e9,i1=0;
+      for(let i=0;i<P.length;i++){
+        let dx=Math.abs(x-P[i][0]),dy=Math.abs(y-P[i][1]);if(dx>S/2) dx=S-dx;if(dy>S/2) dy=S-dy;
+        dy*=2.1;
+        const dd=dx*dx+dy*dy;if(dd<d1){d2=d1;d1=dd;i1=i;}else if(dd<d2) d2=dd;
+      }
+      const c=P[i1],e=Math.sqrt(d2)-Math.sqrt(d1);
+      let ox=x-c[0],oy=y-c[1];if(ox>S/2) ox-=S;if(ox<-S/2) ox+=S;if(oy>S/2) oy-=S;if(oy<-S/2) oy+=S;
+      let k=c[2]+(ox*Math.cos(c[3])+oy*Math.sin(c[3]))/S*c[4];
+      const ce=c[5];                                      // fessure più o meno marcate da blocco a blocco
+      k*=e<1.4?1-0.5*ce:e<4?1-0.2*ce+0.05*e:e<6?1.05:1;  // fessura, bordo smussato, spigolo chiaro
+      k*=0.9+rr()*0.2;
+      const i=(y*S+x)*4;D[i]=Math.min(255,col[0]*k);D[i+1]=Math.min(255,col[1]*k);D[i+2]=Math.min(255,col[2]*k);D[i+3]=255;
+    }
+    g.putImageData(img,0,0);
+  }
+  // 2) stratificazioni ondulate (strati di sedimento) e macchie di colore
+  for(let y=0;y<S;y+=5+rr()*10){const a=rr()*6.28,amp=1+rr()*3;g.fillStyle=rgbS(col,rr()<0.5?0.78:1.14,0.16+rr()*0.14);
+    for(let x=0;x<S;x+=2){const yy=y+Math.sin(x/S*6.283*2+a)*amp;g.fillRect(x,yy,2,1+rr()*2);}}
+  softBlots(g,S,rr,col,40,10,50,0.7,1.25,0.2,0.4);
   for(let i=0;i<3500;i++){const x=rr()*S,y=rr()*S;g.fillStyle=rgbS(col,0.55+rr()*0.9,0.35);g.fillRect(x,y,1+rr()*2,1+rr()*2);}
   g.lineCap='round';
   for(let i=0;i<26;i++){
@@ -1916,9 +2308,15 @@ const TEX={
   bark:canvasTex(128,(g,S,rr)=>{g.fillStyle='#b9a58f';g.fillRect(0,0,S,S);
     for(let i=0;i<70;i++){const x=rr()*S,w=1+rr()*4;g.fillStyle=rgbS([120,100,80],0.6+rr()*0.6,0.5+rr()*0.4);g.fillRect(x,0,w,S);}
     for(let i=0;i<220;i++){const x=rr()*S,y=rr()*S;g.fillStyle='rgba(40,30,20,0.5)';g.fillRect(x,y,2+rr()*3,1+rr()*6);}},[2,2]),
-  leaf:canvasTex(128,(g,S,rr)=>{g.fillStyle='#c9d6b8';g.fillRect(0,0,S,S);
-    for(let i=0;i<900;i++){const x=rr()*S,y=rr()*S,r=2+rr()*5,k=0.62+rr()*0.62;
-      wrapDraw(S,x,y,r,(px,py)=>{g.fillStyle=rgbS([215,230,195],k,0.8);g.beginPath();g.ellipse(px,py,r,r*0.55,rr()*3,0,6.28);g.fill();});}},[2,2]),
+  // fogliame: fondo d'ombra fra le foglie, poi tante foglie a punta, ognuna con la sua ombra sotto e un
+  // riflesso chiaro, di tono diverso (più fitte e chiare in superficie)
+  leaf:canvasTex(256,(g,S,rr)=>{g.fillStyle='#8d9f7c';g.fillRect(0,0,S,S);
+    const leafAt=(px,py,r,a,k)=>{g.save();g.translate(px,py);g.rotate(a);
+      g.fillStyle='rgba(40,50,30,0.35)';g.beginPath();g.ellipse(1.2,1.6,r,r*0.42,0,0,6.28);g.fill();
+      g.fillStyle=rgbS([214,232,190],k,0.8);g.beginPath();g.moveTo(-r,0);g.quadraticCurveTo(0,-r*0.55,r,0);g.quadraticCurveTo(0,r*0.55,-r,0);g.fill();
+      g.strokeStyle='rgba(255,255,240,0.25)';g.lineWidth=0.7;g.beginPath();g.moveTo(-r*0.8,0);g.lineTo(r*0.8,0);g.stroke();g.restore();};
+    for(let i=0;i<2600;i++){const x=rr()*S,y=rr()*S,r=3+rr()*5,k=0.58+rr()*0.7,a=rr()*6.28;
+      wrapDraw(S,x,y,r+2,(px,py)=>leafAt(px,py,r,a,k));}},[3,2]),
   needle:canvasTex(128,(g,S,rr)=>{g.fillStyle='#bccab4';g.fillRect(0,0,S,S);
     // rami a strati: file di aghi inclinati verso il basso
     for(let y=0;y<S;y+=10){for(let i=0;i<60;i++){const x=rr()*S,l=4+rr()*7,k=0.62+rr()*0.6;
@@ -2302,8 +2700,11 @@ function mountainAdd(wx,wy,near){
   const f=Math.max(0,Math.min(1,Math.min(near.dist-mountFrom,mountTo-near.dist)/320));
   if(f<=0) return 0;
   const n1=valueNoise(wx/340+17.3,wy/340-4.1),n2=valueNoise(wx/130+3.7,wy/130+9.2),n3=valueNoise(wx/46-8.2,wy/46+1.9);
-  const ridge=1-Math.abs(2*n1-1);
-  const H=mountAmp*(0.3+0.7*(0.6*ridge*ridge+0.4*n2))*(0.8+0.4*n3);
+  // creste affilate (rumore "a cresta" elevato a potenza) e, sopra, spuntoni e salti di roccia (secondo livello
+  // a cresta, più fitto): profili spigolosi invece di colline tondeggianti
+  const ridge=Math.pow(1-Math.abs(2*n1-1),1.6),ridge2=Math.pow(1-Math.abs(2*n2-1),2.2);
+  const crag=Math.pow(1-Math.abs(2*n3-1),3);
+  const H=mountAmp*(0.28+0.72*(0.55*ridge+0.3*ridge2+0.15*n2))*(0.82+0.3*crag);
   return H*m*m*(3-2*m)*f*f*(3-2*f)*(1-near.bf)*sideK;
 }
 const RAVINE=7.5; // profondità della gola sotto i ponti (unità mondo)
@@ -2836,8 +3237,71 @@ const coniferMat=new THREE.MeshLambertMaterial({color:0xffffff,map:TEX.needle});
 // --- specie: abete, peccio, larice, pino silvestre, pino domestico, cipresso, quercia, pioppo, betulla,
 // salice piangente, ulivo, acacia, palma, albero secco, cespugli; ognuna con forma e colori propri ---
 const treeBarkMat=new THREE.MeshLambertMaterial({color:0xffffff,map:TEX.bark});   // colore della corteccia per istanza
+const coniferDSMat=new THREE.MeshLambertMaterial({color:0xffffff,map:TEX.needle,side:THREE.DoubleSide});   // (sotto i palchi si vede l'interno)
+sharedRes.add(coniferDSMat);
 const leafDSMat=new THREE.MeshLambertMaterial({color:0xffffff,map:TEX.leaf,side:THREE.DoubleSide});
 const blob1Geo=new THREE.IcosahedronGeometry(1,1);
+// Chiome: ciuffi irregolari (sfera deformata da più onde: gobbe e rientranze, sotto un po' piatta) con normali
+// ammorbidite verso l'esterno, così la luce scivola sul fogliame invece di disegnare faccette. Tre varianti.
+function foliageClump(seed,seg){
+  const g=new THREE.SphereGeometry(1,seg,Math.round(seg*0.7)),p=g.attributes.position,v=new THREE.Vector3();
+  const s=[seed*1.7,seed*2.3+1,seed*0.9+2,seed*3.1+3,seed*1.3+4,seed*2.9+5];
+  for(let i=0;i<p.count;i++){
+    v.fromBufferAttribute(p,i);const x=v.x,y=v.y,z=v.z;
+    const n=0.55*Math.sin(x*3.1+s[0])*Math.sin(y*2.7+s[1])*Math.sin(z*3.3+s[2])+0.3*Math.sin(x*6.1+y*4.3+s[3])*Math.sin(z*5.9-y*2.1+s[4])+0.15*Math.sin((x+z)*9.7+s[5]);
+    let r=1+0.32*n;
+    v.multiplyScalar(r);if(v.y<-0.25) v.y=-0.25+(v.y+0.25)*0.7;
+    p.setXYZ(i,v.x,v.y,v.z);
+  }
+  g.computeVertexNormals();
+  const nr=g.attributes.normal;
+  for(let i=0;i<p.count;i++){v.fromBufferAttribute(p,i).normalize();const a=new THREE.Vector3().fromBufferAttribute(nr,i).lerp(v,0.55).normalize();nr.setXYZ(i,a.x,a.y,a.z);}
+  return g;
+}
+const clumpGeos=[foliageClump(1,11),foliageClump(2,11),foliageClump(3,11)],clumpSGeo=foliageClump(4,8);
+// Foglie vere: "ciocche" di foglie disegnate una per una su sfondo trasparente (un ramoscello che si apre a
+// ventaglio, con le foglie a punta attaccate, ognuna con nervatura e ombra), posate a decine attorno al nucleo
+// della chioma, orientate a caso: da vicino si vedono le singole foglie e il cielo fra una ciocca e l'altra.
+const leafCardTex=(()=>{
+  const S=256,c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d'),rr=mulberry32(77);
+  const leaf=(x,y,a,L,k)=>{g.save();g.translate(x,y);g.rotate(a);
+    g.fillStyle='rgba(30,40,20,0.35)';g.beginPath();g.ellipse(L*0.5+1.5,2,L*0.5,L*0.22,0,0,6.28);g.fill();
+    const v=Math.round(150+k*95),gr=g.createLinearGradient(0,-L*0.25,0,L*0.25);
+    gr.addColorStop(0,'rgb('+(v+20)+','+(v+28)+','+(v-10)+')');gr.addColorStop(1,'rgb('+(v-35)+','+(v-22)+','+(v-55)+')');
+    g.fillStyle=gr;g.beginPath();g.moveTo(0,0);g.quadraticCurveTo(L*0.45,-L*0.3,L,0);g.quadraticCurveTo(L*0.45,L*0.3,0,0);g.fill();
+    g.strokeStyle='rgba(250,255,230,0.35)';g.lineWidth=0.8;g.beginPath();g.moveTo(0,0);g.lineTo(L*0.92,0);g.stroke();g.restore();};
+  // ramoscelli che partono dal basso al centro e si aprono; foglie lungo ciascuno
+  for(let b=0;b<9;b++){
+    const a0=-Math.PI/2+(rr()-0.5)*2.2,len=S*(0.32+rr()*0.18);
+    let x=S/2+(rr()-0.5)*20,y=S*0.86,a=a0;
+    g.strokeStyle='rgba(90,70,45,0.9)';g.lineWidth=2;g.beginPath();g.moveTo(x,y);
+    const pts=[];for(let s=0;s<8;s++){a+=(rr()-0.5)*0.25;x+=Math.cos(a)*len/8;y+=Math.sin(a)*len/8;g.lineTo(x,y);pts.push([x,y,a]);}
+    g.stroke();
+    for(const [px,py,pa] of pts) for(const sd of [-1,1]) leaf(px,py,pa+sd*(0.6+rr()*0.5),14+rr()*12,rr());
+    leaf(x,y,a,18+rr()*8,rr());
+  }
+  // altre foglie sparse per riempire la ciocca
+  for(let i=0;i<70;i++){const r=rr()*S*0.36,t=rr()*6.28;leaf(S/2+Math.cos(t)*r,S*0.45+Math.sin(t)*r*0.9,rr()*6.28,12+rr()*12,rr());}
+  const t=new THREE.CanvasTexture(c);t.anisotropy=4;sharedRes.add(t);return t;
+})();
+const leafCardMat=new THREE.MeshLambertMaterial({color:0xffffff,map:leafCardTex,alphaTest:0.42,side:THREE.DoubleSide});
+// (l'ombra delle ciocche segue la forma delle foglie, non quella del quadrato)
+leafCardMat.userData.depth=new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking,map:leafCardTex,alphaTest:0.42});
+const leafCardGeo=new THREE.PlaneGeometry(1,1);
+[leafCardMat,leafCardMat.userData.depth,leafCardGeo].forEach(r=>sharedRes.add(r));
+// palco di rami degli abeti: cono a stella (punte dei rami lunghe e corte alternate, leggermente cadenti)
+function firTierGeo(){
+  const N=14,pos=[],idx=[],uv=[];
+  pos.push(0,1,0);uv.push(0.5,1);
+  for(let k=0;k<=N;k++){const a=k/N*Math.PI*2,long=k%2===0,r=long?1:0.72,y=long?-0.07:0.04;pos.push(Math.cos(a)*r,y,Math.sin(a)*r);uv.push(k/N,0);}
+  pos.push(0,0.12,0);uv.push(0.5,0.5);
+  const c=N+2;
+  for(let k=1;k<=N;k++){idx.push(0,k+1,k);idx.push(c,k,k+1);}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+  g.setIndex(idx);g.computeVertexNormals();return g;
+}
+const firTier=firTierGeo();
+[...clumpGeos,clumpSGeo,firTier].forEach(g=>sharedRes.add(g));
 // chioma ricadente del salice: tronco di cono aperto, appeso alla cima
 const weepGeo=new THREE.CylinderGeometry(0.6,1,1,10,2,true);weepGeo.translate(0,-0.5,0);
 // fronda di palma: nervatura centrale che sale e poi ricade, lamina a V che si assottiglia in punta
@@ -2891,12 +3355,36 @@ function buildTrees(trees,theme){
     cur=chunks.get(ck);if(!cur){cur={};chunks.set(ck,cur);}
     const bark=c=>tint(c,r,0.05);
     // tronco (anche inclinato): restituisce la cima
+    let TT=null;   // cima del tronco (da lì partono i rami verso le chiome)
     const trunk=(h,rad,col,lean,dir)=>{
       lean=lean||0;dir=dir===undefined?ry:dir;
       add('trunk',x,y,z,rad/0.13,h,rad/0.13,dir,bark(col),lean,0);
-      return [x+Math.sin(lean)*Math.sin(dir)*h,y+Math.cos(lean)*h,z+Math.sin(lean)*Math.cos(dir)*h];
+      const top=[x+Math.sin(lean)*Math.sin(dir)*h,y+Math.cos(lean)*h,z+Math.sin(lean)*Math.cos(dir)*h];
+      TT={p:[top[0],top[1]-0.12*h,top[2]],rad,col};
+      return top;
     };
-    const blob=(part,cx,cy,cz,sx,sy,sz,col)=>add(part,cx,cy,cz,sx,sy,sz,r()*6.28,col,(r()-0.5)*0.3,(r()-0.5)*0.3);
+    // ramo (cilindro) da un punto a un altro
+    const branch=(a,b,rad,col)=>{
+      const dx=b[0]-a[0],dy=b[1]-a[1],dz=b[2]-a[2],len=Math.hypot(dx,dy,dz);if(len<0.05) return;
+      add('trunk',a[0],a[1],a[2],rad/0.13,len,rad/0.13,Math.atan2(dx,dz),bark(col),Math.acos(Math.max(-1,Math.min(1,dy/len))),0);
+    };
+    // Chioma: un nucleo di fogliame più scuro (dà volume e chiude i buchi) e tutt'intorno le ciocche di foglie
+    // vere; un ramo la collega al tronco. (I ciuffi piccoli di arbusti e ulivi hanno meno ciocche.)
+    const blob=(part,cx,cy,cz,sx,sy,sz,col,plain)=>{
+      const big=part==='blob1';
+      // (neve sulle chiome e oggetti senza foglie: solo il volume)
+      if(plain||(col.r>0.85&&col.g>0.85&&col.b>0.85)){add(big?'clump'+Math.floor(r()*3):'clumpS',cx,cy,cz,sx,sy,sz,r()*6.28,col,(r()-0.5)*0.3,(r()-0.5)*0.3);return;}
+      add(big?'clump'+Math.floor(r()*3):'clumpS',cx,cy,cz,sx*0.74,sy*0.74,sz*0.74,r()*6.28,col.clone().multiplyScalar(0.9),(r()-0.5)*0.3,(r()-0.5)*0.3);
+      const n=big?Math.round(10+6*Math.min(1.6,(sx+sy+sz)/3/1.2)):5,R=(sx+sy+sz)/3;
+      for(let q=0;q<n;q++){
+        const th=r()*6.283,ph=Math.acos(2*r()-1),rf=0.62+r()*0.42;
+        const dx=Math.sin(ph)*Math.cos(th),dy=Math.cos(ph),dz=Math.sin(ph)*Math.sin(th);
+        const s=R*(0.85+r()*0.5);
+        // (le ciocche in alto prendono più luce)
+        add('leaf',cx+dx*sx*rf,cy+dy*sy*rf,cz+dz*sz*rf,s,s,1,r()*6.283,col.clone().multiplyScalar(1.3+0.25*dy).offsetHSL((r()-0.5)*0.02,0.03,(r()-0.4)*0.08),(r()-0.5)*1.6,(r()-0.5)*1.2);
+      }
+      if(TT&&big) branch(TT.p,[cx+(TT.p[0]-cx)*0.15,cy-sy*0.2,cz+(TT.p[2]-cz)*0.15],TT.rad*0.45,TT.col);
+    };
     const P=TREE_PAL[t.sp]||TREE_PAL.oak,base=tint(pick(P,r),r);
     switch(t.sp){
       case 'fir':case 'spruce':case 'larch':{
@@ -2908,8 +3396,8 @@ function buildTrees(trees,theme){
           const rr=fir?(1.0-0.2*j)*0.85*k:spr?(0.62-0.085*j)*k:(0.6-0.1*j)*k,hh=fir?(1.25-0.12*j)*k:spr?0.95*k:0.8*k;
           const yy=y+(fir?0.35*k+0.5*k*j:spr?0.3*k+0.48*k*j:0.6*k+0.45*k*j);
           const c=col.clone().offsetHSL(0,0,0.015*j);
-          add('cone',tr[0],yy,tr[2],rr,hh,rr,ry+j*0.7,c);
-          if(snow) add('cone',tr[0],yy+hh*0.42,tr[2],rr*0.8,hh*0.5,rr*0.8,ry+j*0.7+0.3,new THREE.Color(SNOWC));
+          add('tier',tr[0],yy,tr[2],rr,hh,rr,ry+j*0.7,c);
+          if(snow) add('tier',tr[0],yy+hh*0.42,tr[2],rr*0.8,hh*0.5,rr*0.8,ry+j*0.7+0.22,new THREE.Color(SNOWC));
         }
         break;}
       case 'pine':{
@@ -2967,7 +3455,7 @@ function buildTrees(trees,theme){
           px+=Math.sin(lean)*Math.sin(dir)*h;py+=Math.cos(lean)*h;pz+=Math.sin(lean)*Math.cos(dir)*h;
         }
         for(let j=0;j<9;j++) add('frond',px,py,pz,1.35*k*(0.85+r()*0.3),1.0*k,1.0*k,j*0.698+r()*0.3,base.clone().offsetHSL(0,0,(r()-0.5)*0.08),0,(r()-0.3)*0.5);
-        blob('blob0',px,py,pz,0.16*k,0.14*k,0.16*k,new THREE.Color(0x6a5030));
+        blob('blob0',px,py,pz,0.16*k,0.14*k,0.16*k,new THREE.Color(0x6a5030),true);
         break;}
       case 'dead':{
         const tr=trunk(1.5*k,0.12*k,0x8a8478,(r()-0.5)*0.15);
@@ -2981,7 +3469,8 @@ function buildTrees(trees,theme){
     }
   }
   const grp=new THREE.Group();
-  const PARTS={trunk:[trunkGeo,treeBarkMat],cone:[coneGeo,coniferMat],blob1:[blob1Geo,leafMat],blob0:[blobGeo,leafMat],weep:[weepGeo,leafDSMat],frond:[frondGeo,leafDSMat]};
+  const PARTS={trunk:[trunkGeo,treeBarkMat],cone:[coneGeo,coniferMat],tier:[firTier,coniferDSMat],clump0:[clumpGeos[0],leafMat],clump1:[clumpGeos[1],leafMat],
+    clump2:[clumpGeos[2],leafMat],clumpS:[clumpSGeo,leafMat],leaf:[leafCardGeo,leafCardMat],blob1:[blob1Geo,leafMat],blob0:[blobGeo,leafMat],weep:[weepGeo,leafDSMat],frond:[frondGeo,leafDSMat]};
   for(const lists of chunks.values()) for(const part in lists){
     const list=lists[part],[geo,mat]=PARTS[part];
     // sfera d'ingombro del blocco (sulla copia della geometria): la usa il frustum culling, ombre comprese
@@ -2993,6 +3482,7 @@ function buildTrees(trees,theme){
     im.instanceMatrix.needsUpdate=true;
     if(im.instanceColor) im.instanceColor.needsUpdate=true;
     im.castShadow=part!=='blob0'||list.length<4000;im.receiveShadow=true;
+    if(mat.userData.depth) im.customDepthMaterial=mat.userData.depth;
     grp.add(im);
   }
   return grp;
@@ -3002,6 +3492,35 @@ const propCylGeo=new THREE.CylinderGeometry(1,1,1,12);propCylGeo.translate(0,0.5
 const propBoxGeo=new THREE.BoxGeometry(1,1,1);propBoxGeo.translate(0,0.5,0);
 const propPrismGeo=new THREE.CylinderGeometry(1,1,1,3);propPrismGeo.rotateX(-Math.PI/2);propPrismGeo.translate(0,0.5,0); // tetto a due falde, colmo lungo z
 const propBlobGeo=new THREE.IcosahedronGeometry(1,1);
+// Rocce spigolose: poliedri (icosaedro, dodecaedro, ottaedro suddiviso) con i vertici spostati a caso (lo stesso
+// spostamento per i vertici coincidenti: niente crepe), allungati, con la base spianata e a volte la cima
+// tagliata; facce piatte, come la pietra spaccata. Sei varianti.
+function rockGeo(seed,kind){
+  // (poliedri suddivisi: più faccette; lo spostamento ha due scale, blocchi grandi e scaglie)
+  const g=kind===0?new THREE.IcosahedronGeometry(1,1):kind===1?new THREE.DodecahedronGeometry(1,1):new THREE.OctahedronGeometry(1,2);
+  const p=g.attributes.position,v=new THREE.Vector3();
+  const hsh=(x,y,z)=>{const s=Math.sin(x*127.1+y*311.7+z*74.7+seed*19.3)*43758.5453;return s-Math.floor(s);};
+  const sx=0.8+hsh(1,2,3)*0.6,sz=0.7+hsh(4,5,6)*0.6,cut=0.45+hsh(7,8,9)*0.5;
+  // piani di frattura: alcune facce grandi tagliate di netto
+  const planes=[0,1,2,3,4,5].map(i=>{const a=hsh(i,9,3)*6.28,b=(hsh(i,4,7)-0.3)*1.3;return [Math.cos(a)*Math.cos(b),Math.sin(b),Math.sin(a)*Math.cos(b),0.5+hsh(i,2,8)*0.3];});
+  for(let i=0;i<p.count;i++){
+    v.fromBufferAttribute(p,i);
+    const k=hsh(Math.round(v.x*100),Math.round(v.y*100),Math.round(v.z*100));
+    const big=Math.sin(v.x*2.3+seed)*Math.sin(v.y*2.9+seed*1.7)*Math.sin(v.z*2.1+seed*0.6);
+    const mid=Math.sin(v.x*5.1+seed*2.1+v.z*3.3)*Math.sin(v.y*4.7-seed);
+    v.multiplyScalar(0.78+0.26*big+0.1*mid+0.26*k);
+    for(const pl of planes){const dd=v.x*pl[0]+v.y*pl[1]+v.z*pl[2];if(dd>pl[3]){const o=dd-pl[3];v.x-=pl[0]*o*0.85;v.y-=pl[1]*o*0.85;v.z-=pl[2]*o*0.85;}}
+    v.x*=sx;v.z*=sz;
+    if(v.y<-0.3) v.y=-0.3-(v.y+0.3)*0.15;          // base spianata (appoggia sul terreno)
+    if(v.y>cut) v.y=cut+(v.y-cut)*0.35;             // cima spaccata
+    p.setXYZ(i,v.x,v.y,v.z);
+  }
+  // (texture più fitta: blocchi e crepe in scala con il masso)
+  const uv=g.attributes.uv;if(uv) for(let i=0;i<uv.count;i++) uv.setXY(i,uv.getX(i)*3,uv.getY(i)*2.2);
+  g.computeVertexNormals();return g;
+}
+const ROCK_GEOS=[0,1,2,3,4,5,6,7].map(i=>rockGeo(i+1,i%3));
+ROCK_GEOS.forEach(g=>sharedRes.add(g));
 const propMat=new THREE.MeshLambertMaterial({color:0xffffff});
 const lampHeadMat=new THREE.MeshLambertMaterial({color:0xfff2c8,emissive:0xffd27a,emissiveIntensity:0});
 // ================= LUCI DI CONTORNO: LAMPIONI, LAMPADE DELLE GALLERIE, TORRI FARO, CARTELLONI =================
@@ -3082,6 +3601,11 @@ function lampFrame(fx,fz){
     if(!l){li.intensity=0;continue;}
     const K=LAMP_KIND[l.kind],t=Math.max(0,Math.min(1,(dCut-l.d)/(dCut*0.4)));
     li.position.set(l.x,l.y-0.25,l.z);li.color.set(K.col);li.distance=K.r;li.intensity=K.i*t*t*(3-2*t);
+  }
+  // lampo dello scoppio del motore: per un attimo l'ultima luce del gruppo illumina tutto attorno all'auto
+  if(typeof EXPL!=='undefined'&&EXPL.t>0){
+    const li=lampLights[LAMP_N-1],f=EXPL.t;
+    li.position.set(EXPL.x,EXPL.y+0.4,EXPL.z);li.color.setRGB(1,0.62+0.25*f,0.3);li.distance=14;li.intensity=7*f*f*(0.8+0.4*Math.random());
   }
 }
 function chevronMat(dir){
@@ -3198,6 +3722,118 @@ function buildGrass(wps,theme){
   return grp;
 }
 const lift=(c,k)=>{const x=new THREE.Color(c).multiplyScalar(k);return new THREE.Color(Math.min(1,x.r),Math.min(1,x.g),Math.min(1,x.b)).getHex();};
+// ---------- edifici di campagna e di montagna: casolare, casa, fienile, baita, capanno ----------
+// In scala con auto e persone (porte da ~2 m, piani da ~3 m). Ogni edificio poggia su un basamento in pietra
+// che scende fino al punto più basso del terreno sotto di lui: sui pendii nessun angolo resta sospeso e il
+// pavimento è in piano. Dettagli: finestre con cornice, traversi, davanzale e persiane; porta con stipiti,
+// gradino e pensilina; spigoli in pietra, marcapiano, gronde, pluviali, comignolo, tetto sporgente con colmo.
+function buildHouse(p,part,ch,sh,Y){
+  const T=p.type,K={farm:0.8,house:0.85,barn:0.78,chalet:0.82,shack:0.8}[T]||0.8;
+  const w=p.w*K,d=p.d*K,hh=(p.h||3)*K*(T==='farm'?0.92:1);
+  const rnd=mulberry32((Math.floor(p.x*13.7)^Math.floor(p.y*7.3))|0);
+  // terreno sotto l'edificio (spigoli e mezzerie, un po' oltre i muri): quota più bassa e più alta
+  const gh=(lx,lz)=>terrainAt(p.x+(lx*ch-lz*sh)/S3,p.y+(lx*sh+lz*ch)/S3)-Y;
+  let b0=0,b1=0;
+  for(const [a,b] of [[1,1],[1,-1],[-1,1],[-1,-1],[0,1],[0,-1],[1,0],[-1,0]]){const v=gh(a*(w/2+0.35),b*(d/2+0.35));b0=Math.min(b0,v);b1=Math.max(b1,v);}
+  const fl=b1+0.22;                                  // pavimento
+  const stone=0x9c968b,stoneL=0xc9c2b4,frameC=0xece6da,glass=0x24303a,dark=0x3a2a1e;
+  const wallC=T==='farm'?[0xecca92,0xf3dfb4,0xe8bea6,0xdcae80][p.col%4]:PROP_COL.wall[T==='farm'?'house':T][p.col%4];
+  const roofC=T==='farm'?[0xc8664a,0xb85a40,0xd07050,0xa85238][p.col%4]:PROP_COL.roof[T==='farm'?'house':T][p.col%4];
+  const shutC=[0x44704a,0x74502e,0x3e5f7a,0x6b3a2e][(p.col+1)%4];
+  const B=(mat,lx,ly,lz,sx,sy,sz,col,rx,rz)=>part(propBoxGeo,mat,lx,ly,lz,rx||0,0,rz||0,sx,sy,sz,col);
+  // elemento piatto appoggiato a una facciata: f = 'f' davanti (+z), 'b' dietro, 'r' destra (+x), 'l' sinistra
+  const face=(f,u,v,ww,wh,col,dep,mat)=>{
+    dep=dep||0.05;const out=0.015+dep/2;
+    if(f==='f'||f==='b') B(mat||propMat,u,v,(f==='f'?1:-1)*(d/2+out),ww,wh,dep,col);
+    else B(mat||propMat,(f==='r'?1:-1)*(w/2+out),v,u,dep,wh,ww,col);
+  };
+  const win=(f,u,v,ww,wh,shut)=>{
+    const t=0.07;
+    face(f,u,v,ww,wh,glass,0.03);
+    face(f,u,v+wh,ww+2*t,t,frameC,0.07);face(f,u-ww/2-t/2,v,t,wh,frameC,0.07);face(f,u+ww/2+t/2,v,t,wh,frameC,0.07);
+    face(f,u,v-0.07,ww+0.22,0.07,stoneL,0.16);                         // davanzale
+    face(f,u,v,0.035,wh,frameC,0.05);face(f,u,v+wh*0.58,ww,0.035,frameC,0.05);   // traversi
+    if(shut) for(const s of [-1,1]) face(f,u+s*(ww/2+t+ww*0.26),v-0.02,ww*0.5,wh+0.04,shut,0.05);
+  };
+  const door=(f,u,dw,dhh,col)=>{
+    face(f,u,fl,dw,dhh,col||dark,0.05);
+    face(f,u,fl+dhh,dw+0.2,0.1,stoneL,0.08);face(f,u-dw/2-0.05,fl,0.1,dhh,stoneL,0.08);face(f,u+dw/2+0.05,fl,0.1,dhh,stoneL,0.08);
+    face(f,u+dw*0.32,fl+dhh*0.48,0.05,0.05,0xc8b070,0.09);            // maniglia
+    face(f,u,fl-0.16,dw+0.5,0.16,stone,0.42,PM.rock);                   // gradino
+    face(f,u,fl+dhh+0.24,dw+0.6,0.05,roofC,0.5);                        // pensilina
+  };
+  // basamento in pietra fino al punto più basso del terreno
+  B(PM.rock,0,b0-0.45,0,w+0.2,fl-b0+0.45,d+0.2,stone);
+  if(T==='shack'){
+    // capanno: assi di legno, tetto a una falda in lamiera, porta, finestrella, un barile accanto
+    B(PM.planks,0,fl,0,w,hh,d,lift(wallC,1.25));
+    B(propMat,0,fl+hh+0.08,0,w+0.5,0.06,d+0.5,0x8a8f96,0.16);
+    door('f',-w*0.18,0.6,1.15,0x5a4030);win('f',w*0.25,fl+0.6,0.42,0.38,null);win('r',0,fl+0.6,0.42,0.38,null);
+    part(propCylGeo,propMat,w/2+0.35,b0,d*0.25,0,0,0,0.24,0.62-b0,0.24,[0x8a3a2a,0x4a5a7a,0x6a6a5a][p.col%3]);
+    return;
+  }
+  const floors=T==='barn'?1:2,fh=hh/floors;
+  // muri: intonaco (casolare, casa), assi (fienile), pietra sotto e legno sopra (baita)
+  if(T==='chalet'){B(PM.rock,0,fl,0,w,fh*0.95,d,0xb3ab9e);B(PM.planks,0,fl+fh*0.95,0,w,hh-fh*0.95,d,lift(wallC,1.2));}
+  else B(T==='barn'?PM.planks:PM.plaster,0,fl,0,w,hh,d,lift(wallC,T==='barn'?1.3:1.05));
+  if(T==='farm'||T==='house'){
+    for(const sx of [-1,1]) for(const sz of [-1,1]) B(PM.rock,sx*(w/2-0.06),fl,sz*(d/2-0.06),0.2,hh,0.2,stoneL);   // cantonali
+    B(propMat,0,fl+fh-0.05,0,w+0.07,0.08,d+0.07,stoneL);                                                       // marcapiano
+  }
+  B(propMat,0,fl+hh-0.12,0,w+0.09,0.12,d+0.09,T==='barn'||T==='chalet'?0x5a4232:stoneL);                       // fascia sotto la gronda
+  // finestre e porte
+  if(T==='barn'){
+    // fienile: portone a due ante con le croci di rinforzo, finestrella alta, apertura del fienile sul timpano
+    const dw=Math.min(2.2,w*0.5),dh=Math.min(2.1,hh*0.78);
+    const lw=dw/2-0.04,Ld=Math.hypot(lw,dh)*0.96,ang=Math.atan2(lw,dh);
+    for(const s of [-1,1]){
+      const u=s*dw/4;
+      face('f',u,fl,lw,dh,0x5c3a24,0.06);
+      // croce di rinforzo: due assi inclinate (ruotano attorno all'angolo in basso da cui partono)
+      B(propMat,u-lw/2+0.04,fl+0.03,d/2+0.08,0.08,Ld,0.05,0x7a5236,0,-ang);
+      B(propMat,u+lw/2-0.04,fl+0.03,d/2+0.08,0.08,Ld,0.05,0x7a5236,0,ang);
+    }
+    B(propMat,0,fl+dh,d/2+0.06,dw+0.2,0.1,0.08,0x4a3020);
+    win('b',0,fl+hh*0.55,0.5,0.45,null);
+    face('r',0,fl+hh*0.62,0.9,0.75,0x2a1e14,0.04);face('l',0,fl+hh*0.62,0.9,0.75,0x2a1e14,0.04);
+    for(let k=-3;k<=3;k++) face('f',k*(w/7),fl,0.05,hh-0.15,0x6a4a32,0.03);   // listelli verticali
+  }else{
+    const cols=Math.max(2,Math.round(w/1.6)),cw=w/cols,ww=0.55,wh=0.85,doorK=Math.floor(cols/2);
+    for(let fi=0;fi<floors;fi++){
+      const v=fl+fi*fh+fh*0.32;
+      for(let k=0;k<cols;k++){
+        const u=(k-(cols-1)/2)*cw;
+        if(fi===0&&k===doorK) door('f',u,0.68,Math.min(1.25,fh*0.78));
+        else win('f',u,v,ww,wh,T==='chalet'?null:shutC);
+        win('b',u,v,ww,wh,T==='chalet'?null:shutC);
+      }
+      const sc=Math.max(1,Math.round(d/2.2));
+      for(let k=0;k<sc;k++){const u=(k-(sc-1)/2)*(d/sc);win('r',u,v,ww,wh,T==='chalet'?null:shutC);win('l',u,v,ww,wh,T==='chalet'?null:shutC);}
+    }
+    if(T==='chalet'){
+      // balcone di legno lungo la facciata al piano di sopra, con ringhiera a listelli e mensole
+      const bw=w*0.86,by=fl+fh*0.95+0.05;
+      B(PM.planks,0,by,d/2+0.33,bw,0.08,0.62,0x7a5a3a);
+      B(PM.planks,0,by+0.62,d/2+0.62,bw,0.06,0.06,0x6a4a2e);
+      for(let x=-bw/2;x<=bw/2+1e-6;x+=0.2) B(PM.planks,x,by+0.08,d/2+0.62,0.045,0.54,0.045,0x6a4a2e);
+      for(const s of [-1,0,1]) B(PM.planks,s*bw*0.42,by-0.32,d/2+0.2,0.08,0.32,0.4,0x5a4030);
+    }
+  }
+  // pluviali agli spigoli
+  for(const s of [-1,1]) part(propCylGeo,propMat,s*(w/2+0.06),fl,d/2+0.06,0,0,0,0.035,hh,0.035,0x7a7e84);
+  // tetto a due falde sporgente (timpani pieni del colore dei muri), colmo, comignolo
+  const ov=T==='chalet'?0.6:0.35,rh=T==='barn'?1.35:T==='chalet'?1.0:1.15+0.1*floors;
+  part(propPrismGeo,T==='barn'?PM.planks:PM.plaster,0,fl+hh,0,0,Math.PI/2,0,d/1.732,rh*0.97/1.5,w,lift(wallC,T==='barn'?1.3:1.05));
+  part(propPrismGeo,PM.tiles,0,fl+hh-0.02,0,0,Math.PI/2,0,(d+2*ov)/1.732,(rh+0.06)/1.5,w+2*ov,lift(roofC,1.3));
+  if(T==='chalet'||p.snowRoof) part(propPrismGeo,PM.snow,0,fl+hh+0.05,0,0,Math.PI/2,0,(d+2*ov)/1.732*0.97,(rh+0.05)/1.5,w+2*ov-0.1,0xffffff);
+  B(propMat,0,fl+hh+rh-0.04,0,w+2*ov,0.08,0.16,lift(roofC,0.8));
+  for(const s of [-1,1]) B(propMat,0,fl+hh-0.08,s*(d/2+ov),w+2*ov,0.1,0.05,T==='chalet'||T==='barn'?0x5a4232:0xe8e2d8);   // tavole di gronda
+  if(T!=='barn'){
+    const cx=w*(0.22+rnd()*0.12),cz=d*0.12;
+    B(PM.brick,cx,fl+hh,cz,0.38,rh+0.45,0.38,0xc2a48a);
+    B(propMat,cx,fl+hh+rh+0.45,cz,0.5,0.07,0.5,0x8a8680);
+  }
+}
 function buildPropMeshes(props,theme){
   const grp=new THREE.Group(),dummy=new THREE.Object3D();dummy.rotation.order='YXZ';
   const lists=new Map();
@@ -3210,16 +3846,29 @@ function buildPropMeshes(props,theme){
   const fencePrev={},town={},bunt={pos:[],col:[]};
   [bannerMat,flagGeo,buntingMat].forEach(r=>sharedRes.add(r));
   for(const p of props){
-    const X=p.x*S3,Z=p.y*S3,Y=terrainAt(p.x,p.y),h=p.rot,ch=Math.cos(h),sh=Math.sin(h),yaw=-h;
+    const X=p.x*S3,Z=p.y*S3,h=p.rot,ch=Math.cos(h),sh=Math.sin(h),yaw=-h;
+    const s=p.s||1;
+    let Y=terrainAt(p.x,p.y);
+    // oggetti appoggiati: sul pendio si usa il punto più basso sotto di loro (così nessun lato resta sospeso;
+    // dalla parte a monte affondano un poco nel terreno, come succede davvero)
+    const gR={rock:4.5*s,crag:6*s,bale:7,logs:9,tyres:5,cactus:2,bush:3*s,drybush:2.5*s,adcol:4,snowbank:6*s}[p.type];
+    if(gR){for(let k=0;k<6;k++){const a=k/6*Math.PI*2;Y=Math.min(Y,terrainAt(p.x+Math.cos(a)*gR,p.y+Math.sin(a)*gR));}Y-=0.04;}
     // punto locale (lx lungo la strada, lz verso destra) → mondo
     const L=(lx,ly,lz)=>[X+lx*ch-lz*sh,Y+ly,Z+lx*sh+lz*ch];
     const part=(geo,mat,lx,ly,lz,rx,ryAdd,rz,sx,sy,sz,col)=>{const w=L(lx,ly,lz);push(geo,mat,w[0],w[1],w[2],rx,yaw+ryAdd,rz,sx,sy,sz,col);};
-    const s=p.s||1;
     switch(p.type){
-      case 'rock':{
-        const col=pick(PROP_COL.rock[theme]||PROP_COL.rock.mountain);
-        part(propBlobGeo,PM.rock,0,0.25*s,0,Math.random()*0.5,Math.random()*6,Math.random()*0.5,1.1*s,0.75*s,0.9*s,lift(col,1.3));
-        if(theme==='snow') part(propBlobGeo,PM.snow,0,0.72*s,0,0,0,0,0.95*s,0.32*s,0.8*s,0xffffff);
+      case 'rock':case 'crag':{
+        // masso spigoloso (a volte con qualche sasso accanto); gli speroni sui versanti sono gruppi di massi
+        // grandi, in parte interrati, di forma e tono diversi
+        const cols=PROP_COL.rock[theme]||PROP_COL.rock.mountain,crag=p.type==='crag';
+        const n=crag?3+Math.floor(Math.random()*3):(s>1.2&&Math.random()<0.7?2+Math.floor(Math.random()*2):1);
+        for(let k=0;k<n;k++){
+          const ks=k===0?1:0.35+Math.random()*0.4,ox=k===0?0:(Math.random()-0.5)*2.6*s,oz=k===0?0:(Math.random()-0.5)*2.6*s;
+          const sc=s*ks*(crag?1.15:1),hgt=(crag?0.65+Math.random()*0.5:0.6+Math.random()*0.35);
+          part(pick(ROCK_GEOS),PM.rock,ox,(crag?-0.25:0.12)*sc,oz,(Math.random()-0.5)*0.4,Math.random()*6.28,(Math.random()-0.5)*0.4,
+            1.1*sc,hgt*sc,0.95*sc,lift(pick(cols),1.5+Math.random()*0.35));
+          if(theme==='snow'&&(k===0||crag)) part(pick(ROCK_GEOS),PM.snow,ox,(crag?-0.25:0.12)*sc+hgt*sc*0.62,oz,0,Math.random()*6.28,0,0.85*sc,0.22*sc,0.75*sc,0xffffff);
+        }
         break;}
       case 'bale':   // balle rotonde sdraiate, spesso impilate a due
         part(propCylGeo,PM.straw,0,0.62*s,-0.55*s,0,0,Math.PI/2,0.62*s,1.2*s,0.62*s,0xf2e0b0);
@@ -3283,16 +3932,9 @@ function buildPropMeshes(props,theme){
         for(let row=0;row<3;row++) for(let k=0;k<3-row;k++)
           part(propCylGeo,PM.wood,-0.9,0.22+row*0.38,(k-(2-row)/2)*0.42,0,0,-Math.PI/2,0.2,1.8,0.2,pick([0xb08050,0x9a6e44,0xc0925e]));
         break;
-      case 'house':case 'barn':case 'chalet':case 'shack':{
-        const w=p.w,d=p.d,hh=p.h,wall=PROP_COL.wall[p.type][p.col%4],roof=PROP_COL.roof[p.type][p.col%4];
-        part(propBoxGeo,p.type==='house'?PM.plaster:PM.planks,0,-1.5,0,0,0,0,w,hh+1.5,d,lift(wall,p.type==='house'?1.05:1.3));
-        const rh=p.type==='shack'?0.5:1.4+(p.type==='chalet'?0.4:0);
-        part(propPrismGeo,p.type==='chalet'?PM.snow:PM.tiles,0,hh,0,0,Math.PI/2,0,(d*1.14)/1.732,rh/1.5,w*1.08,p.type==='chalet'?0xffffff:lift(roof,1.3));
-        // porta e finestre sul lato lungo
-        const dark=0x2a2f36;
-        part(propBoxGeo,propMat,0,0,d/2,0,0,0,0.85,1.7,0.06,p.type==='barn'?0x4a2e1c:dark);
-        for(const ox of [-w*0.3,w*0.3]) part(propBoxGeo,propMat,ox,hh*0.45,d/2,0,0,0,0.7,0.6,0.06,dark);
-        break;}
+      case 'house':case 'barn':case 'chalet':case 'shack':case 'farm':
+        buildHouse(p,part,ch,sh,Y);
+        break;
       case 'townhouse':{
         const st=townStyles()[p.st],face=p.side>0?Math.PI:0;
         if(!town[p.st]) town[p.st]=[];
@@ -3303,20 +3945,6 @@ function buildPropMeshes(props,theme){
         if(st.gable) part(propPrismGeo,PM.tiles,0,st.h,0,0,0,0,st.w*1.04/1.732,rh/1.5,st.d*1.02,lift(st.roof,1.2));
         else part(propPrismGeo,PM.tiles,0,st.h,0,0,Math.PI/2,0,st.d*1.04/1.732,rh/1.5,st.w*1.02,lift(st.roof,1.2));
         part(propBoxGeo,propMat,st.w*0.28,st.h+rh*0.3,-st.d*0.18*p.side,0,0,0,0.5,rh*0.9,0.5,0x9a5a44);   // comignolo
-        break;}
-      case 'farm':{
-        // casolare di campagna: due piani intonacati, tetto in coppi, comignolo, finestre con persiane
-        const w=p.w,d=p.d,hh=p.h,wall=[0xecca92,0xf3dfb4,0xe8bea6,0xdcae80][p.col%4],sh=p.col%2?0x44704a:0x74502e;
-        part(propBoxGeo,PM.plaster,0,-1.5,0,0,0,0,w,hh+1.5,d,wall);
-        part(propPrismGeo,PM.tiles,0,hh,0,0,Math.PI/2,0,(d*1.16)/1.732,1.7/1.5,w*1.1,0xe07a58);
-        part(propBoxGeo,propMat,w*0.3,hh+0.4,d*0.15,0,0,0,0.55,1.6,0.55,0xc8a078);
-        const cols=Math.max(2,Math.floor(w/1.9));
-        for(const fz of [d/2,-d/2]) for(const fy of [1.05,3.15]) for(let k=0;k<cols;k++){
-          const fx=(k-(cols-1)/2)*(w/cols);
-          if(fz>0&&fy<2&&k===Math.floor(cols/2)){part(propBoxGeo,propMat,fx,0,fz,0,0,0,0.95,2,0.08,0x5a3a24);continue;}   // portone
-          part(propBoxGeo,propMat,fx,fy,fz,0,0,0,0.6,0.95,0.07,0x2a2f36);
-          for(const so of [-0.46,0.46]) part(propBoxGeo,propMat,fx+so,fy,fz,0,0,0,0.3,0.95,0.1,sh);
-        }
         break;}
       case 'church':{
         const away=p.side,twin=p.twin;
@@ -4193,8 +4821,10 @@ function addWheels(model,list){
   }
 }
 function helmet(grp,x,y,z,color){
-  part(grp,new THREE.SphereGeometry(0.085,16,12),stdMat({color,metalness:0.3,roughness:0.25}),x,y,z);
-  part(grp,new THREE.SphereGeometry(0.087,16,8,Math.PI/2-0.9,1.8,1.25,0.6),CM.glass,x,y,z); // visiera rivolta in avanti
+  const a=part(grp,new THREE.SphereGeometry(0.085,16,12),stdMat({color,metalness:0.3,roughness:0.25}),x,y,z);
+  const b=part(grp,new THREE.SphereGeometry(0.087,16,8,Math.PI/2-0.9,1.8,1.25,0.6),CM.glass,x,y,z); // visiera rivolta in avanti
+  // casco del pilota (lato sinistro, +x): nella visuale abitacolo la camera è dentro il casco, che va nascosto
+  if(x>0) grp.userData.drvHelmet={meshes:[a,b],pos:[x,y,z]};
 }
 function newModel(){const root=new THREE.Group(),body=new THREE.Group();root.add(body);return {root,body,wheels:[]};}
 
@@ -4339,6 +4969,115 @@ function grille(B,w,h,x,y,z,frame){
 }
 // abitacolo: sedili avvolgenti con le cinture, pilota (mani sul volante) e navigatore (con le note),
 // cruscotto, e la gabbia di sicurezza interna che segue i finestrini
+// ---------- cruscotto: plancia in plastica goffrata, palpebra con contagiri e tachimetro (lancette vive),
+// pannello interruttori in carbonio, trip-master del navigatore, bocchette d'aria ----------
+let DASH=null;
+function dashRes(){
+  if(DASH) return DASH;
+  const plastic=canvasTex(256,(g,S,rr)=>{
+    g.fillStyle='#2b2c30';g.fillRect(0,0,S,S);
+    for(let i=0;i<5200;i++){const v=34+rr()*22|0;g.fillStyle=`rgba(${v},${v},${v+3},0.55)`;g.fillRect(rr()*S,rr()*S,1+rr()*2,1+rr()*2);}
+    g.strokeStyle='rgba(0,0,0,0.25)';g.lineWidth=1;
+    for(let y=0;y<S;y+=16){g.beginPath();g.moveTo(0,y+0.5);g.lineTo(S,y+0.5);g.stroke();}
+  },[4,1]);
+  const carbon=canvasTex(128,(g,S)=>{
+    for(let y=0;y<S;y+=8) for(let x=0;x<S;x+=8){const o=((x+y)/8)%2;
+      const gr=g.createLinearGradient(x,y,o?x+8:x,o?y:y+8);gr.addColorStop(0,'#1a1b1e');gr.addColorStop(0.5,'#3a3c42');gr.addColorStop(1,'#16171a');
+      g.fillStyle=gr;g.fillRect(x,y,8,8);}
+  },[2,2]);
+  const mk=(w,h,draw)=>{const c=document.createElement('canvas');c.width=w;c.height=h;draw(c.getContext('2d'),w,h);
+    const t=new THREE.CanvasTexture(c);t.anisotropy=renderer.capabilities.getMaxAnisotropy();return t;};
+  const dial=(g,cx,cy,r,max,step,red,label,unit)=>{
+    const gr=g.createRadialGradient(cx,cy-r*0.3,r*0.1,cx,cy,r);gr.addColorStop(0,'#26282d');gr.addColorStop(1,'#0b0c0e');
+    g.fillStyle=gr;g.beginPath();g.arc(cx,cy,r,0,7);g.fill();
+    g.strokeStyle='#9aa0a8';g.lineWidth=3;g.beginPath();g.arc(cx,cy,r-1.5,0,7);g.stroke();
+    const P=(f,rr)=>{const a=(-135+f*270)*Math.PI/180;return [cx+rr*Math.sin(a),cy-rr*Math.cos(a)];};
+    if(red<max){g.strokeStyle='#e0322a';g.lineWidth=7;g.beginPath();
+      g.arc(cx,cy,r-9,(-135+red/max*270-90)*Math.PI/180,(135-90)*Math.PI/180);g.stroke();}
+    for(let v=0;v<=max+1e-6;v+=step/2){const f=v/max,big=Math.abs(v/step-Math.round(v/step))<1e-6;
+      const [x0,y0]=P(f,r-5),[x1,y1]=P(f,r-(big?17:11));g.strokeStyle=v>=red?'#ff5a4a':'#f2f2f2';g.lineWidth=big?3:1.5;
+      g.beginPath();g.moveTo(x0,y0);g.lineTo(x1,y1);g.stroke();
+      if(big){const [tx,ty]=P(f,r-30);g.fillStyle=v>=red?'#ff5a4a':'#f2f2f2';g.font='bold 15px Arial';g.textAlign='center';g.textBaseline='middle';
+        g.fillText(String(Math.round(v/(max>1000?1000:1))),tx,ty);}}
+    g.fillStyle='#c9ccd2';g.font='bold 11px Arial';g.textAlign='center';g.fillText(label,cx,cy+r*0.42);
+    g.font='9px Arial';g.fillText(unit,cx,cy+r*0.42+13);
+  };
+  const gauges=mk(512,192,(g,w,h)=>{
+    g.fillStyle='#111214';g.fillRect(0,0,w,h);
+    dial(g,150,96,88,8000,1000,7600,'RPM','x1000');
+    dial(g,362,96,88,200,20,999,'km/h','');
+    // spie: abbaglianti, olio, batteria, freno a mano
+    [['#2f7bff',256,30],['#ffb020',256,62],['#e0322a',256,94],['#3fd06a',256,126]].forEach(([c,x,y])=>{g.fillStyle=c;g.globalAlpha=0.55;g.beginPath();g.arc(x,y,6,0,7);g.fill();g.globalAlpha=1;});
+  });
+  const switches=mk(256,128,(g,w,h)=>{
+    g.fillStyle='#1c1d20';g.fillRect(0,0,w,h);
+    g.strokeStyle='#55585e';g.lineWidth=2;g.strokeRect(3,3,w-6,h-6);
+    const lab=['IGN','START','FAN','LIGHTS','WIPER','PUMP','HORN','PIT'];
+    lab.forEach((t,i)=>{const x=32+(i%4)*64,y=i<4?38:92;
+      g.fillStyle=i===1?'#d23a2a':i===7?'#e0a020':'#3a3d43';g.beginPath();g.arc(x,y,13,0,7);g.fill();
+      g.fillStyle='#d9dce1';g.beginPath();g.arc(x,y,5,0,7);g.fill();
+      g.fillStyle='#e9ebee';g.font='bold 11px Arial';g.textAlign='center';g.fillText(t,x,y+26);});
+  });
+  const trip=mk(256,96,(g,w,h)=>{
+    g.fillStyle='#0d0f0d';g.fillRect(0,0,w,h);
+    g.fillStyle='#7fe08a';g.font='bold 30px Courier New';g.textAlign='left';g.fillText('12.48',18,40);g.fillText('03.07',18,82);
+    g.font='bold 13px Arial';g.fillStyle='#a8c8aa';g.fillText('TRIP',160,32);g.fillText('INT',160,74);
+  });
+  DASH={plastic:stdMat({color:0xffffff,map:plastic,roughness:0.85,metalness:0.05}),
+    carbon:stdMat({color:0xffffff,map:carbon,roughness:0.35,metalness:0.2}),
+    gauges:new THREE.MeshBasicMaterial({map:gauges}),switches:stdMat({color:0xffffff,map:switches,roughness:0.6}),
+    trip:new THREE.MeshBasicMaterial({map:trip}),needle:new THREE.MeshBasicMaterial({color:0xff3a22}),
+    stitch:stdMat({color:0x8a2a22,roughness:0.8})};
+  return DASH;
+}
+// plancia del cruscotto: x0 = lato pilota, y/z = centro del blocco, w = mezza larghezza interna
+function dashboard(B,X,y,z,w,cock,mono){
+  const D=dashRes(),face=z-0.09,top=y+0.05;
+  part(B,new THREE.BoxGeometry(w*2-0.04,0.1,0.18),D.plastic,0,y,z);
+  part(B,new THREE.BoxGeometry(w*2-0.06,0.006,0.006),D.stitch,0,top-0.004,face+0.004);   // cucitura sul bordo
+  // quadro incassato nella plancia (sotto il bordo superiore: si legge attraverso la corona del volante
+  // e non copre la strada), con una piccola palpebra sopra
+  const GW=0.15,GH=GW*192/512;
+  part(B,new THREE.BoxGeometry(GW+0.02,0.008,0.035),D.plastic,X,y+0.015+GH/2+0.006,face-0.014);
+  part(B,new THREE.BoxGeometry(GW+0.012,GH+0.01,0.004),CM.black,X,y+0.015,face-0.001);
+  const gp=part(B,new THREE.PlaneGeometry(GW,GH),D.gauges,X,y+0.015,face-0.004,0,Math.PI,0);gp.castShadow=false;
+  const needle=(cx)=>{const n=new THREE.Group();n.position.set(cx,0,0.002);gp.add(n);
+    const m=new THREE.Mesh(new THREE.BoxGeometry(0.002,0.024,0.001).translate(0,0.0095,0),D.needle);n.add(m);
+    const hub=new THREE.Mesh(new THREE.CylinderGeometry(0.0035,0.0035,0.002,10).rotateX(Math.PI/2),CM.darkMetal);n.add(hub);return n;};
+  // (centri dei quadranti nella texture: x=150 e 362 su 512 → coordinate locali del pannello)
+  const tach=needle((150/512-0.5)*GW),speedo=needle((362/512-0.5)*GW);
+  if(cock){cock.tach=tach;cock.speedo=speedo;}
+  if(mono){   // monoposto: interruttori sulla plancia accanto agli strumenti, niente console né navigatore
+    const sw=part(B,new THREE.PlaneGeometry(0.13,0.065),D.switches,X-0.2,y,face-0.002,0,Math.PI,0);sw.castShadow=false;
+    return {tach,speedo};
+  }
+  // console centrale in carbonio con il pannello interruttori, leva del cambio sequenziale
+  part(B,new THREE.BoxGeometry(0.16,0.2,0.06),D.carbon,0,y-0.1,face+0.01);
+  const sw=part(B,new THREE.PlaneGeometry(0.15,0.075),D.switches,0,y-0.03,face-0.022,0.1,Math.PI,0);sw.castShadow=false;
+  tube(B,CM.chrome,[0,y-0.28,face-0.05],[-0.02,y-0.12,face-0.1],0.008);
+  part(B,new THREE.SphereGeometry(0.018,10,8),D.carbon,-0.02,y-0.115,face-0.1);
+  // bocchette d'aria ai lati
+  for(const k of [-1,1]){
+    part(B,new THREE.CylinderGeometry(0.028,0.028,0.02,16).rotateX(Math.PI/2),CM.black,k*(w-0.07),y+0.01,face-0.006);
+    for(let i=-1;i<=1;i++) part(B,new THREE.BoxGeometry(0.048,0.004,0.004),CM.darkMetal,k*(w-0.07),y+0.01+i*0.012,face-0.018);
+  }
+  // trip-master del navigatore
+  part(B,new THREE.BoxGeometry(0.1,0.04,0.006),CM.black,-X,y+0.01,face-0.002);
+  const tp=part(B,new THREE.PlaneGeometry(0.088,0.033),D.trip,-X,y+0.01,face-0.006,0,Math.PI,0);tp.castShadow=false;
+  if(cock){cock.tach=tach;cock.speedo=speedo;}
+  return {tach,speedo};
+}
+// braccia del pilota: spalla → gomito → guanto (che gira con il volante), con la stessa cinematica inversa del buggy
+function cockArms(ck){
+  if(!ck||!ck.arms) return;
+  ck.piv.updateMatrix();ck.spin.updateMatrix();
+  for(const a of ck.arms){
+    a.Hp.copy(a.gl.position).applyMatrix4(ck.spin.matrix).applyMatrix4(ck.piv.matrix);
+    a.Hp.addScaledVector(_v3.subVectors(a.sh,a.Hp).normalize(),0.025);   // (il polso entra nel guanto)
+    solveArm(a.sh,a.Hp,a.E,a.k,0.2,0.2);
+    setLimb(a.up,a.sh,a.E);setLimb(a.fa,a.E,a.Hp);a.el.position.copy(a.E);
+  }
+}
 function cabin(B,o){
   const H=o.headY,Z=o.headZ,X=o.drvX,belt=stdMat({color:0xd23a2a,roughness:0.7}),notes=stdMat({color:0xf2efe6,roughness:0.9});
   for(const s of [1,-1]){
@@ -4346,21 +5085,41 @@ function cabin(B,o){
     part(B,new THREE.BoxGeometry(0.3,0.06,0.32),CM.seat,x,H-0.32,Z+0.06);
     part(B,new THREE.BoxGeometry(0.3,0.44,0.06),CM.seat,x,H-0.12,Z-0.13,-0.18);
     for(const k of [-1,1]) part(B,new THREE.BoxGeometry(0.04,0.3,0.24),CM.seat,x+k*0.155,H-0.2,Z-0.04);
-    part(B,new THREE.CylinderGeometry(0.1,0.112,0.26,12),suit,x,H-0.2,Z-0.04);
+    const tor=part(B,new THREE.CylinderGeometry(0.1,0.112,0.26,12),suit,x,H-0.2,Z-0.04);
     const sh=part(B,new THREE.SphereGeometry(0.11,12,8),suit,x,H-0.08,Z-0.04);sh.scale.set(1.18,0.5,0.85);
-    for(const k of [-1,1]) part(B,new THREE.BoxGeometry(0.035,0.25,0.01),belt,x+k*0.055,H-0.18,Z+0.07,0.15);
+    if(s>0) B.userData.drvBody=[tor,sh];   // (nascosti nella visuale abitacolo: restano braccia, mani e volante)
+    for(const k of [-1,1]){const bl=part(B,new THREE.BoxGeometry(0.035,0.25,0.01),belt,x+k*0.055,H-0.18,Z+0.07,0.15);if(s>0) B.userData.drvBody.push(bl);}
     for(const k of [-1,1]) tube(B,suit,[x+k*0.055,H-0.3,Z+0.12],[x+k*0.06,H-0.3,Z+0.42],0.045);
     if(s>0){
-      for(const k of [-1,1]){tube(B,suit,[x+k*0.11,H-0.1,Z],[x+k*0.1,H-0.22,Z+0.2],0.032);tube(B,suit,[x+k*0.1,H-0.22,Z+0.2],[x+k*0.085,H-0.13,Z+0.33],0.028);}
-      const sw=part(B,new THREE.TorusGeometry(0.1,0.013,8,24),CM.black,x,H-0.13,Z+0.35);sw.rotation.x=-0.45;
+      // braccia complete: omero dalla spalla, gomito e avambraccio fino al guanto sul volante, ricalcolati a ogni
+      // fotogramma (cinematica inversa: girando il volante i gomiti si piegano e si aprono come quelli veri)
+      const arms=[];
+      for(const k of [-1,1]){
+        const up=part(B,new THREE.CylinderGeometry(0.03,0.034,1,10),suit,0,0,0);
+        const fa=part(B,new THREE.CylinderGeometry(0.026,0.03,1,10),suit,0,0,0);
+        const el=part(B,new THREE.SphereGeometry(0.031,10,8),suit,0,0,0);
+        arms.push({k,sh:new THREE.Vector3(x+k*0.125,H-0.1,Z-0.02),up,fa,el,E:new THREE.Vector3(),Hp:new THREE.Vector3()});
+      }
+      // volante che gira con lo sterzo, con le razze, il riferimento a ore 12 e i guanti del pilota sopra
+      // (inclinato come quello vero: la parte alta più lontana dal pilota, perpendicolare al piantone)
+      const piv=new THREE.Group();piv.position.set(x,H-0.13,Z+0.35);piv.rotation.x=0.43;B.add(piv);
+      const spin=new THREE.Group();piv.add(spin);
+      part(spin,new THREE.TorusGeometry(0.1,0.013,8,24),CM.black,0,0,0);
+      part(spin,new THREE.CylinderGeometry(0.026,0.026,0.03,14).rotateX(Math.PI/2),CM.darkMetal,0,0,0);
+      for(const a of [0,Math.PI,-Math.PI/2]){const sp=part(spin,new THREE.BoxGeometry(0.09,0.016,0.01),CM.darkMetal,Math.cos(a)*0.05,Math.sin(a)*0.05,0);sp.rotation.z=a;}
+      part(spin,new THREE.BoxGeometry(0.02,0.012,0.016),CM.caliper,0,0.1,0.002);
+      const glove=stdMat({color:0xb9b2a4,roughness:0.85});   // guanti chiari: si distinguono sul volante nero
+      for(const a of arms){const gl=part(spin,new THREE.SphereGeometry(0.032,10,8),glove,a.k*0.098,0.0,0.012);gl.scale.set(0.9,1.25,0.85);
+        a.gl=gl;part(gl,new THREE.CylinderGeometry(0.03,0.028,0.03,10),glove,0,-0.006,-0.03,Math.PI/2);}   // polsino
       tube(B,CM.darkMetal,[x,H-0.13,Z+0.35],[x,H-0.21,Z+0.52],0.014);
+      B.userData.cock={eye:[x,H+0.01,Z+0.11],spin,piv,arms};
+      cockArms(B.userData.cock);
     }else{
       for(const k of [-1,1]) tube(B,suit,[x+k*0.11,H-0.1,Z],[x+k*0.05,H-0.27,Z+0.2],0.03);
       part(B,new THREE.BoxGeometry(0.17,0.012,0.12),notes,x,H-0.27,Z+0.23,-0.55);
     }
   }
-  part(B,new THREE.BoxGeometry(o.inW*2-0.04,0.1,0.18),CM.black,0,o.dashY,o.dashZ);
-  for(const dx of [-0.05,0.05]) part(B,new THREE.CylinderGeometry(0.026,0.026,0.01,14).rotateX(Math.PI/2-0.4),CM.head,X+dx,o.dashY+0.04,o.dashZ-0.08);
+  dashboard(B,X,o.dashY,o.dashZ,o.inW,B.userData.cock);
   // gabbia interna: arco dietro ai sedili, montanti lungo il parabrezza fino all'arco, barre porta
   const W=o.inW,cg=o.cage;
   bentTube(B,cg,[[-W,o.floorY,o.hoopZ],[-W,o.roofY-0.1,o.hoopZ],[-W+0.08,o.roofY-0.03,o.hoopZ],[W-0.08,o.roofY-0.03,o.hoopZ],[W,o.roofY-0.1,o.hoopZ],[W,o.floorY,o.hoopZ]],0.022);
@@ -4369,6 +5128,7 @@ function cabin(B,o){
     bentTube(B,cg,[[sd*W,o.floorY+0.05,o.aZ0-0.05],[sd*(W+0.02),(o.floorY+o.dashY)/2+0.05,(o.aZ0+o.hoopZ)/2],[sd*W,o.dashY+0.05,o.hoopZ]],0.018);
   }
   bentTube(B,cg,[[-W+0.08,o.roofY-0.03,o.hoopZ],[0,o.floorY+0.02,o.hoopZ-0.02],[W,o.floorY,o.hoopZ]],0.018);
+  cabinTub(B,o);
 }
 // --- 1: Hatch WRC ---
 function buildHatch(){
@@ -4613,11 +5373,7 @@ function buildBuggyDriver(B){
   part(B,new THREE.BoxGeometry(0.36,0.5,0.07),CM.seat,DRV_X,0.7,-0.42,-0.22);
   for(const s of [-1,1]) part(B,new THREE.BoxGeometry(0.05,0.34,0.3),CM.seat,DRV_X+s*0.18,0.6,-0.3,-0.2);
   // cruscotto con strumenti
-  part(B,new THREE.BoxGeometry(0.72,0.09,0.14),CM.darkMetal,0,0.6,0.37);
-  for(const dx of [-0.05,0.05]){
-    part(B,new THREE.CylinderGeometry(0.03,0.03,0.012,16).rotateX(Math.PI/2+0.35),CM.chrome,DRV_X+dx,0.64,0.305);
-    part(B,new THREE.CylinderGeometry(0.024,0.024,0.014,16).rotateX(Math.PI/2+0.35),CM.head,DRV_X+dx,0.64,0.302);
-  }
+  const bDash={};dashboard(B,DRV_X,0.6,0.39,0.36,bDash,true);
   // piantone e volante (inclinato verso il pilota)
   tube(B,CM.darkMetal,[DRV_X,0.6,0.34],[DRV_X,0.735,0.1],0.015);
   const wheelPivot=new THREE.Group();wheelPivot.position.set(DRV_X,0.74,0.09);wheelPivot.rotation.x=0.57;B.add(wheelPivot);
@@ -4662,6 +5418,10 @@ function buildBuggyDriver(B){
   const arms={uL:limb(0.045,0.038,suit),fL:limb(0.038,0.032,suit),uR:limb(0.045,0.038,suit),fR:limb(0.038,0.032,suit)};
   const handL=part(B,new THREE.SphereGeometry(0.036,10,8),glove,0,0,0),handR=part(B,new THREE.SphereGeometry(0.036,10,8),glove,0,0,0);
   const elbowL=part(B,new THREE.SphereGeometry(0.04,10,8),suit,0,0,0),elbowR=part(B,new THREE.SphereGeometry(0.04,10,8),suit,0,0,0);
+  torso.updateMatrix();head.updateMatrix();
+  const rest=(x,y,z)=>new THREE.Vector3(x,y,z).applyMatrix4(head.matrix).applyMatrix4(torso.matrix).toArray();
+  B.userData.cock={head,eye:rest(0,0.065,0.08),tgt:rest(0,-0.62,2),tach:bDash.tach,speedo:bDash.speedo};   // (visuale abitacolo: dal casco del pilota, che si muove con il busto)
+  B.userData.drvHelmet={meshes:head.children.slice()};B.userData.drvBody=[sh];   // nascosti nella visuale abitacolo
   return {body:B,wheelSpin,hL,hR,lever,knob,pedB,pedT,torso,head,shL,shR,arms,handL,handR,elbowL,elbowR,
     shiftT:0,shiftDir:1,lastGear:1,bob:0,bobV:0,prevY:0,prevVy:0};
 }
@@ -4674,15 +5434,16 @@ function setLimb(mesh,a,b){
   mesh.quaternion.setFromUnitVectors(_up,_v4.divideScalar(len));
 }
 // braccio a due segmenti (IK analitica): gomito piegato verso il basso e verso l'esterno
-function solveArm(S,H,E,side){
-  const a=0.24,b=0.25; // braccio e avambraccio
+function solveArm(S,H,E,side,a=0.24,b=0.25){   // (a, b: braccio e avambraccio)
   const dir=_v1.subVectors(H,S);let d=dir.length();dir.divideScalar(d||1);
   d=Math.min(d,a+b-0.002);
   const x=(a*a-b*b+d*d)/(2*d),h=Math.sqrt(Math.max(0,a*a-x*x));
   const bend=_v2.set(side*0.8,-1,-0.2);bend.addScaledVector(dir,-bend.dot(dir)).normalize();
   E.copy(S).addScaledVector(dir,x).addScaledVector(bend,h);
   // se il bersaglio è troppo lontano la mano si ferma a fine braccio
-  H.copy(S).addScaledVector(dir,Math.min(_v3.subVectors(H,S).length(),a+b-0.002));
+  // (la distanza va letta prima di spostare H: prima la mano finiva sempre sulla spalla)
+  const reach=Math.min(_v3.subVectors(H,S).length(),a+b-0.002);
+  H.copy(S).addScaledVector(dir,reach);
 }
 const _S=new THREE.Vector3(),_H=new THREE.Vector3(),_E=new THREE.Vector3(),_K=new THREE.Vector3();
 function localPos(obj,body,out){obj.getWorldPosition(out);return body.worldToLocal(out);}
@@ -4844,6 +5605,82 @@ function buildBuggy(){
   return m;
 }
 
+// ================= ABITACOLO APERTO, VETRI, SOTTOSCOCCA =================
+// La carrozzeria è un volume pieno fino alla linea dei finestrini: la sua faccia superiore, vista dai vetri,
+// era un ripiano piatto che tagliava piloti e interni (e lo stesso faceva la faccia inferiore del guscio dei
+// vetri). Dentro l'abitacolo quelle facce si scartano nello shader e al loro posto c'è un interno vero:
+// pavimento con tunnel della trasmissione, pannelli delle portiere con maniglia, paratie davanti e dietro.
+const cabTrim=stdMat({color:0x2b2d31,roughness:0.85,metalness:0.1}),cabFloor=stdMat({color:0x1c1d20,roughness:0.95});
+function cabinTub(B,o){
+  const W=o.inW,z0=o.hoopZ-0.22,z1=o.aZ0+0.03,belt=o.dashY+0.03,fl=o.floorY,L=z1-z0,zc=(z0+z1)/2,H=belt-fl;
+  part(B,new THREE.BoxGeometry(2*W+0.08,0.02,L),cabFloor,0,fl-0.01,zc);
+  part(B,new THREE.BoxGeometry(0.16,0.11,L*0.85),cabTrim,0,fl+0.05,zc);                    // tunnel della trasmissione
+  for(const sd of [-1,1]){
+    part(B,new THREE.BoxGeometry(0.025,H,L),cabTrim,sd*(W+0.04),fl+H/2,zc);               // pannello della portiera
+    part(B,new THREE.BoxGeometry(0.02,0.05,L*0.55),cabFloor,sd*(W+0.025),fl+H*0.72,zc+0.05);// bracciolo / maniglia
+    part(B,new THREE.BoxGeometry(0.01,0.02,0.1),CM.chrome,sd*(W+0.022),fl+H*0.85,z1-0.12);
+  }
+  part(B,new THREE.BoxGeometry(2*W+0.08,H,0.025),cabTrim,0,fl+H/2,z0);                     // paratia dietro
+  part(B,new THREE.BoxGeometry(2*W+0.08,o.dashY-fl,0.025),cabTrim,0,fl+(o.dashY-fl)/2,z1); // paratia davanti
+  B.userData.cab={W:W+0.06,z0:z0-0.01,z1:z1+0.01,y:belt-0.05};
+}
+// scarta le facce rivolte in su della carrozzeria dentro l'abitacolo (coordinate del modello)
+function cutCabinMat(m,c){
+  const mm=m.clone();carEnvMats.push(mm);
+  mm.onBeforeCompile=sh=>{
+    sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vCabP;varying vec3 vCabN;')
+      .replace('#include <begin_vertex>','#include <begin_vertex>\nvCabP=position;vCabN=normal;');
+    sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying vec3 vCabP;varying vec3 vCabN;')
+      .replace('#include <clipping_planes_fragment>','#include <clipping_planes_fragment>\nif(vCabN.y>0.45&&abs(vCabP.x)<'+c.W.toFixed(3)+'&&vCabP.z>'+c.z0.toFixed(3)+'&&vCabP.z<'+c.z1.toFixed(3)+'&&vCabP.y>'+c.y.toFixed(3)+') discard;');
+  };
+  mm.customProgramCacheKey=()=>'cab'+c.W+c.z0+c.z1+c.y+m.uuid;
+  return mm;
+}
+// Vetri: tinta leggermente verde-azzurra, riflettono cielo e paesaggio; trasparenti guardandoli di fronte e
+// sempre più specchianti e opachi di taglio (come il vetro vero). La faccia inferiore del guscio non si vede.
+glassT.color.set(0x1a2a32);glassT.metalness=0.65;glassT.roughness=0.03;glassT.opacity=0.35;
+// (dall'abitacolo i vetri si guardano molto di taglio: lì restano trasparenti, con un leggero riflesso)
+const GLASS_U={uGlIn:{value:0}};
+glassT.onBeforeCompile=sh=>{
+  sh.uniforms.uGlIn=GLASS_U.uGlIn;
+  sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying float vGlN;')
+    .replace('#include <begin_vertex>','#include <begin_vertex>\nvGlN=normal.y;');
+  sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying float vGlN;uniform float uGlIn;')
+    .replace('#include <clipping_planes_fragment>','#include <clipping_planes_fragment>\nif(vGlN<-0.5) discard;')
+    .replace('#include <lights_fragment_end>',`#include <lights_fragment_end>
+      {float gf=pow(1.0-abs(dot(normalize(normal),normalize(vViewPosition))),2.2);diffuseColor.a=mix(mix(0.26,0.92,gf),mix(0.05,0.22,gf),uGlIn);}`);
+};
+glassT.customProgramCacheKey=()=>'glassFresnel';
+// Sottoscocca: piastra paramotore in alluminio, coppa e cambio, scarico con silenziatore e scudo termico,
+// albero di trasmissione e differenziale, serbatoio, traverse, bracci delle sospensioni e ammortizzatori
+function underbody(m,id){
+  const B=m.body,bot={hatch:0.135,classic:0.145,raid:0.26}[id];if(bot===undefined) return;
+  const ws=m.wheels,fz=Math.max(...ws.map(w=>w.rest.z)),rz=Math.min(...ws.map(w=>w.rest.z)),hx=Math.max(...ws.map(w=>Math.abs(w.rest.x)));
+  const wr=ws[0].r||0.2,y=bot-0.005;
+  const alu=stdMat({color:0xb8bcc2,metalness:0.8,roughness:0.4}),blk=CM.black,dm=CM.darkMetal;
+  part(B,new THREE.BoxGeometry(hx*1.3,0.025,0.75),alu,0,y-0.03,fz+0.02,0.08);                 // paramotore
+  for(let i=-2;i<=2;i++) part(B,new THREE.BoxGeometry(0.02,0.012,0.6),dm,i*hx*0.22,y-0.045,fz+0.02);  // nervature
+  part(B,new THREE.BoxGeometry(0.34,0.08,0.38),dm,0,y-0.04,fz-0.05);                          // coppa dell'olio
+  part(B,new THREE.BoxGeometry(0.2,0.09,0.42),dm,0,y-0.045,fz-0.45);                          // cambio
+  tube(B,dm,[0,y-0.04,fz-0.66],[0,y-0.04,rz+0.12],0.03);                                     // albero di trasmissione
+  part(B,new THREE.SphereGeometry(0.1,10,8),dm,0,wr*0.9,rz).scale.set(1.2,0.8,1);              // differenziale
+  part(B,new THREE.BoxGeometry(0.56,0.11,0.32),blk,0,y-0.05,rz+0.42);                         // serbatoio
+  // scarico: tubo lungo il fondo, silenziatore, scudo termico
+  const ex=0.18;
+  tube(B,CM.chrome,[ex*0.4,y-0.05,fz-0.2],[ex,y-0.06,-0.1],0.025);
+  tube(B,CM.chrome,[ex,y-0.06,-0.1],[ex+0.05,y-0.06,rz-0.1],0.025);
+  part(B,new THREE.CylinderGeometry(0.07,0.07,0.36,12).rotateX(Math.PI/2),dm,ex+0.04,y-0.07,rz+0.2);
+  part(B,new THREE.BoxGeometry(0.18,0.006,0.6),alu,ex,y-0.008,-0.4);
+  // traverse e longheroni
+  for(const z of [fz-0.25,rz+0.25]) part(B,new THREE.BoxGeometry(hx*1.6,0.05,0.07),blk,0,y-0.02,z);
+  for(const s of [-1,1]) part(B,new THREE.BoxGeometry(0.06,0.05,fz-rz),blk,s*hx*0.62,y-0.02,(fz+rz)/2);
+  // bracci delle sospensioni (a triangolo) e ammortizzatori verso i mozzi
+  for(const w of ws){
+    const sx=Math.sign(w.rest.x),hub=[w.rest.x-sx*0.08,wr*0.85,w.rest.z],in0=[sx*hx*0.35,y-0.02,w.rest.z+0.12],in1=[sx*hx*0.35,y-0.02,w.rest.z-0.12];
+    tube(B,dm,in0,hub,0.016);tube(B,dm,in1,hub,0.016);
+    tube(B,CM.chrome,[w.rest.x-sx*0.12,wr*0.9,w.rest.z],[sx*hx*0.7,wr+0.28,w.rest.z],0.022);
+  }
+}
 const CARS=[
   {id:'hatch',name:'Hatch WRC',build:buildHatch},
   {id:'classic',name:'Coupé Classica ’70',build:buildClassic},
@@ -4853,6 +5690,10 @@ const CARS=[
 const carModels={};
 for(const c of CARS){
   const md=c.build();
+  // abitacolo: la faccia superiore della carrozzeria dentro l'abitacolo si scarta (resta l'interno vero)
+  const cab=md.body.userData.cab;
+  if(cab) md.body.traverse(o=>{if(o.isMesh&&Array.isArray(o.material)&&o.material.length===2&&o.material[0].map) o.material=o.material.map(mt=>cutCabinMat(mt,cab));});
+  underbody(md,c.id);
   md.root.position.y=-CAR_BASE_Y+0.02;
   md.root.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
   md.root.visible=false;
@@ -6215,7 +7056,8 @@ function audioFrame(dt,s){
   set(eng.fireG.gain,P.tone*(0.12+1.0*load+0.25*r)*overrun);
   set(eng.halfG.gain,P.tone*0.3*(1-0.6*r)*(0.4+0.6*load));
   set(eng.toneLP.frequency,Math.min(900,fireHz*1.8+120));
-  set(eng.bus.gain,limiterT>0?0.4:1,0.005);
+  // (motore rotto: si spegne in meno di un secondo, tra un colpo di tosse e l'altro)
+  set(eng.bus.gain,(limiterT>0?0.4:1)*(ENGINE_FAIL.on?Math.max(0,1-ENGINE_FAIL.t/0.9)*(0.5+0.5*Math.random()):1),0.005);
   set(sfxVerb.gain,0.06+tunnelT*0.5,0.1); // rimbombo in galleria
 
   // turbo: pressione che sale sotto carico, "pssh" della valvola quando si alza il piede
@@ -6785,12 +7627,14 @@ const volOf=k=>k==='music'?musicVol:sfxVol;
 // trascinando o toccando la barra si sceglie il volume (il clic sulla barra non vale come "muto")
 let volDrag=null;
 function volFromPointer(e){
-  const bar=volDrag.querySelector('.vBar').getBoundingClientRect();
-  setVolume(volDrag.dataset.k,(e.clientX-bar.left)/Math.max(1,bar.width));
+  const bar=volDrag.querySelector('.vBar').getBoundingClientRect(),f=Math.max(0,Math.min(1,(e.clientX-bar.left)/Math.max(1,bar.width)));
+  // (barre del sedile e del campo visivo nella pausa)
+  if(volDrag.dataset.act==='cock'){const k=volDrag.dataset.k,[lo,hi,st]=COCK_LIM[k];COCK_CFG[k]=lo+(hi-lo)*f;adjustCockpit(k,0);return;}
+  setVolume(volDrag.dataset.k,f);
 }
 window.addEventListener('pointerdown',e=>{
   const bar=e.target.closest&&e.target.closest('.vBar');if(!bar) return;
-  initAudio();volDrag=bar.closest('.volRow');volFromPointer(e);e.preventDefault();
+  volDrag=bar.closest('.volRow');if(volDrag.dataset.act!=='cock') initAudio();volFromPointer(e);e.preventDefault();
 },true);
 window.addEventListener('pointermove',e=>{if(volDrag) volFromPointer(e);});
 // icone audio della schermata iniziale: un tocco = muto / volume di prima
@@ -7181,7 +8025,7 @@ function loadStage(n,c){
   if(typeof phys!=='undefined'){phys.ax=phys.ay=phys.spin=phys.lock=phys.alphaF=phys.alphaR=phys.laF=phys.laR=0;}
   if(typeof sus!=='undefined') sus.init=false;
   clearTyreFX();Object.assign(WET,{gF:1,gR:1,drag:0,yaw:0,n:0,side:0});
-  crashReset();CARVIS.q=null;CARVIS.tip=0;
+  crashReset();CARVIS.q=null;CARVIS.tip=0;offTrackReset();
   lastIdx=0;offTrack=false;onPuddle=false;elapsed=0;tunnelT=0;progEl.textContent='0%';carVisElev=wps[0].elev;carAirY=0;carVelY=0;gear=1;rpm=IDLE_RPM;slipAmt=0;gearEl.textContent=1;
   stageNumEl.textContent=n;surfEl.textContent=COURSES[course].name+' · '+surface.name+' · '+curLight.label;
   updateHudMode();
@@ -7699,6 +8543,9 @@ function update(dt){
     if(!partyOn&&finishT>1.2&&Math.abs(car.speed)<3){startParty();partyT0=finishT;}
     if(finishT>11||(partyOn&&finishT-partyT0>3.4)) endFinish();
   }else engThr=ctl.thr;
+  // motore rotto: niente gas, l'auto si ferma (si può ancora sterzare)
+  // (il freno solo finché si muove: da fermi il freno inserirebbe la retromarcia)
+  if(ENGINE_FAIL.on){inThr=0;inBrk=Math.abs(car.speed)>3?0.6:0;inHb=Math.abs(car.speed)<=3;engThr=0;rpm+=(IDLE_RPM*0.4-rpm)*Math.min(1,dt*2);}
   // ribaltamento in corso: niente guida, la scocca rotola (vedi crashUpdate); il cronometro corre
   // la strisciata della carrozzeria tace quando l'auto è ferma, sollevata dal pubblico o di nuovo in strada
   if(rollScrape.src&&(!CRASH.on||CRASH.right||RESCUE.phase==='come')) rollScrapeSet(0);
@@ -7817,6 +8664,8 @@ function update(dt){
   tunnelT+=((wps[lastIdx].tunnel?(wps[lastIdx].tunLight||1):0)-tunnelT)*Math.min(1,dt*3);
   progEl.textContent=Math.min(100,Math.floor(lastIdx/finishIdx*100))+'%';
   warn.classList.toggle('show',offTrack&&running);
+  offTrackRules(dt);
+  engineFailFrame(dt);
 
   const wasPuddle=onPuddle;
   updateWet(dt,airborne);
@@ -8040,6 +8889,7 @@ function verticalStep(h,ax,ay){
     }
     VB.bdPrev=diff;
   }
+  VB.gslope=Math.atan2(gL-gRt,m.tw);   // pendenza laterale del fondo sotto le ruote (per il ribaltamento)
   VB.vy+=(F-GRAV_Y)*h;VB.vp+=Mp/SUS.Ip*h;VB.vr+=Mr/SUS.Ir*h;
   if(contacts===0){VB.vp*=1-0.3*h;VB.vr*=1-0.8*h;}  // in volo solo un minimo smorzamento
   // Niente "trampolini": salendo con le ruote su una roccia ripida, su un cordolo o su un dislivello (bordi
@@ -8088,12 +8938,23 @@ function updateSuspension(){} // sostituita da verticalStep (integrata nei sotto
 // l'auto va su due ruote e, se la spinta continua oltre il punto di equilibrio, si ribalta.
 // h: altezza del baricentro (mondo); stabilità statica = mezza carreggiata / h
 const ROLLOVER={hatch:{h:0.34},classic:{h:0.34},raid:{h:0.45},buggy:{h:0.3}};
-// quanto il fondo "inciampa" la gomma che scivola di traverso (g in più, a scivolata piena)
-// (l'asfalto asciutto tiene e fa leva; ghiaia, neve e bagnato lasciano scivolare; sabbia ed erba fanno inciampare)
-const TRIP={asphalt:0.3,wet:0.1,dirt:0.22,hard:0.26,gravel:0.18,fine:0.2,mixed:0.22,sand:0.4,mud:0.3,
-  snow:0.15,grass:0.45,redsand:0.45,powder:0.35};
+// "Inciampo": quando l'auto scivola di lato le gomme affondano nel fondo e fanno da leva (è il modo in cui
+// si ribaltano davvero le auto, molto più che per la sola curva). Conta la velocità con cui si scivola di
+// traverso, non quella di marcia: sotto ~17 km/h di scivolata non succede niente, poi cresce in fretta.
+// Valori: g in più per ogni "unità" di scivolata oltre la soglia. Sabbia, erba e neve fresca fanno affondare la
+// gomma; l'asfalto asciutto un poco (spalla della gomma, cerchio); bagnato e ghiaia lasciano scivolare.
+const TRIP={asphalt:0.24,wet:0.08,dirt:0.42,hard:0.36,gravel:0.3,fine:0.34,mixed:0.42,sand:0.7,mud:0.45,
+  snow:0.28,grass:0.65,redsand:0.72,powder:0.6};
+let TRIP_V0=16,TRIP_V1=18,TRIP_P=1.5;   // soglia (≈12 km/h di scivolata laterale), scala (unità pista/s), crescita
+// ROLL_GS: la spinta laterale del gioco riportata in g "veri" (le gomme del gioco arrivano a ~0,7: un'auto vera
+// a ~1 g); ROLL_HOOK: quanto pesa il rilancio della cassa nei cambi di direzione; ROLL_LAG: rapidità con cui la
+// cassa segue la spinta (più basso = più ritardo, più rilancio)
+let ROLL_GS=1.5,ROLL_HOOK=0.85,ROLL_LAG=4;
+// ROLL_I: inerzia di rollio (× il momento di un punto): un picco brevissimo alza appena le ruote, una spinta che
+// dura le alza davvero; ROLL_D: smorzamento (le sospensioni riportano giù la cassa)
+let ROLL_I=1.25,ROLL_D=1.3;
 const TIP={a:0,w:0,s:1,g:0};   // a: angolo sopra le ruote esterne; s: +1 = si alza il lato sinistro; g: spinta (g)
-function tipReset(){TIP.a=TIP.w=TIP.g=0;}
+function tipReset(){TIP.a=TIP.w=TIP.g=0;TIP.vyp=undefined;TIP.dvy=0;TIP.lp=0;}
 function tipStep(h){
   const m=carModels[curCarId];
   if(!m||!m.tw||VB.contacts===0){          // in volo: niente perno, l'angolo torna nel rollio della scocca
@@ -8101,28 +8962,48 @@ function tipStep(h){
     TIP.a=TIP.w=0;return;
   }
   const R=ROLLOVER[curCarId]||ROLLOVER.hatch,d=m.tw/2,hh=R.h;
-  // spinta laterale delle gomme (in g) e verso: ay>0 (verso destra) carica le ruote di sinistra → si alza la destra
-  const latG=Math.abs(phys.ay)/G_ACC;
-  let side=phys.ay>0?-1:1;
-  // inciampo: l'auto scivola di traverso e il fondo trattiene le gomme (la spinta frena la scivolata)
-  // Cresce con l'angolo di deriva e col quadrato della velocità (l'energia della scivolata che si trasforma
-  // in rotazione): una derapata ampia e veloce alza le ruote interne, un testacoda in velocità ribalta.
+  // Tutte le spinte sono con segno: >0 = verso destra, carica le ruote di sinistra e alza la destra.
+  // 1) Accelerazione laterale vera del baricentro = rotazione × velocità + variazione della scivolata (filtrata:
+  //    i colpi di un istante non contano), ridotta a bassa velocità dove la quantità di moto in gioco è piccola.
+  //    (Non la forza istantanea delle gomme: a passo d'uomo, quando le gomme fermano una piccola scivolata, quella
+  //    forza è grande ma non può far ruotare l'auto.)
+  const dvy=TIP.vyp===undefined?0:(car.vy-TIP.vyp)/h;TIP.vyp=car.vy;
+  TIP.dvy=(TIP.dvy||0)+(dvy-(TIP.dvy||0))*Math.min(1,h*8);
+  const Vt=Math.hypot(car.speed,car.vy);
+  let ac=(car.speed*car.r+TIP.dvy)/G_ACC*Math.min(1,Vt/45);
+  // la spinta delle gomme non può superare la loro aderenza: sul fondo che scivola l'auto scivola, non si ribalta
+  const cap=(offTrack?offroad().grip:surface.grip||1)*1.15;ac=Math.max(-cap,Math.min(cap,ac));
+  // 2) Effetto "gancio" (fishhook): in un sinistra-destra veloce la cassa, che stava rollando da una parte, viene
+  //    rilanciata dall'altra mentre la spinta cambia lato: per un attimo il carico sulle ruote esterne supera
+  //    quello di una curva costante (quanto la spinta attuale supera quella di poco fa, dallo stesso lato).
+  TIP.lp=(TIP.lp||0)+(ac-(TIP.lp||0))*Math.min(1,h*ROLL_LAG);
+  const over=Math.max(0,(ac-TIP.lp)*Math.sign(ac));
+  TIP.over=over;
+  // 3) Inciampo: solo se l'auto scivola davvero di lato; spinge dalla parte opposta alla scivolata (le gomme che
+  //    affondano trattengono il basso dell'auto mentre il resto prosegue).
   let trip=0;
-  const vxa=Math.abs(car.speed),vya=Math.abs(car.vy),V=Math.hypot(vxa,vya),beta=Math.atan2(vya,Math.max(vxa,1));
-  if(V>60&&Math.sign(phys.ay)===-Math.sign(car.vy)){
+  const vya=Math.abs(car.vy);
+  if(vya>TRIP_V0){
     const kind=offTrack?OFFROAD_FX[surface.scene]||'grass':surface.fx;
-    // (le derive del gioco: ~3° in curva normale, 8-10° in una derapata decisa, oltre 15° di traverso)
-    const sl=Math.max(0,Math.min(1.5,(beta-0.04)/0.2));
-    trip=((TRIP[kind]||0.25)+(offTrack?0.12:0))*4.8*sl*Math.min(2.2,(V/150)*(V/150));
+    const x=Math.min(2.2,(vya-TRIP_V0)/TRIP_V1);
+    // (con una ruota fuori dal bordo strada la gomma trova il gradino della banchina: inciampa un po' di più)
+    trip=-Math.sign(car.vy)*(TRIP[kind]||0.3)*(offTrack?1.25:1)*Math.pow(x,TRIP_P);
   }
-  const g=latG+trip;TIP.g=g;
+  const tot=(ac+ROLL_HOOK*over*Math.sign(ac))*ROLL_GS+trip;
+  const side=tot>0?-1:1;
+  const g=Math.abs(tot);TIP.g=g;
   if(TIP.a<=0.0005) TIP.s=side;            // il lato si sceglie quando le ruote sono ancora tutte giù
-  else if(side!==TIP.s) TIP.g=-g*0.5;      // spinta dall'altra parte: aiuta a ricadere
-  const gp=GRAV_Y,th=TIP.a+TIP.s*VB.r;     // angolo totale rispetto all'orizzontale (anche fondo inclinato)
-  const u=d*Math.cos(th)-hh*Math.sin(th),v=d*Math.sin(th)+hh*Math.cos(th);
-  const alpha=(TIP.g*gp*v-gp*u)/(1.35*(d*d+hh*hh));
+  else if(side!==TIP.s) TIP.g=-g*0.6;      // spinta dall'altra parte (sinistra-destra): aiuta a ricadere
+  // angolo rispetto all'orizzontale: rotazione sulle ruote esterne + pendenza laterale del fondo + lo spostamento
+  // del baricentro dovuto al rollio delle sospensioni (una parte: la cassa che si inclina sposta poco il peso,
+  // e l'oscillazione delle molle in un cambio di direzione non deve sommarsi tutta come se l'auto fosse già alzata)
+  const slope=VB.gslope||0,th=TIP.a+TIP.s*(slope+0.3*((VB.r||0)-slope));
+  const gp=GRAV_Y,u=d*Math.cos(th)-hh*Math.sin(th),v=d*Math.sin(th)+hh*Math.cos(th);
+  // inerzia di rollio di un'auto vera (massa distribuita, non un punto): serve una spinta che dura, un picco
+  // di un istante alza appena le ruote; lo smorzamento delle sospensioni la riporta giù
+  const alpha=(TIP.g*gp*v-gp*u)/(ROLL_I*(d*d+hh*hh));
   if(TIP.a<=0&&alpha<=0){TIP.a=0;TIP.w=0;return;}
-  TIP.w+=alpha*h;TIP.w*=1-1.2*h;TIP.a+=TIP.w*h;
+  TIP.w+=alpha*h;TIP.w*=1-ROLL_D*h;TIP.a+=TIP.w*h;
   if(TIP.a<0){                                // ricade sulle quattro ruote
     if(TIP.w<-0.8){const s=Math.min(1,-TIP.w/5);VB.land=Math.min(VB.land,-2-6*s);VB.vr-=TIP.s*TIP.w*0.3;}
     TIP.a=0;TIP.w=0;return;
@@ -8130,7 +9011,8 @@ function tipStep(h){
   // oltre il punto di equilibrio (baricentro sopra le ruote esterne) e ancora in rotazione: si ribalta
   // oltre il punto di equilibrio, oppure già molto inclinata mentre scivola ancora forte di lato (l'energia della
   // scivolata non è finita: il corpo rigido la trasforma in capriole vere invece di un lento adagiarsi sul fianco)
-  if((th>Math.atan2(d,hh)+0.08&&TIP.w>0.3)||(TIP.a>0.5&&TIP.w>0.6&&Math.abs(car.vy)>35)) startCrash('roll');
+  // si ribalta solo oltre il punto di equilibrio (baricentro oltre le ruote esterne) e ancora in rotazione
+  if(th>Math.atan2(d,hh)+0.06&&TIP.w>0.25) startCrash('roll');
 }
 // spostamento della scocca quando ruota sul perno delle ruote esterne (coordinate della scocca: x a sinistra)
 function tipOffset(a,s,d){
@@ -8286,12 +9168,110 @@ function waterLevelHere(){
   return null;
 }
 // rimessa in strada con penalità (ribaltata in un punto irraggiungibile, o finita in acqua)
+// ================= FUORI PISTA: PENALITÀ E MOTORE CHE SI ROMPE =================
+// Restare fuori pista costa: ogni 4 s di fila fuori dalla carreggiata +1 s. Restarci fermi o quasi (impantanati,
+// incastrati, a girare a vuoto) scalda il motore: il tempo passato così si accumula e, sulla strada, cala molto
+// piano (le soste ripetute si sommano). Al limite il motore si rompe: fumo nero e vapore dal cofano, qualche
+// fiammata, il motore tossisce e si spegne; poi l'auto viene rimessa in pista con 5 s di penalità.
+const OFFP={t:0,slow:0,warn:false};
+const ENGINE_FAIL={on:false,t:0,acc:0,pop:0};
+const OFF_PEN_EVERY=4,OFF_SLOW_MAX=5,ENGINE_PEN=5;
+const SMOKE_FX={size:[0.5,3.8],life:[1.8,3.2],alpha:0.7,rise:1.4,grav:0,kick:1.1};
+const STEAM_FX={size:[0.4,2.6],life:[0.9,1.6],alpha:0.45,rise:1.8,grav:0,kick:1.6};
+const FIRE_FX={size:[0.25,0.6],life:[0.25,0.55],alpha:0.95,rise:2.2,grav:0,kick:1.2};
+// scoppio: palla di fuoco che si gonfia, scintille e pezzi che ricadono, anello di polvere a terra
+const BLAST_FX={size:[0.6,3.4],life:[0.45,0.9],alpha:1,rise:2.6,grav:0,kick:3};
+const SPARK_FX={size:[0.05,0.09],life:[0.5,1.1],alpha:1,rise:0,grav:9,kick:5};
+const CHUNK_FX={size:[0.1,0.16],life:[0.8,1.4],alpha:1,rise:0,grav:11,kick:6};
+const RING_FX={size:[0.6,3],life:[0.9,1.6],alpha:0.6,rise:0.35,grav:0,kick:0.3};
+// ---- penalità ben visibili: riquadro rosso in alto al centro, con il totale della tappa ----
+let penTotal=0;
+const hudPen=document.getElementById('hudPen'),hpVal=document.getElementById('hpVal'),hpLbl=document.getElementById('hpLbl'),hpTot=document.getElementById('hpTot');
+function addPenalty(sec,reason){
+  if(!running||finishing||countdownT>0) return;
+  elapsed+=sec;penTotal+=sec;
+  hpVal.textContent='+'+sec+' s';hpLbl.textContent=reason;hpTot.textContent='Penalità totali +'+penTotal+' s';
+  hudPen.hidden=false;hudPen.classList.remove('pop');void hudPen.offsetWidth;hudPen.classList.add('pop');
+  clearTimeout(addPenalty.t);addPenalty.t=setTimeout(()=>{hudPen.hidden=true;},2900);
+  beep(196,0.22,0.12);setTimeout(()=>beep(147,0.3,0.12),140);
+}
+function penaltyHudReset(){penTotal=0;hudPen.hidden=true;clearTimeout(addPenalty.t);}
+function offTrackReset(){OFFP.t=0;OFFP.slow=0;OFFP.warn=false;ENGINE_FAIL.on=false;ENGINE_FAIL.t=0;penaltyHudReset();}
+function offTrackRules(dt){
+  if(!running||finishing||countdownT>0||CRASH.on||ENGINE_FAIL.on||replayMode||demoMode) return;
+  const spd=Math.hypot(car.speed,car.vy);
+  if(offTrack){
+    OFFP.t+=dt;
+    if(OFFP.t>=OFF_PEN_EVERY){OFFP.t-=OFF_PEN_EVERY;addPenalty(1,'Troppo tempo fuori pista');}
+    if(spd<28) OFFP.slow+=dt;
+  }else{OFFP.t=Math.max(0,OFFP.t-dt*2);OFFP.slow=Math.max(0,OFFP.slow-dt*0.06);}
+  if(OFFP.slow>OFF_SLOW_MAX*0.55&&!OFFP.warn){OFFP.warn=true;fsMsg('🌡 Il motore si sta surriscaldando: torna in strada!',2200);}
+  if(OFFP.slow<OFF_SLOW_MAX*0.3) OFFP.warn=false;
+  if(OFFP.slow>=OFF_SLOW_MAX) startEngineFail();
+}
+const EXPL={t:0,x:0,y:0,z:0};
+function engineBay(){
+  const c=Math.cos(car.angle),s=Math.sin(car.angle),fwd=curCarId==='buggy'?-0.75:0.75;
+  return [car.x*S3+c*fwd,carGroup.position.y+0.45,car.y*S3+s*fwd];
+}
+function startEngineFail(){
+  ENGINE_FAIL.on=true;ENGINE_FAIL.t=0;ENGINE_FAIL.acc=0;ENGINE_FAIL.pop=0;
+  fsMsg('💥 Motore esploso!',2200);
+  const [x,y,z]=engineBay();EXPL.t=1;EXPL.x=x;EXPL.y=y+0.3;EXPL.z=z;
+  // scoppio: boato basso e lungo, lamiera che si squarcia, vetri, detriti che ricadono
+  if(audioCtx){
+    thump(48,22,0.9,0.95);thump(90,40,0.35,0.6);
+    burst({type:'lowpass',f0:1400,f1:110,dur:1.1,gain:0.7,att:0.002});
+    debris({f:700,q:0.6,dur:1.3,gain:0.55,rate:0.55});debris({type:'highpass',f:3000,dur:0.8,gain:0.3,delay:0.05,rate:1.4});
+    sfxGlass(1);backfire(1);
+  }
+  rumble(1,1,700);camShake=Math.max(camShake,1.0);
+  // l'auto sobbalza
+  VB.vy+=1.4;VB.vr+=(Math.random()-0.5)*3;VB.vp+=(curCarId==='buggy'?-1:1)*1.6;
+  // palla di fuoco, scintille, pezzi di carrozzeria, anello di polvere sul terreno
+  const gc=GROUND_STYLE[surface.scene]?GROUND_STYLE[surface.scene].base:[150,130,100];
+  for(let i=0;i<46;i++){const a=Math.random()*6.28,u=Math.random(),sp=0.6+Math.random()*2.2;
+    emitParticle(x+(Math.random()-0.5)*0.4,y+0.1,z+(Math.random()-0.5)*0.4,Math.cos(a)*sp,BLAST_FX.kick*(0.4+u*0.9),Math.sin(a)*sp,BLAST_FX,u<0.3?[255,236,150]:u<0.75?[255,150,40]:[220,70,20],1.3,1);}
+  for(let i=0;i<70;i++){const a=Math.random()*6.28,sp=2+Math.random()*5;
+    emitParticle(x,y+0.2,z,Math.cos(a)*sp,SPARK_FX.kick*(0.5+Math.random()),Math.sin(a)*sp,SPARK_FX,[255,210,120],1,1);}
+  for(let i=0;i<26;i++){const a=Math.random()*6.28,sp=1.5+Math.random()*3.5;
+    emitParticle(x,y+0.2,z,Math.cos(a)*sp,CHUNK_FX.kick*(0.5+Math.random()*0.8),Math.sin(a)*sp,CHUNK_FX,Math.random()<0.5?[30,30,32]:[90,90,96],1,1);}
+  const g=carGroup.position.y-CAR_BASE_Y+0.05;
+  for(let i=0;i<32;i++){const a=i/32*6.28,sp=3+Math.random()*1.5;
+    emitParticle(x+Math.cos(a)*0.5,g,z+Math.sin(a)*0.5,Math.cos(a)*sp,0.2,Math.sin(a)*sp,RING_FX,[Math.min(255,gc[0]*0.7+70),Math.min(255,gc[1]*0.7+60),Math.min(255,gc[2]*0.7+50)],1.2,1);}
+}
+// a ogni fotogramma durante la rottura: l'auto si ferma, il motore brucia e fuma, piccoli scoppi
+function engineFailFrame(dt){
+  if(EXPL.t>0) EXPL.t=Math.max(0,EXPL.t-dt*1.6);
+  if(!ENGINE_FAIL.on) return;
+  ENGINE_FAIL.t+=dt;
+  const [cx,cy,cz]=engineBay();
+  ENGINE_FAIL.acc+=dt*(ENGINE_FAIL.t<2.4?95:30);
+  while(ENGINE_FAIL.acc>=1){
+    ENGINE_FAIL.acc-=1;
+    const k=Math.random(),ox=(Math.random()-0.5)*0.6,oz=(Math.random()-0.5)*0.6;
+    if(k<0.5) emitParticle(cx+ox,cy,cz+oz,(Math.random()-0.5)*0.8,SMOKE_FX.kick*(0.6+Math.random()*0.6),(Math.random()-0.5)*0.8,SMOKE_FX,[30,28,27],1.5,1.1);
+    else if(k<0.72) emitParticle(cx+ox,cy+0.05,cz+oz,(Math.random()-0.5)*0.6,STEAM_FX.kick*(0.7+Math.random()*0.5),(Math.random()-0.5)*0.6,STEAM_FX,[236,238,240],1,1);
+    else if(ENGINE_FAIL.t<2.4) emitParticle(cx+ox*0.6,cy-0.05,cz+oz*0.6,(Math.random()-0.5)*0.5,FIRE_FX.kick*(0.8+Math.random()*0.6),(Math.random()-0.5)*0.5,FIRE_FX,Math.random()<0.4?[255,220,120]:[255,120,30],1.4,1);
+  }
+  // scoppiettii che seguono il botto principale
+  ENGINE_FAIL.pop-=dt;
+  if(ENGINE_FAIL.t>0.35&&ENGINE_FAIL.t<1.8&&ENGINE_FAIL.pop<=0){
+    ENGINE_FAIL.pop=0.18+Math.random()*0.35;backfire(0.5+Math.random()*0.5);
+    for(let i=0;i<8;i++) emitParticle(cx,cy+0.1,cz,(Math.random()-0.5)*2,2+Math.random()*2,(Math.random()-0.5)*2,BLAST_FX,[255,160,50],0.6,1);
+    for(let i=0;i<10;i++){const a=Math.random()*6.28;emitParticle(cx,cy+0.1,cz,Math.cos(a)*3,3+Math.random()*3,Math.sin(a)*3,SPARK_FX,[255,210,120],1,1);}
+  }
+  if(ENGINE_FAIL.t>=3.2){
+    ENGINE_FAIL.on=false;OFFP.slow=0;OFFP.t=0;OFFP.warn=false;
+    CRASH.on=false;CRASH.right=null;recoverCar();
+    addPenalty(ENGINE_PEN,'Motore esploso · auto rimessa in pista');
+  }
+}
 const PENALTY_S=3;
 function penaltyRecover(msg){
   CRASH.on=false;CRASH.right=null;
   recoverCar();
-  if(running&&!finishing&&countdownT<=0) elapsed+=PENALTY_S;
-  fsMsg(msg+' · +'+PENALTY_S+' s',2600);
+  addPenalty(PENALTY_S,msg.replace(/^[^A-Za-zÀ-ú]+/,''));
   rumble(0.6,0.6,300);
 }
 // il pubblico può raggiungere l'auto e rimetterla sulle ruote? (all'aperto, vicino alla strada, su terreno
@@ -8334,13 +9314,13 @@ function startRescue(){
     const lat=side*(k===3?13:9.5);
     const tx=cx+sx*lat+fx*along,ty=cy+sz*lat+fz*along;
     // arrivano da bordo strada (dal lato più vicino al loro posto), qualche decina di metri più in là
-    const rs=(k%2?1:-1)*(Math.random()<0.7?1:-1),dist=w.half+24+Math.random()*16,alongS=(Math.random()-0.5)*36;
+    const rs=(k%2?1:-1)*(Math.random()<0.7?1:-1),dist=w.half+17+Math.random()*10,alongS=(Math.random()-0.5)*26;
     const x0=w.x+Math.cos(n)*rs*dist+Math.cos(w.heading)*alongS,y0=w.y+Math.sin(n)*rs*dist+Math.sin(w.heading)*alongS;
     // due commissari col gilet e tre spettatori
     const look=k<2?officialLook(k*3):randomLook(rng,rng()<0.35);
     const h={i:HUM.free.pop(),bank:HUM.rescue,gen:HUM.gen,look,sc:0.95+Math.random()*0.08,phase:Math.random()*6,kind:'watch',item:null,
-      hL:new THREE.Vector3(),hR:new THREE.Vector3(),x:x0,y:y0,hx:x0,hy:y0,tx,ty,delay:Math.random()*0.25,arrived:false,
-      speed:40+Math.random()*6,yaw:Math.atan2(tx-x0,ty-y0),wx:x0*S3,wy:0,wz:y0*S3,mv:null,rpose:null,state:'idle'};
+      hL:new THREE.Vector3(),hR:new THREE.Vector3(),x:x0,y:y0,hx:x0,hy:y0,tx,ty,delay:Math.random()*0.12,arrived:false,
+      speed:52+Math.random()*6,yaw:Math.atan2(tx-x0,ty-y0),wx:x0*S3,wy:0,wz:y0*S3,mv:null,rpose:null,state:'idle'};
     humColors(h);
     h.sh=new THREE.Mesh(blobShadowGeo,blobShadowMat);grp.add(h.sh);
     RESCUE.helpers.push(h);
@@ -8434,16 +9414,15 @@ function rescueFrame(dt){
   }
   humFlush();
   // tutti arrivati (o dopo un po' comunque): si spinge e l'auto si raddrizza
-  if(RESCUE.phase==='come'&&(allIn||RESCUE.t>3.5)&&CRASH.on&&!CRASH.right){RESCUE.phase='push';startRighting();}
+  if(RESCUE.phase==='come'&&(allIn||RESCUE.t>2.4)&&CRASH.on&&!CRASH.right){RESCUE.phase='push';startRighting();}
   // auto di nuovo sulle ruote: si torna a bordo strada e poi si sparisce
   if(RESCUE.phase==='push'&&!CRASH.on){RESCUE.phase='leave';RESCUE.t=0;}
   if(RESCUE.phase==='leave'&&(RESCUE.t>6||RESCUE.helpers.every(h=>Math.hypot(h.hx-h.x,h.hy-h.y)<1))) rescueClear();
 }
-// raddrizzamento: in ~1 s la scocca torna sulle ruote (sollevata e girata dal pubblico), nella direzione in cui guardava
+// raddrizzamento: in meno di 1 s la scocca torna sulle ruote (sollevata e girata dal pubblico), nel senso di marcia
 function startRighting(){
-  const f=_cf.set(0,0,1).applyQuaternion(CRASH.q);
-  let yaw=Math.atan2(f.x,f.z);
-  if(Math.hypot(f.x,f.z)<0.2) yaw=Math.atan2(Math.cos(car.angle),Math.sin(car.angle));
+  // si rimette sulle ruote nel senso di marcia della strada, lì dove si trova (niente spostamenti in pianta)
+  const hd=wps[lastIdx].heading,yaw=Math.atan2(Math.cos(hd),Math.sin(hd));
   const q1=new THREE.Quaternion().setFromEuler(new THREE.Euler(0,yaw,0,'YXZ'));
   const p1=CRASH.p.clone();p1.y=groundAt(car.x,car.y)+CAR_BASE_Y+0.02;
   CRASH.right={t:0,q0:CRASH.q.clone(),q1,p0:CRASH.p.clone(),p1};
@@ -8465,11 +9444,11 @@ function rightingClear(){
 function crashUpdate(dt){
   if(CRASH.right){
     const R=CRASH.right;R.t+=dt;
-    const k=Math.min(1,R.t/1.05),e=k*k*(3-2*k);
+    const k=Math.min(1,R.t/0.8),e=k*k*(3-2*k);
     CRASH.q.slerpQuaternions(R.q0,R.q1,e);
     CRASH.p.lerpVectors(R.p0,R.p1,e);CRASH.p.y+=Math.sin(Math.PI*e)*0.5;rightingClear();
     car.x=CRASH.p.x/S3;car.y=CRASH.p.z/S3;car.speed=0;car.vy=0;carVisElev=CRASH.p.y-CAR_BASE_Y;VB.contacts=0;slipAmt=0;
-    if(R.t>=1.2){CRASH.right=null;CRASH.v.set(0,0,0);CRASH.w.set(0,0,0);exitCrash();}
+    if(R.t>=0.92){CRASH.right=null;CRASH.v.set(0,0,0);CRASH.w.set(0,0,0);exitCrash();}
     return;
   }
   // il pubblico sta arrivando: l'auto resta ferma dov'è
@@ -8638,7 +9617,7 @@ const pMat=new THREE.ShaderMaterial({
       float r2=dot(q,q)*4.0;
       vec3 n=normalize(vec3(q.x*2.0,-q.y*2.0,sqrt(max(0.05,1.0-r2))));
       float sunL=max(dot(n,uSunV),0.0),back=pow(max(-uSunV.z,0.0),2.0)*(1.0-sqrt(min(r2,1.0)));
-      float lit=0.76+0.36*sunL*uSunAmt+0.3*back*uSunAmt+0.12*(-q.y);
+      float lit=0.84+0.3*sunL*uSunAmt+0.3*back*uSunAmt+0.1*(-q.y);
       gl_FragColor=vec4(vCol*uLight*(0.72+0.28*t.r)*lit,a*(0.85+0.3*(1.0-r2)));
       #include <fog_fragment>
     }`,
@@ -8691,6 +9670,34 @@ function clearTyreFX(){
 // un fotogramma: per ogni ruota a terra decide segno e scia in base a fondo, conformazione del terreno,
 // acqua presente, velocità e slittamento
 const _sunV=new THREE.Vector3();
+// Colore di polvere e granelli ricavato dal fondo vero dello stage (la polvere è il fondo sollevato: più chiara e un
+// po' più smorta, perché l'aria la illumina e la diluisce), così la scia si accorda con la strada e con il terreno.
+// Fuori strada sul prato si solleva la terra sotto l'erba, non il verde.
+const _dustCache=new Map();
+function tyreDustColor(kind,off){
+  const key=course+'|'+kind+'|'+off;if(_dustCache.has(key)) return _dustCache.get(key);
+  let c;
+  if(kind==='asphalt') c=[214,214,218];                                 // fumo delle gomme
+  else if(kind==='wet'||kind==='snow'||kind==='powder'||kind==='water') c=(TYRE_FX[kind]||TYRE_FX.snow).dust;
+  else if(kind==='mud') c=surface.base.map(v=>Math.round(v*0.72));     // zolle di fango
+  // dune rosse: sabbia fine color albicocca sulla pista, terra rossa più rosata fuori (polvere sottile e luminosa)
+  else if(surface.scene==='desert') c=off?[236,168,128]:[246,206,158];
+  else{
+    const sc=surface.scene,gs=GROUND_STYLE[sc]&&GROUND_STYLE[sc].base;
+    const src=off?(sc==='desert'?gs:sc==='snow'?[240,244,250]:sc==='town'?[196,192,186]:[150,128,96]):surface.base;
+    // (schiarita verso un bianco caldo, che mantiene il tono del fondo: sabbia arancio, terra bruna, ghiaia grigia)
+    const L=[244,226,196],k=off&&sc==='snow'?0:0.3;
+    c=src.map((v,i)=>Math.round(Math.min(255,(v+(L[i]-v)*k)*1.1)));
+  }
+  _dustCache.set(key,c);return c;
+}
+function tyreGrainColor(kind,off){
+  const key='g'+course+'|'+kind+'|'+off;if(_dustCache.has(key)) return _dustCache.get(key);
+  const sc=surface.scene,gs=GROUND_STYLE[sc]&&GROUND_STYLE[sc].base;
+  const src=off?(sc==='desert'?gs:sc==='snow'?[226,232,244]:[92,76,54]):(kind==='asphalt'||kind==='wet'?[70,70,74]:surface.base);
+  const c=src.map(v=>Math.round(v*(off&&sc!=='desert'&&sc!=='snow'?1:0.82)));
+  _dustCache.set(key,c);return c;
+}
 function updateTyreFX(dt,active){
   const m=carModels[curCarId];
   if(active&&m&&VB.init){
@@ -8772,7 +9779,7 @@ function updateTyreFX(dt,active){
         emitParticle(px,h+0.05,pz,
           wvx*back+s*lat*S3*8+(Math.random()-0.5)*0.6,
           src.kick*(0.5+Math.random()*0.7)*km,
-          wvz*back-c*lat*S3*8+(Math.random()-0.5)*0.6,src,src.dust,sm,rm);
+          wvz*back-c*lat*S3*8+(Math.random()-0.5)*0.6,src,src===fx?tyreDustColor(fxk,off):src.dust,sm,rm);
       }
       // acqua sul fondo: nebbia di goccioline dietro l'auto, tanto più densa e alta quanta più acqua c'è
       // e quanto più si va forte (sulle pozzanghere un vero muro d'acqua)
@@ -8792,7 +9799,7 @@ function updateTyreFX(dt,active){
         }
       }
       // granelli e zolle lanciati dalle ruote che slittano o pattinano (più in alto con più velocità)
-      const gcol=TYRE_FX.grain[inSnow?'powder':fxk];
+      const gcol=TYRE_FX.grain[inSnow?'powder':fxk]?(inSnow?TYRE_FX.grain.powder:tyreGrainColor(fxk,off)):null;
       if(gcol&&!w.wet&&water<0.6){
         const gr=(w.front?0.4:1)*(60*slip+70*spinW)*(off&&fxk==='grass'?0.6:1)*(0.6+0.8*loose+(hard?0:0.3));
         w.grainAcc=(w.grainAcc||0)+gr*dt;
@@ -8916,13 +9923,22 @@ function updateScene(){
   sun.target.updateMatrixWorld();
 
   // (durante un ribaltamento la camera esce dall'abitacolo e inquadra l'auto da fuori)
-  const onboard=!demoMode&&!replayMode&&!CRASH.on&&!(countdownT>0||finishing)&&(camMode==='hood'||camMode==='bumper');
+  const onboard=!demoMode&&!replayMode&&!CRASH.on&&!(countdownT>0||finishing)&&(camMode==='hood'||camMode==='bumper'||camMode==='cockpit');
+  GLASS_U.uGlIn.value=onboard&&camMode==='cockpit'?1:0;
+  {const ud=carModels[curCarId]&&carModels[curCarId].body.userData,v=!(onboard&&camMode==='cockpit'&&!demoMode&&!replayMode);
+   if(ud&&ud.drvHelmet) ud.drvHelmet.meshes.forEach(q=>q.visible=v);if(ud&&ud.drvBody) ud.drvBody.forEach(q=>q.visible=v);}
+  // volante dell'abitacolo che gira con lo sterzo (le mani del pilota ci sono sopra)
+  {const ck=carModels[curCarId]&&carModels[curCarId].body.userData.cock;
+   if(ck&&ck.spin){ck.spin.rotation.z=steerAng*3.2;cockArms(ck);}
+   // lancette del quadro: contagiri e tachimetro
+   if(ck&&ck.tach){const f=Math.max(0,Math.min(1,rpm/8000)),v=Math.max(0,Math.min(1,Math.abs(car.speed)*KMH/200));
+     ck.tach.rotation.z=(135-f*270)*Math.PI/180;ck.speedo.rotation.z=(135-v*270)*Math.PI/180;}}   // (destra = angolo positivo = volante in senso orario visto dal pilota)
   {const tb=tunnelCamBlend();tunCamS+=(tb-tunCamS)*(tb>tunCamS?0.18:0.05);if(tunCamS<0.002) tunCamS=0;}   // (si esce più piano di come si entra)
   if(demoMode) demoCamera(cx,cz,dirX,dirZ);
   else if(replayMode) replayCamera(cx,cz,dirX,dirZ);
   else if(onboard){
     onboardCamera(camMode);
-    if(camShake>0.01){camera.position.y+=(Math.random()-0.5)*camShake*0.08;}
+    if(camShake>0.01&&camMode!=='cockpit'){camera.position.y+=(Math.random()-0.5)*camShake*0.08;}   // (abitacolo: vedi cockpitCamera)
     camYaw=car.angle;
   }
   else if(countdownT>0||finishing){
@@ -8952,7 +9968,7 @@ function updateScene(){
     const cdx=Math.cos(camYaw),cdz=Math.sin(camYaw);
     const airPull=carAirY*0.4, zoomIn=jumpAnticipation*1.6;
     // distanza e altezza secondo la telecamera scelta
-    let D=camMode==='far'?11:camMode==='heli'?17:7;let Hc=camMode==='far'?5.2:camMode==='heli'?12:3.6;
+    let D=camMode==='far'?11:camMode==='heli'?17:camMode==='close'?4.9:7;let Hc=camMode==='far'?5.2:camMode==='heli'?12:camMode==='close'?2.35:3.6;
     if(CRASH.on){D+=2.5;Hc+=2.2;}   // ribaltamento: un po' più lontano e in alto, per vedere tutta la scena
     const camY=Hc+carVisElev+carAirY*0.6-jumpAnticipation*0.3;
     // davanti alla tribuna di partenza la telecamera si avvicina invece di finirci dentro
@@ -8984,8 +10000,9 @@ function updateScene(){
       if(camera.position.y<camGround) camera.position.y=camGround;
     }
   }
+  if(onboard&&camMode==='cockpit'&&!demoMode&&!replayMode) camera.up.copy(_cockUp);else camera.up.set(0,1,0);
   camera.lookAt(camTarget);
-  if(!replayMode) camera.fov=demoMode?50:onboard?(camMode==='bumper'?74:68):camMode==='heli'?48:60+Math.min(4,carAirY*1.8)-jumpAnticipation*4;
+  if(!replayMode) camera.fov=demoMode?50:onboard?(camMode==='bumper'?74:camMode==='cockpit'?COCK_CFG.fov:68):camMode==='heli'?48:60+Math.min(4,carAirY*1.8)-jumpAnticipation*4;
   if(!onboard&&tunCamS>0) camera.fov+=(64-camera.fov)*tunCamS;   // in galleria un'inquadratura un po' più ampia
   camera.updateProjectionMatrix();
   skyMesh.position.copy(camera.position);panoMesh.position.copy(camera.position);
@@ -9183,7 +10200,8 @@ function demoCamera(cx,cz,dirX,dirZ){
 // ======================= TELECAMERE DI GARA =======================
 // chase (inseguimento), far (inseguimento alto e lontano), hood (sul cofano), bumper (paraurti, rasoterra),
 // heli (elicottero). Si cambiano con il tasto "Cambia telecamera" (C / Y); la scelta viene ricordata.
-const CAMS=[{id:'chase',label:'Inseguimento'},{id:'far',label:'Inseguimento lontano'},{id:'hood',label:'Cofano'},{id:'bumper',label:'Paraurti'},{id:'heli',label:'Elicottero'}];
+const CAMS=[{id:'chase',label:'Inseguimento'},{id:'close',label:'Inseguimento ravvicinato'},{id:'far',label:'Inseguimento lontano'},
+  {id:'heli',label:'Aerea'},{id:'hood',label:'Cofano'},{id:'cockpit',label:'Abitacolo'}];
 let camMode='chase';
 try{const c=localStorage.getItem('rallyDriftCam');if(CAMS.some(x=>x.id===c)) camMode=c;}catch(e){}
 function cycleCamera(){
@@ -9195,7 +10213,53 @@ function cycleCamera(){
 // [altezza, avanzamento] della camera "cofano": appena sopra il tetto, in cima al parabrezza (vista oltre il cofano)
 const HOOD_CAM={hatch:[0.93,0.15],classic:[0.9,0.1],raid:[1.33,0.2],buggy:[1.26,0.2]};
 const _cv=new THREE.Vector3(),_ct=new THREE.Vector3();
+// visuale abitacolo: dagli occhi del pilota (appena davanti al casco), segue scocca, rollio e beccheggio;
+// si vedono cruscotto, volante che gira con le mani sopra, montanti, gabbia e strada attraverso il parabrezza
+const _ce1=new THREE.Vector3(),_ce2=new THREE.Vector3();
+function cockpitCamera(){
+  const m=carModels[curCarId],ck=m&&m.body.userData.cock;
+  if(!ck){onboardCamera('hood');return;}
+  // (prima va aggiornata la posizione dell'auto in questo fotogramma: altrimenti la camera resta indietro
+  // di un passo, di più quanto più si va veloci, e trema quando la durata dei fotogrammi varia)
+  carGroup.updateMatrixWorld(true);
+  // punto di vista fisso nella scocca (come una camera montata sul casco a busto fermo): l'abitacolo resta
+  // immobile nell'inquadratura, braccia e volante sempre al loro posto; si muove solo il mondo fuori
+  let e,t;
+  if(ck.tgt){e=ck.eye;t=ck.tgt;}   // buggy: posizione di riposo della testa, calcolata alla costruzione
+  else{
+    const hm=m.body.userData.drvHelmet;e=hm?[hm.pos[0],hm.pos[1]+0.045,hm.pos[2]+0.02]:ck.eye;   // occhi dentro il casco (nascosto)
+    t=[e[0]*0.6,e[1]-0.2,e[2]+2];
+  }
+  // regolazioni del sedile scelte nella pausa (altezza e posizione avanti/indietro)
+  const sh=COCK_CFG.h,sz=COCK_CFG.z;
+  m.body.localToWorld(_ce1.set(e[0],e[1]+sh,e[2]+sz));m.body.localToWorld(_ce2.set(t[0],t[1]+sh,t[2]+sz));
+  // l'orizzonte si inclina con la scocca (rollio), così l'abitacolo non ruota davanti agli occhi
+  _cockUp.set(0,1,0).transformDirection(m.body.matrixWorld);
+  camera.position.copy(_ce1);camTarget.copy(_ce2);
+}
+const _cockUp=new THREE.Vector3(0,1,0);
+// sedile e campo visivo della visuale abitacolo (salvati): altezza e posizione in unità del modello, fov in gradi
+const COCK_CFG={h:0,z:0,fov:72};
+const COCK_LIM={h:[-0.06,0.08,0.01],z:[-0.1,0.1,0.01],fov:[55,95,1]};
+try{Object.assign(COCK_CFG,JSON.parse(localStorage.getItem('rallyDriftCockpit')||'{}'));}catch(e){}
+function adjustCockpit(k,d){
+  const [lo,hi,st]=COCK_LIM[k];
+  let v=Math.round((COCK_CFG[k]+d*st)/st)*st;
+  COCK_CFG[k]=Math.max(lo,Math.min(hi,+v.toFixed(3)));
+  try{localStorage.setItem('rallyDriftCockpit',JSON.stringify(COCK_CFG));}catch(e){}
+  updateCockpitLabels();
+}
+// (1 unità del modello ≈ 1,79 m: le regolazioni del sedile si mostrano in centimetri)
+const cockCm=v=>(v>0?'+':v<0?'−':'')+Math.abs(Math.round(v*179))+' cm';
+function updateCockpitLabels(){
+  for(const b of document.querySelectorAll('[data-act="cock"]')){
+    const k=b.dataset.k,v=COCK_CFG[k];
+    b.querySelector('.vPct').textContent=k==='fov'?Math.round(v)+'°':cockCm(v);
+    const [lo,hi]=COCK_LIM[k];b.querySelector('.vBar i').style.width=((v-lo)/(hi-lo)*100).toFixed(1)+'%';
+  }
+}
 function onboardCamera(kind){
+  if(kind==='cockpit'){cockpitCamera();return;}
   const h=HOOD_CAM[curCarId]||HOOD_CAM.hatch,my=-CAR_BASE_Y+0.02;
   if(kind==='hood'){_cv.set(0,my+h[0],h[1]);_ct.set(0,my+h[0]-0.6,h[1]+20);}
   else{_cv.set(0,my+0.3,1.42);_ct.set(0,my+0.1,21);}
@@ -9720,7 +10784,7 @@ function askConfirm(act){
 function updatePauseLabels(){
   const c=document.getElementById('pCam');if(c) c.textContent='🎥 Telecamera: '+CAMS.find(x=>x.id===camMode).label;
   document.getElementById('pBack').textContent=pauseFrom==='overlay'?'← Torna al risultato':'← Indietro';
-  updateDisplayLabels();updateMuteLabel();
+  updateDisplayLabels();updateMuteLabel();updateCockpitLabels();
 }
 function showPausePage(p){
   pausePage=p;pauseSel=0;resetPConfirm();
@@ -9777,6 +10841,10 @@ function pauseAction(act){
   else if(act==='pickc'){const b=pauseBtns()[pauseSel],c=b?+b.dataset.c:0;if(c){closePause();startTimeAttack(c);}}
   else if(act==='back') pauseBack();
   else if(act==='cam'){cycleCamera();updatePauseLabels();}
+  else if(act==='cock'){   // clic / Invio: un passo avanti, dal massimo si riparte dal minimo
+    const b=pauseBtns()[pauseSel];if(!b) return;const k=b.dataset.k,[lo,hi]=COCK_LIM[k];
+    if(COCK_CFG[k]>=hi-1e-6){COCK_CFG[k]=lo;adjustCockpit(k,0);}else adjustCockpit(k,k==='fov'?2:1);
+  }
   else if(act==='restart'){
     if(!askConfirm('restart')) return;
     closePause();
@@ -9790,7 +10858,9 @@ function pauseAction(act){
   else if(act==='quit'){if(!askConfirm('quit')) return;closePause();running=false;showTitle();}
 }
 // ◀▶ su una barra del volume: ±10%
-function adjustVolRow(b,d){if(b&&b.dataset.act==='vol'){initAudio();setVolume(b.dataset.k,volOf(b.dataset.k)+d*0.1);return true;}return false;}
+function adjustVolRow(b,d){
+  if(b&&b.dataset.act==='cock'){adjustCockpit(b.dataset.k,d*(b.dataset.k==='fov'?2:1));return true;}
+  if(b&&b.dataset.act==='vol'){initAudio();setVolume(b.dataset.k,volOf(b.dataset.k)+d*0.1);return true;}return false;}
 function movePause(d){const n=pauseBtns().length;pauseSel=(pauseSel+d+n)%n;renderPauseSel();}
 function pauseKey(e){
   if(['ArrowUp','KeyW'].includes(e.code)){e.preventDefault();movePause(-1);}
@@ -9922,7 +10992,7 @@ setTimeout(alignKarma,300);
 const TITLE_STAGES=[5,2,8,9]; // tramonto, mattino, crepuscolo, alba: gli sfondi più scenografici
 let titleSub='main',titleSel=0,savedCarId=curCarId;
 const titleTA=document.getElementById('titleTA');
-const TITLE_LISTS={main:titleMain,options:titleOpts,car:titleGarage,ta:titleTA,board:titleBoard,name:titleName};
+const TITLE_LISTS={main:titleMain,options:titleOpts,car:titleGarage,ta:titleTA,board:titleBoard,name:titleName,lang:document.getElementById('titleLang')};
 let carCtx={mode:'show'},afterName=null;
 // ---- nome del pilota (chiesto la prima volta che si sceglie una modalità; si cambia dalle opzioni) ----
 let pilotName='';try{pilotName=localStorage.getItem('rallyDriftPilot')||'';}catch(e){}
@@ -9982,7 +11052,7 @@ function renderBoard(){
   boardTable.innerHTML=boardHTML(c?board.stages[c]:board.career,10,lastEntryId);
 }
 function cycleBoard(d){boardIdx=(boardIdx+d+COURSE_ORDER.length+1)%(COURSE_ORDER.length+1);renderBoard();}
-const TITLE_HEAD={options:'Opzioni',ta:'Time Attack · scegli la pista',board:'Classifica',name:'Nome del pilota'};
+const TITLE_HEAD={options:'Opzioni',ta:'Time Attack · scegli la pista',board:'Classifica',name:'Nome del pilota',lang:'🌐 Lingua · Language'};
 // Time Attack: elenco delle piste con fondo, ora del giorno e record; la pista evidenziata compare sullo sfondo
 function renderTAList(){
   let h='';
@@ -10151,6 +11221,8 @@ window.addEventListener('keydown',e=>{
 function titleAction(act){
   if(act==='play') beginFlow({mode:'career'});
   else if(act==='options'){titleSub='options';titleSel=0;renderTitleSel();}
+  else if(act==='lang'){titleSub='lang';renderLangList();titleSel=Math.max(0,LANGS.findIndex(l=>l.id===LANG));renderTitleSel();}
+  else if(act==='setlang'){const b=titleBtns()[titleSel];if(b&&b.dataset.l){setLang(b.dataset.l);renderLangList();renderTitleSel();}}
   else if(act==='ta'){titleSub='ta';titleSel=0;taPreviewC=0;renderTAList();renderTitleSel();}
   else if(act==='course'){const b=titleBtns()[titleSel];clearTimeout(taPreviewT);beginFlow({mode:'ta',course:+b.dataset.c});}
   else if(act==='showroom') openCars({mode:'show'});
@@ -10221,7 +11293,7 @@ function titleKey(e){
   else if(['ArrowLeft','KeyA','ArrowRight','KeyD'].includes(e.code)){if(titleSide(/Right|KeyD/.test(e.code)?1:-1)) e.preventDefault();}
   else if(['Enter','Space','NumpadEnter'].includes(e.code)){e.preventDefault();if(!e.repeat) titleAction(titleBtns()[titleSel].dataset.act);}
 }
-for(const list of [titleMain,titleOpts,titleGarage,titleTA,titleBoard,titleName]){
+for(const list of [titleMain,titleOpts,titleGarage,titleTA,titleBoard,titleName,TITLE_LISTS.lang]){
   list.addEventListener('click',e=>{if(e.target.closest('.vBar')) return;const b=e.target.closest('button');if(b){b.blur();titleSel=titleBtns().indexOf(b);titleAction(b.dataset.act);}});
   list.addEventListener('mouseover',e=>{const b=e.target.closest('button');if(b&&titleBtns().includes(b)){titleSel=titleBtns().indexOf(b);renderTitleSel();}});
 }
@@ -10498,7 +11570,7 @@ function touchFrame(){
   const show=touchOn&&running&&!paused&&!replayMode&&!titleOpen()&&!settingsOpen();
   if(show!==touchShown){touchShown=show;touchUI.classList.toggle('show',show);if(!show) touchReset();else steerBaseHome();}
   const rt=touchOn?'● REPLAY  ·  tocca per uscire':'● REPLAY  ·  Invio / Esc / A / B per uscire';
-  if(replayEl.textContent!==rt) replayEl.textContent=rt;
+  if(replayEl.dataset.src!==rt){replayEl.dataset.src=rt;replayEl.textContent=rt;}   // (il testo mostrato può essere tradotto)
 }
 // telefono in verticale durante la gara: pausa (compare l'invito a ruotarlo)
 window.addEventListener('resize',()=>{if(touchOn&&innerHeight>innerWidth&&running&&!paused) openPause();if(touchShown) steerBaseHome();});
@@ -10778,6 +11850,7 @@ function navFrame(){
 }
 updateHints();
 oB.onclick=startGame;
+installI18n();   // traduzione del DOM nella lingua scelta (dopo che tutti i testi iniziali sono al loro posto)
 
 showTitle();
 updateScene();
