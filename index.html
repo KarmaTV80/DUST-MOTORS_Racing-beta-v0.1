@@ -1126,6 +1126,9 @@ function buildProps(wps,stage,theme,trees,nearStruct,railPoints){
           if(rng()<0.35){const [x,y]=at(i-1,side,7);add({type:'adcol',x,y,rot:0,r:4},4);}
           // albero della cuccagna bavarese (Maibaum) nelle piazzette dietro le transenne
           else if(rng()<0.45&&maypoles<4){const [x,y]=at(Math.max(4,i-1),side,FL+9);if(add({type:'maypole',x,y,rot:wps[Math.max(4,i-1)].heading,r:3,fp:6},FL+4)) maypoles++;}
+          // altrimenti, nella piazzetta, un tiglio o un ippocastano (alberi da piazza bavaresi)
+          else{const ii=Math.max(4,i-1),[x,y]=at(ii,side,FL+11);
+            if(free(x,y,6)&&offRoad(x,y,FL+6)){trees.push({x,y,elev:wps[ii].elev,sp:rng()<0.6?'linden':'chestnut',sz:0.55+rng()*0.15,idx:ii,seed:rng()});occ(x,y,6);}}
           block=3+Math.floor(rng()*5);continue;
         }
         const si=Math.floor(rng()*styles.length),st=styles[si];
@@ -1188,8 +1191,16 @@ function buildProps(wps,stage,theme,trees,nearStruct,railPoints){
   // --- tratti con recinzione, lampioni, cumuli e paline ---
   const runs=(count,len,fn)=>{for(let c=0;c<count;c++){const s=15+Math.floor(rng()*(N-60)),e=Math.min(N-15,s+len[0]+Math.floor(rng()*len[1]));
     const side=rng()<0.5?-1:1;if(voidSide(side)) continue;for(let i=s;i<=e;i++) if(!skip(i)) fn(i,side,i-s);}};
+  // tratti nei campi: staccionate di legno ai lati della strada bianca (con qualche varco) e rotoballe sparse
+  for(let i=4;i<N-4;i++){
+    if(!wps[i].field||skip(i)) continue;
+    for(const side of [-1,1]){
+      if(i%2===0&&((i>>3)+(side>0?1:0))%5!==0){const [x,y]=at(i,side,16);add({type:'fence',x,y,rot:wps[i].heading,r:0,fp:1},8);}
+      if(rng()<0.07){const [x,y]=at(i,side,40+rng()*160,(rng()-0.5)*20);add({type:'bale',x,y,rot:rng()*6.28,s:0.9+rng()*0.25,r:5},20);}
+    }
+  }
   if(theme==='city'){
-    runs(Math.round(N/160),[30,40],(i,side,k)=>{if(k%4===0){const [x,y]=at(i,side,7);add({type:'lamp',x,y,rot:wps[i].heading,side,r:2.5},3);}});
+    runs(Math.round(N/160),[30,40],(i,side,k)=>{if(k%4===0&&!wps[i].field){const [x,y]=at(i,side,7);add({type:'lamp',x,y,rot:wps[i].heading,side,r:2.5},3);}});
     runs(Math.round(N/200),[20,30],(i,side,k)=>{const [x,y]=at(i,side,20);add({type:'fence',x,y,rot:wps[i].heading,white:true,r:0,fp:1},10);});
   }
   if(theme==='mountain'||theme==='snow'){
@@ -1233,6 +1244,28 @@ function buildProps(wps,stage,theme,trees,nearStruct,railPoints){
       }
     }
   }
+  // --- Cave di pietra: i tratti rimasti spogli (pochi elementi e pochi alberi attorno) si riempiono con
+  // gruppi di massi, speroni, cespugli e cataste di legna, così il paesaggio è fitto in modo uniforme ---
+  if(stage===3){
+    const crowd=(x,y,R)=>{let c=0;const gx=Math.floor(x/G),gy=Math.floor(y/G),k=Math.ceil(R/G);
+      for(let a=-k;a<=k;a++) for(let b=-k;b<=k;b++){const cl=grid.get((gx+a)+','+(gy+b));if(cl) for(const o of cl) if(Math.hypot(o[0]-x,o[1]-y)<R) c++;}
+      return c;};
+    for(let i=16;i<N-16;i+=4){
+      if(skip(i)) continue;
+      for(const side of [-1,1]){
+        const [cx,cy]=at(i,side,60);
+        if(crowd(cx,cy,120)>=4) continue;
+        const n=3+Math.floor(rng()*3);
+        for(let k=0;k<n;k++){
+          const lat=16+rng()*130,[x,y]=at(i,side,lat,(rng()-0.5)*40),t=rng();
+          if(t<0.45){const s=lat<34?0.5+rng()*0.8:0.9+rng()*1.8;add({type:'rock',x,y,rot:rng()*6.28,s,r:7*s,fp:Math.max(4,7*s)},8);}
+          else if(t<0.62&&lat>60){const s=1.2+rng()*1.6;add({type:'crag',x,y,rot:rng()*6.28,s,r:6*s,fp:5*s},6*s);}
+          else if(t<0.9) add({type:'bush',x,y,rot:rng()*6.28,s:0.8+rng()*0.5,r:0,fp:4},8);
+          else add({type:'logs',x,y,rot:rng()*6.28,s:0.9+rng()*0.3,r:8,fp:8},10);
+        }
+      }
+    }
+  }
   // --- edifici lontani dalla strada (casolari, baite, capanni) ---
   const bType={city:'farm',mountain:'barn',snow:'chalet',desert:'shack'}[theme]||'house';
   const bProb={city:0.05,mountain:0.025,snow:0.025,desert:0.015}[theme]||0.02;
@@ -1271,19 +1304,33 @@ function buildProps(wps,stage,theme,trees,nearStruct,railPoints){
 // dal ciglio, scala delle macchie di bosco, quota di terreno a bosco, probabilità in radura/nel bosco,
 // taglia (min-max) e limite del bosco (metri sopra la strada, oltre i quali gli alberi si diradano)
 const FLORA={
-  1:{mix:[['oak',3],['poplar',2],['cypress',1.5],['umbrella',0.8],['birch',0.7],['bush',2]],cand:7,reach:260,patch:260,forest:0.34,base:0.32,dense:0.88,size:[0.8,1.25]},
-  2:{mix:[['oak',2.5],['birch',1.5],['fir',2.5],['spruce',1.5],['bush',1.6]],cand:8,reach:330,patch:220,forest:0.55,base:0.3,dense:0.95,size:[0.75,1.35],treeline:30},
-  3:{mix:[['oak',1.5],['birch',2],['pine',2],['dead',1],['bush',3.5]],cand:6,reach:260,patch:200,forest:0.32,base:0.28,dense:0.82,size:[0.6,1.1],treeline:22},
-  4:{mix:[['palm',3],['acacia',3.5],['dead',1.2],['drybush',2.5]],cand:5,reach:260,patch:300,forest:0.18,base:0.13,dense:0.75,size:[0.7,1.2]},
-  5:{mix:[['willow',3],['poplar',2],['dead',1.5],['birch',1],['bush',2.5]],cand:7,reach:280,patch:200,forest:0.42,base:0.3,dense:0.9,size:[0.7,1.2]},
-  6:{mix:[['fir',4.5],['spruce',3.5],['larch',1],['dead',0.3],['bush',0.7]],cand:9,reach:360,patch:200,forest:0.6,base:0.25,dense:0.97,size:[0.6,1.4],treeline:26,snow:true},
-  7:{mix:[['poplar',3],['oak',2.5],['birch',1.5],['cypress',1],['bush',2]],cand:6,reach:240,patch:240,forest:0.28,base:0.3,dense:0.85,size:[0.8,1.2]},
-  8:{mix:[['pine',4.5],['umbrella',1.5],['fir',1.5],['bush',2.5]],cand:8,reach:340,patch:220,forest:0.62,base:0.3,dense:0.95,size:[0.8,1.4],treeline:34},
-  9:{mix:[['larch',3],['birch',2],['pine',1.5],['spruce',1.5],['bush',2]],cand:7,reach:330,patch:240,forest:0.44,base:0.26,dense:0.92,size:[0.65,1.25],treeline:24},
-  10:{mix:[['spruce',3],['fir',3],['oak',1.5],['birch',1],['bush',1.5]],cand:9,reach:360,patch:200,forest:0.7,base:0.35,dense:0.97,size:[0.8,1.5],treeline:36},
-  11:{mix:[['umbrella',3.5],['cypress',2],['olive',2],['palm',1],['bush',1.5]],cand:7,reach:280,patch:220,forest:0.4,base:0.28,dense:0.9,size:[0.75,1.2]},
+  // 1 Colline di campagna: querce e castagni d'India sparsi, cipressi (anche in filare lungo la strada), pioppi
+  1:{mix:[['oak',3],['chestnut',1],['poplar',1.4],['cypress',1.6],['umbrella',0.5],['linden',0.5],['bush',2]],cand:8,reach:260,patch:260,forest:0.34,base:0.32,dense:0.88,size:[0.8,1.2],rows:['cypress',0.45]},
+  // 2 Sentiero nel bosco: faggeta con querce, abeti più in alto
+  2:{mix:[['beech',3.5],['oak',1.4],['fir',1.6],['spruce',0.8],['birch',0.8],['chestnut',0.5],['bush',1.6]],cand:9,reach:330,patch:220,forest:0.55,base:0.3,dense:0.95,size:[0.75,1.25],treeline:30},
+  // 3 Cave di pietra: pini silvestri e mughi tra le pietraie, qualche betulla
+  3:{mix:[['pine',2.5],['mugo',2.6],['birch',1.2],['oak',0.5],['dead',1],['bush',2]],cand:7,reach:260,patch:200,forest:0.32,base:0.28,dense:0.82,size:[0.6,1.1],treeline:22},
+  // 4 Dune rosse: palme e acacie, saguari, arbusti secchi
+  4:{mix:[['palm',2.4],['acacia',3],['cactus',1.3],['dead',1],['drybush',2.5]],cand:5,reach:260,patch:300,forest:0.18,base:0.13,dense:0.75,size:[0.7,1.15]},
+  // 5 Palude al tramonto: salici piangenti, pioppi (in filare), betulle
+  5:{mix:[['willow',3],['poplar',2],['birch',1],['dead',1.5],['bush',2.5]],cand:8,reach:280,patch:200,forest:0.42,base:0.3,dense:0.9,size:[0.7,1.15],rows:['poplar',0.4]},
+  // 6 Passo innevato: abeti rossi e bianchi, larici e mughi verso il limite del bosco
+  6:{mix:[['spruce',4],['fir',3.5],['larch',1.2],['mugo',1.4],['bush',0.4]],cand:10,reach:360,patch:200,forest:0.6,base:0.25,dense:0.97,size:[0.6,1.3],treeline:26,snow:true},
+  // 7 Periferia di notte: tigli e pioppi lungo i viali, betulle, querce e ippocastani
+  7:{mix:[['linden',2.2],['poplar',2],['birch',1.4],['oak',1],['chestnut',1],['bush',2]],cand:7,reach:240,patch:240,forest:0.28,base:0.3,dense:0.85,size:[0.8,1.15],rows:['linden',0.4]},
+  // 8 Pineta al crepuscolo: pini silvestri, pini domestici, qualche abete
+  8:{mix:[['pine',4.5],['umbrella',1.6],['fir',1],['bush',2.5]],cand:9,reach:340,patch:220,forest:0.62,base:0.3,dense:0.95,size:[0.8,1.3],treeline:34},
+  // 9 Altopiano all'alba: larici (alcuni dorati), mughi, betulle, abeti rossi
+  9:{mix:[['larch',3],['mugo',1.8],['birch',1.2],['pine',1.2],['spruce',1.5],['bush',1.5]],cand:8,reach:330,patch:240,forest:0.44,base:0.26,dense:0.92,size:[0.65,1.2],treeline:24},
+  // 10 Foresta notturna: abeti in alto, faggi e querce nel fondovalle
+  10:{mix:[['spruce',3],['fir',3],['beech',2],['oak',1],['birch',0.7],['bush',1.5]],cand:10,reach:360,patch:200,forest:0.7,base:0.35,dense:0.97,size:[0.8,1.35],treeline:36},
+  // 11 Costa Brava: pini domestici, cipressi, ulivi, qualche palma
+  11:{mix:[['umbrella',3.5],['cypress',2],['olive',2.2],['palm',0.8],['bush',1.5]],cand:8,reach:280,patch:220,forest:0.4,base:0.28,dense:0.9,size:[0.75,1.15]},
   12:{mix:[['oak',1]],cand:0,reach:0,patch:200,forest:0,base:0,dense:0,size:[1,1]}
 };
+// distanza minima tra un albero e i vicini (unità pista, più la taglia): chiome larghe più distanziate
+const TREE_GAP={oak:9,beech:8,chestnut:9,linden:7,willow:10,umbrella:10,acacia:10,olive:6,palm:6,cactus:4,
+  fir:5,spruce:5,larch:5,pine:6,cypress:3.5,poplar:4,birch:4.5,mugo:5,dead:4};
 // un albero sta ad almeno ~2 m dal ciglio di qualunque tratto di strada (larghezza reale del tratto)
 function treeFits(cx,cy,wps){
   for(let k=0;k<wps.length;k+=2){
@@ -1303,10 +1350,37 @@ function bumpShape(height,S,Sd,crest,base){
   return {len:x2+base,off:base/2,pts:[[0,S,base],[x1,-(S+Sd),crest],[x2,Sd,base]]};
 }
 let trackBumps=[];
+// Saliscendi lunghi della strada (colline di campagna, dune): due onde dolci sommate al profilo dei dossi,
+// nulle attorno a partenza e arrivo (tribune) e raccordate. l1, l2 = lunghezze d'onda / 2π (unità pista).
+let ROLL=null;
+function rollAt(d){
+  if(!ROLL) return 0;
+  const f=Math.max(0,Math.min(1,Math.min(d-ROLL.d0,ROLL.d1-d)/ROLL.ramp));if(f<=0) return 0;
+  return ROLL.a*f*f*(3-2*f)*(0.6*Math.sin(d/ROLL.l1+ROLL.p1)+0.4*Math.sin(d/ROLL.l2+ROLL.p2));
+}
+// Tratti nei campi (Colline di campagna): l'asfalto lascia il posto a una strada bianca tra i campi e poi
+// torna. FIELD_ZONES = [inizio, fine] in distanza lungo la pista; zoneW = 0..1 con raccordo ai due capi
+// (stessa funzione per la grafica della strada, la fisica, la polvere e i campi coltivati ai lati).
+let FIELD_ZONES=[],stageSurface=null,zoneSurface=null;
+function zoneW(d){
+  for(const [a,b] of FIELD_ZONES){if(d<a-40||d>b+40) continue;const t=Math.max(0,Math.min(1,Math.min(d-a,b-d)/40+0.5));return t*t*(3-2*t);}
+  return 0;
+}
+// Passaggi tra le dune (Dune rosse): la strada scende sotto il livello del suolo tra due pareti di sabbia.
+// CUT_BUMPS sono i profili di quei tratti (avvallamenti); cutDepth = quanto la strada sta sotto il piano lì.
+let CUT_BUMPS=[];
+function cutDepth(dist){
+  let h=0;
+  for(const b of CUT_BUMPS){
+    const x=(dist-b.d0)*S3;if(x<=0||x>=b.len) continue;
+    const xx=x-b.off;for(const p of b.pts) h+=p[1]*smoothRamp(xx-p[0],p[2]);
+  }
+  return -h;
+}
 // quota della strada alla distanza "dist" (unità pista) lungo il tracciato
 function elevAt(dist,list){
   list=list||trackBumps;
-  let h=0;
+  let h=rollAt(dist);
   for(const b of list){
     const x=(dist-b.d0)*S3;
     if(x<=0||x>=b.len) continue;
@@ -1342,6 +1416,9 @@ function buildTrack(stage){
   const rng=mulberry32(9000+stage*57);
   const N=wps.length,dif=courseDiff(stage);
   const nearHp=(from,to,m)=>{for(let k=Math.max(0,from-m);k<=Math.min(N-1,to+m);k++) if(wps[k].hp) return true;return false;};
+  // saliscendi lunghi: colline di campagna e dune (vedi rollAt); numeri casuali a parte, così il resto non cambia
+  {const RL={1:{a:2.6,l1:900,l2:520},4:{a:3.2,l1:1100,l2:600}}[stage],rr=mulberry32(5100+stage*7);
+   ROLL=RL?{a:RL.a,l1:RL.l1/6.283,l2:RL.l2/6.283,p1:rr()*6.28,p2:rr()*6.28,d0:wps[30].dist,d1:wps[N-60].dist,ramp:320}:null;}
 
   // --- ricciolo con cavalcavia: dove il tratto "over" passa sopra il rettilineo dello stesso ricciolo ---
   const crossings=[];
@@ -1365,7 +1442,9 @@ function buildTrack(stage){
   const specs=[];
   // (in città niente ponti né gallerie) — quanti dipende dalla lunghezza del tracciato
   if(!surf.town) for(let c=0;c<Math.max(1,Math.round(N/650+dif));c++) specs.push({type:'bridge',len:18+Math.floor(rng()*16)});
-  if(!surf.town) for(let c=0;c<Math.max(1,Math.round(N/700+dif*0.8));c++) specs.push({type:'tunnel',len:24+Math.floor(rng()*30)});
+  // (nel deserto al posto delle gallerie: passaggi lunghi scavati tra le dune, sotto il livello del suolo)
+  const desert=surf.scene==='desert';
+  if(!surf.town) for(let c=0;c<Math.max(1,Math.round(N/700+dif*0.8));c++){const L=24+Math.floor(rng()*30);specs.push(desert?{type:'cut',len:L+60}:{type:'tunnel',len:L});}
   for(const s of specs){
     for(let tries=0;tries<80;tries++){
       const start=45+Math.floor(rng()*Math.max(1,N-100-s.len));
@@ -1374,6 +1453,9 @@ function buildTrack(stage){
       if(structs.every(t=>end+35<t.start||start>t.end+35)){structs.push({type:s.type,start,end});break;}
     }
   }
+  // i passaggi tra le dune non sono strutture (niente pareti né volta): solo un profilo della strada
+  const cuts=structs.filter(s=>s.type==='cut');
+  for(let k=structs.length-1;k>=0;k--) if(structs[k].type==='cut') structs.splice(k,1);
   // stile di ogni struttura secondo lo scenario e il fondo: ponti in cemento, ad archi di pietra, in legno
   // o a travatura d'acciaio; gallerie in cemento, scavate nella roccia viva o paravalanghe aperte su un lato
   const BSTYLE={city:['concrete','stone'],desert:['truss','concrete'],snow:['stone','wood'],town:['concrete'],
@@ -1405,10 +1487,31 @@ function buildTrack(stage){
     let e=i;while(e<N-1&&wps[e+1].hp) e++;
     narrowPlateau(i,e,6,surf.cliff?0.92:0.82);
   }
+  // tratti nei campi (Colline di campagna): 4 tratti di strada bianca, lontani da ponti, gallerie, partenza e
+  // arrivo; la carreggiata lì si stringe un po', come una strada interpoderale
+  const fields=[];
+  if(stage===1){
+    const fr=mulberry32(6100+stage);
+    for(let c=0;c<4;c++) for(let t=0;t<80;t++){
+      const len=44+Math.floor(fr()*30),s=70+Math.floor(fr()*Math.max(1,N-200-len)),e=s+len;
+      if(nearStruct(s,e,26)||nearCross(s,e,20)||fields.some(f=>e+50>=f[0]&&s-50<=f[1])) continue;
+      fields.push([s,e]);break;
+    }
+    fields.sort((a,b)=>a[0]-b[0]);
+    for(const [s,e] of fields){narrowPlateau(s,e,8,0.86);for(let i=s;i<=e;i++) wps[i].field=true;}
+  }
   // dossi: mai dentro o a ridosso di ponti e tunnel, mai sovrapposti.
   // Due tipi: "salto" (rampa, cresta stretta, discesa: l'auto decolla sulla cresta se è veloce)
   // e "ondulazione" (cresta larga: si percorre restando a terra). Profilo esatto in funzione della distanza.
   const bumps=[],used=[];
+  // passaggi tra le dune: discesa dolce (~10%) fino a ~7 m sotto il piano, tratto in fondo, risalita
+  const cutBumps=[];
+  for(const c of cuts){
+    const Hd=4.2,S=0.1,B=14,x1=Hd/S,lenW=(c.end-c.start)*STEP*S3,P=Math.max(24,lenW-2*x1-B);
+    const b={len:x1+P+x1+B,off:B/2,pts:[[0,-S,B],[x1,S,B],[x1+P,S,B],[x1+P+x1,-S,B]]};
+    b.d0=wps[c.start].dist;bumps.push(b);cutBumps.push(b);
+    used.push({from:c.start,to:Math.min(N-1,c.start+Math.ceil(b.len/S3/STEP)+1)});
+  }
   const nBumps=Math.round(N/110*(0.7+stage*0.1));
   const nJumps=surf.town?0:Math.max(2,Math.round(nBumps*0.4));   // in città solo dossi dolci
   for(let c=0;c<nBumps;c++){
@@ -1497,6 +1600,7 @@ function buildTrack(stage){
       for(let k=0;k<fl.cand;k++){
         // distanza dal ciglio: più candidati vicino alla strada, ma il bosco arriva lontano
         const u=rng(),d=w.half+20+Math.pow(u,1.6)*fl.reach;
+        if(w.field&&d<w.half+230) continue;   // (tra i campi coltivati niente alberi: solo i filari ai margini)
         const along=(rng()-0.5)*STEP*2;
         const cx=w.x+Math.cos(n)*d*side+Math.cos(w.heading)*along,cy=w.y+Math.sin(n)*d*side+Math.sin(w.heading)*along;
         const patch=valueNoise(cx/fl.patch+nOff,cy/fl.patch-nOff)*0.75+valueNoise(cx/(fl.patch*0.3)-nOff,cy/(fl.patch*0.3)+nOff)*0.25;
@@ -1512,10 +1616,24 @@ function buildTrack(stage){
         if(rng()<0.05) sz*=1.45;                          // qualche esemplare monumentale
         const bushSp=spList.includes('drybush')?'drybush':'bush';
         if(d<w.half+30&&sp!==bushSp&&rng()<0.35) sp=bushSp;
-        const isBush=sp===bushSp,r=isBush?1.5:2.6+sz*1.2;
+        // (distanza minima secondo la chioma: le chiome larghe si toccano appena, quelle strette stanno più fitte)
+        const isBush=sp===bushSp,r=isBush?1.5:(TREE_GAP[sp]||5)+sz*3;
         if(!tFree(cx,cy,r)||!treeFits(cx,cy,wps)) continue;
         tAdd({x:cx,y:cy,elev:w.elev,sp,sz,bush:isBush,idx:i,seed:rng()});
       }
+    }
+  }
+  // filari lungo i rettilinei (cipressi in campagna, pioppi in palude, tigli nei viali di periferia): alberi in fila
+  // alla stessa distanza dal ciglio, uno ogni due waypoint
+  if(fl.rows&&!surf.town) for(let i=24;i<wps.length-44;i+=36){
+    if(rng()>fl.rows[1]) continue;
+    const len=16+Math.floor(rng()*16),side=rng()<0.5?-1:1,off=30+rng()*16;
+    if(Math.abs(wps[i+len].heading-wps[i].heading)>0.3||(surf.cliff&&side===CLIFF_SIDE)) continue;
+    for(let j=i;j<i+len;j+=2){
+      const w=wps[j];if(w.noTree||w.struct) continue;
+      const n=w.heading+Math.PI/2,cx=w.x+Math.cos(n)*(w.half+off)*side,cy=w.y+Math.sin(n)*(w.half+off)*side;
+      if(!tFree(cx,cy,3)||!treeFits(cx,cy,wps)) continue;
+      tAdd({x:cx,y:cy,elev:w.elev,sp:fl.rows[0],sz:0.92+rng()*0.12,bush:false,idx:j,seed:rng()});
     }
   }
   let posts=[];let lastPost=-99;
@@ -1679,7 +1797,8 @@ function buildTrack(stage){
     drifts.sort((a,b)=>a.idx-b.idx);
   }
   const props=buildProps(wps,stage,surface.scene,trees,nearStruct,railPoints);
-  return {wps,trees,posts,puddles,drifts,railRuns,railPoints,surface,structs,bumps,props};
+  return {wps,trees,posts,puddles,drifts,railRuns,railPoints,surface,structs,bumps,props,
+    fields:fields.map(([s,e])=>[wps[s].dist,wps[e].dist]),cuts:cutBumps};
 }
 
 // --- three.js setup ---
@@ -1739,13 +1858,23 @@ const hemi=new THREE.HemisphereLight(0xffffff,0x3d5a2f,0.65);
 scene.add(hemi);
 const sun=new THREE.DirectionalLight(0xffffff,1.0);
 sun.castShadow=true;
-const SHADOW_BOX=38;
-sun.shadow.mapSize.set(2048,2048);
+// Zona delle ombre: un quadrato attorno all'auto, spostato in avanti nella direzione di marcia (lì guarda la
+// telecamera). Più grande sui computer (mappa 4096), più piccolo sui telefoni; verso il bordo le ombre sfumano
+// (vedi la modifica a getShadow più sotto), così non si vede dove finiscono.
+const SHADOW_HI=!matchMedia('(pointer:coarse)').matches;
+const SHADOW_BOX=SHADOW_HI?66:46;
+sun.shadow.mapSize.set(SHADOW_HI?4096:2048,SHADOW_HI?4096:2048);
 sun.shadow.camera.left=-SHADOW_BOX;sun.shadow.camera.right=SHADOW_BOX;
 sun.shadow.camera.top=SHADOW_BOX;sun.shadow.camera.bottom=-SHADOW_BOX;
 sun.shadow.camera.near=1;sun.shadow.camera.far=320;
 sun.shadow.bias=-0.0005;sun.shadow.normalBias=0.04;
 scene.add(sun);scene.add(sun.target);
+// ombre che sfumano verso il bordo della zona delle ombre (ultimo 22%): fuori dalla mappa non c'è più un taglio netto
+(()=>{
+  const C=THREE.ShaderChunk.shadowmap_pars_fragment,i=C.indexOf('float getShadow('),j=i<0?-1:C.indexOf('return shadow;',i);
+  if(j>0) THREE.ShaderChunk.shadowmap_pars_fragment=C.slice(0,j)+
+    '{vec2 sEdge=abs(shadowCoord.xy-0.5)*2.0;shadow=mix(shadow,1.0,smoothstep(0.78,1.0,max(sEdge.x,sEdge.y)));}\n\t'+C.slice(j);
+})();
 
 // texture della carreggiata: u = attraverso la strada (bordo sinistro → destro), v = lungo la pista
 // (si ripete ogni TRACK_V unità pista, così i texel restano circa quadrati). Disegnata per tipo di fondo:
@@ -2618,8 +2747,38 @@ function valueNoise(x,y){
   return a+(b-a)*ux+(c-a)*uy+(a-b-c+d)*ux*uy;
 }
 function hillHeight(wx,wy){
+  if(duneOn) return duneHeight(wx,wy);
   const n=valueNoise(wx/420,wy/420)*0.6+valueNoise(wx/190,wy/190)*0.28+valueNoise(wx/80,wy/80)*0.12;
   return (n-0.3)*hillAmp;
+}
+// Dune (deserto): onde di sabbia allineate al vento, con il fianco sopravento lungo e dolce e quello
+// sottovento corto e ripido; le creste si piegano e cambiano altezza (rumore), più qualche increspatura.
+let duneOn=false;
+const DUNE_A=13,DUNE_L=720;   // altezza (mondo) e distanza tra le creste (unità pista)
+function duneHeight(wx,wy){
+  const ca=0.82,sa=0.57,pr=wx*ca+wy*sa,pe=-wx*sa+wy*ca;
+  const ph=pr/DUNE_L+1.6*valueNoise(pe/900+4.1,pr/1300-2.2)+0.5*valueNoise(pe/300,pr/400);
+  const s=ph-Math.floor(ph);
+  let y;
+  if(s<0.72){const f=s/0.72;y=f*f*(3-2*f);}else{const g=(1-s)/0.28;y=g*g*(3-2*g);}
+  const amp=DUNE_A*(0.45+0.55*valueNoise(pe/500-7.7,pr/700+3.1));
+  return amp*(y-0.35)+0.6*(valueNoise(wx/60,wy/60)-0.5);
+}
+// Gallerie degli stage di pianura (campagna, periferia): la galleria passa sotto una collina vera, alta
+// TUN_HILL sopra la strada, che scende verso i due imbocchi; la volta esterna della galleria è la cima della
+// collina (vedi tunnelOuter). La strada arriva agli imbocchi in trincea.
+let tunHillOn=false;
+const TUN_HILL=7.6;
+// profilo della collina lungo la strada (0..1): più bassa sopra gli imbocchi (lì il muro d'imbocco è alto poco
+// più del portale), piena a metà galleria, e fuori scende verso la pianura
+function tunnelHillF(dist){
+  const sm=t=>{t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);};
+  let f=0;
+  for(const [a,b] of tunnelRanges){
+    if(dist>=a&&dist<=b) f=Math.max(f,0.55+0.45*sm(Math.min(dist-a,b-dist)/90));
+    else f=Math.max(f,0.55*(1-sm((dist<a?a-dist:dist-b)/140)));
+  }
+  return f;
 }
 let terrainWps=[],terrainStep=1;
 function nearestTrack(wx,wy){
@@ -2714,9 +2873,15 @@ const RAVINE=7.5; // profondità della gola sotto i ponti (unità mondo)
 function terrainAt(wx,wy,near){
   near=near||nearestTrack(wx,wy);
   const bt=Math.max(0,Math.min(1,(near.d-75)/180));
-  const natural=hillHeight(wx,wy)*bt*bt*(3-2*bt);   // colline lontano dalla pista, piano vicino
+  let natural=hillHeight(wx,wy)*bt*bt*(3-2*bt);   // colline lontano dalla pista, piano vicino
   const road=near.elev,edge=near.d-near.half;
-  const emb=12+Math.abs(road-natural)*14;            // lunghezza della scarpata (unità pista)
+  let embK=14;
+  // collina sopra le gallerie di pianura
+  if(tunHillOn){const tf=tunnelHillF(near.dist);if(tf>0){const lat=Math.max(0,Math.min(1,(760-near.d)/380));natural=Math.max(natural,road+TUN_HILL*tf*lat*lat*(3-2*lat));}}
+  // passaggio tra le dune: ai lati il terreno resta al livello di prima (la strada è scesa), con pareti di
+  // sabbia ripide quasi quanto l'angolo di riposo della sabbia
+  if(CUT_BUMPS.length){const cd=cutDepth(near.dist);if(cd>0.05){natural=Math.max(natural,road+cd*1.12+0.7+Math.max(0,hillHeight(wx,wy))*0.35);embK=9;}}
+  const emb=(embK===9?8:12)+Math.abs(road-natural)*embK;            // lunghezza della scarpata (unità pista)
   const u=Math.max(0,Math.min(1,(edge-3)/emb)),k=u*u*(3-2*u);
   let h=road+(natural-road)*k;
   // sotto l'asfalto il terreno sta appena più in basso (niente prato che affiora sulla strada)
@@ -2736,6 +2901,14 @@ function terrainAt(wx,wy,near){
   return h+mountainAdd(wx,wy,near);
 }
 
+// appezzamenti attorno ai tratti nei campi: 0 terra arata, 1 grano, 2 prato; w = quanto conta (0 lontano)
+const FIELD_TINT=[[1.6,1.05,0.62],[2.7,1.95,0.42],[1,1,1]];
+function fieldPlot(wx,wy,near){
+  const e=near.d-near.half,w=zoneW(near.dist)*Math.max(0,Math.min(1,(e-8)/10))*Math.max(0,Math.min(1,(340-e)/60));
+  if(w<=0.01) return {w:0,kind:2};
+  const n=valueNoise(wx/170+3.3,wy/170-1.7);
+  return {w,kind:n<0.4?0:n<0.72?1:2};
+}
 function buildGround(wps,surface){
   disposeMesh(groundMesh);
   let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
@@ -2747,7 +2920,10 @@ function buildGround(wps,surface){
   const sampleStep=8;
   terrainSamples=[];terrainWps=wps;terrainStep=sampleStep;
   for(let i=0;i<wps.length;i+=sampleStep) terrainSamples.push(wps[i]);
-  hillAmp=HILL_AMP[surface.scene]||6;
+  // (Colline di campagna: colline vere attorno alla strada; deserto: dune)
+  hillAmp=course===1?10:HILL_AMP[surface.scene]||6;
+  duneOn=surface.scene==='desert';
+  tunHillOn=surface.scene==='city';
   hillSeed=Math.imul(course,2654435761)|0;
   // montagne solo tra la partenza e il tratto prima dell'arrivo (wps qui include i prolungamenti)
   mountAmp=MOUNT_AMP[surface.scene]||0;
@@ -2778,7 +2954,13 @@ function buildGround(wps,surface){
       // leggera ombreggiatura del bordo strada: stacca la pista dal terreno
       const tc=Math.max(0,Math.min(1,1-(nearestD-near.half)/30));
       const shade=1-tc*tc*(3-2*tc)*0.16;
-      colors.push(shade,shade,shade);
+      // campi coltivati ai lati della strada bianca: appezzamenti di grano, terra arata e prato
+      let cr=1,cg=1,cb=1;
+      if(FIELD_ZONES.length){
+        const fp=fieldPlot(wx,wy,near);
+        if(fp.w>0.01){const t=FIELD_TINT[fp.kind];cr=1+(t[0]-1)*fp.w;cg=1+(t[1]-1)*fp.w;cb=1+(t[2]-1)*fp.w;}
+      }
+      colors.push(shade*cr,shade*cg,shade*cb);
       info.push(nearestD-near.half,h-near.elev,cliffDrop(wx,wy,near));
     }
   }
@@ -2954,14 +3136,16 @@ function occPatchScene(){
     (Array.isArray(o.material)?o.material:[o.material]).forEach(occPatchMat);
   });
 }
+// strada bianca dei tratti nei campi (vedi zoneW): texture dello sterrato, mescolata a quella dello stage
+const ZONE_U={uZoneMap:{value:null}};
 function patchRoadMat(m){
   m.onBeforeCompile=sh=>{
-    Object.assign(sh.uniforms,SURF_U);
+    Object.assign(sh.uniforms,SURF_U,ZONE_U);
     sh.vertexShader=sh.vertexShader
-      .replace('#include <common>','#include <common>\nvarying vec3 vSWP;')
-      .replace('#include <begin_vertex>','#include <begin_vertex>\nvSWP=(modelMatrix*vec4(transformed,1.0)).xyz;');
+      .replace('#include <common>','#include <common>\nvarying vec3 vSWP;attribute float aZone;varying float vZone;')
+      .replace('#include <begin_vertex>','#include <begin_vertex>\nvSWP=(modelMatrix*vec4(transformed,1.0)).xyz;vZone=aZone;');
     sh.fragmentShader=sh.fragmentShader
-      .replace('#include <common>','#include <common>\nvarying vec3 vSWP;\nuniform float uGloss;uniform float uRut;uniform float uWet;uniform float uWetPatch;uniform float uReflI;uniform float uSpecMax;uniform float uRain;uniform float uTrackV;uniform float uAsph;uniform float uLines;\n'+
+      .replace('#include <common>','#include <common>\nvarying vec3 vSWP;varying float vZone;uniform sampler2D uZoneMap;\nuniform float uGloss;uniform float uRut;uniform float uWet;uniform float uWetPatch;uniform float uReflI;uniform float uSpecMax;uniform float uRain;uniform float uTrackV;uniform float uAsph;uniform float uLines;\n'+
         'uniform float uMix;uniform vec3 uMixA;uniform float uMixPeb;uniform float uMixGrass;uniform vec3 uMixGrassCol;uniform float uMixDark;uniform vec3 uMixBerm;uniform float uMixIce;\n'+SURF_GLSL+`
         // zone di fondo smosso (stessa formula di looseZone() nella fisica: lì l'auto ha un po' meno tenuta)
         float looseZoneG(float s,float u){
@@ -3020,7 +3204,7 @@ function patchRoadMat(m){
             float side=u>0.5?7.0:1.0;
             float wear=smoothstep(0.22,0.48,sNoise(vec2(s*0.11,side)));
             float chip=0.45+0.55*smoothstep(0.25,0.6,sNoise(vec2(s*1.3,u*90.0+side)));
-            ln*=wear*chip;
+            ln*=wear*chip*(1.0-vZone);
             vec3 lc=mix(vec3(0.84,0.83,0.78),vec3(0.52,0.47,0.38),clamp(sNoise(vec2(s*0.35,side*3.0))*1.1,0.0,1.0));
             diffuseColor.rgb=mix(diffuseColor.rgb,lc,ln*0.82);
           }
@@ -3060,13 +3244,24 @@ function patchRoadMat(m){
             }
           }
         }
+        // tratti nei campi: strada bianca (terra battuta e ghiaietto) con l'erba in mezzeria e ai bordi; il
+        // passaggio dall'asfalto è sfrangiato (l'asfalto finisce a pezzi, la terra lo invade)
+        if(vZone>0.001){
+          vec3 zc=mapTexelToLinear(texture2D(uZoneMap,vUv)).rgb*(0.86+0.28*sNoise(vSWP.xz*0.07+vec2(1.3,4.1)));
+          float zed=min(vUv.x,1.0-vUv.x);
+          float zgr=max(smoothstep(0.13,0.0,zed+(sNoise(vSWP.xz*0.8)-0.5)*0.12),
+                        0.85*smoothstep(0.07,0.0,abs(vUv.x-0.5)+(sNoise(vSWP.xz*1.3)-0.5)*0.06));
+          zc=mix(zc,vec3(0.3,0.42,0.17)*(0.7+0.5*sNoise(vSWP.xz*5.0)),zgr*0.85);
+          float zw=clamp(vZone+(sNoise(vSWP.xz*0.6)-0.5)*0.6*(1.0-abs(2.0*vZone-1.0)),0.0,1.0);
+          diffuseColor.rgb=mix(diffuseColor.rgb,zc,smoothstep(0.35,0.65,zw));
+        }
         // zone lucidate dal passaggio delle gomme: chiazze sparse a caso (niente corsie parallele a "binario")
         float sTr=smoothstep(0.58,0.82,sNoise(vSWP.xz*0.22+vec2(7.0,2.0)))*smoothstep(0.3,0.7,sNoise(vSWP.xz*0.05+vec2(1.7,8.3)));
         float sWet=clamp(uWet+uWetPatch*smoothstep(0.55,0.8,sN1+0.12*sN2),0.0,1.0);
         // pioggia: tutto umido, e zone dove l'acqua scorre e ristagna (solchi, bordi, tratti bassi) quasi a specchio
         float sRainZ=0.0;
         if(uRain>0.0){sRainZ=rainZoneG(vUv.y*uTrackV,vUv.x);sWet=max(sWet,clamp(uRain*(0.45+0.55*sRainZ),0.0,1.0));}
-        float sGl=clamp(uGloss*(0.7+0.6*sN2)+sTr*uRut+sWet*0.6+uMixIce*sMixL*0.55,0.0,1.0);
+        float sGl=clamp(uGloss*(0.7+0.6*sN2)+sTr*uRut+sWet*0.6+uMixIce*sMixL*0.55,0.0,1.0)*(1.0-0.85*vZone);
         diffuseColor.rgb*=1.0-0.4*sWet;                       // il bagnato scurisce il fondo`)
       .replace('#include <lights_phong_fragment>',`#include <lights_phong_fragment>
         // più lucido = riflessi di sole, fari e lampade più stretti e intensi
@@ -3129,12 +3324,14 @@ function rNoise(x,y){
 }
 // s = distanza lungo la pista, lat = scostamento dal centro (unità pista), u = 0..1 attraverso la carreggiata
 function roadRough(s,lat,u){
-  if(!roughA) return 0;
+  // (nei tratti nei campi la strada bianca ha le sue gobbe anche se lo stage è asfaltato)
+  const A=FIELD_ZONES.length?Math.max(roughA,ROUGH_A.dirt*zoneW(s)):roughA;
+  if(!A) return 0;
   const e=Math.min(u,1-u);if(e<=0) return 0;
   const q=Math.min(1,e/0.12),tp=q*q*(3-2*q);
   const env=0.45+0.9*rNoise(s/170+40.3,1.7);
   const n=0.55*rNoise(s/22,lat/22)+0.3*rNoise(s/9+17.1,lat/9-3.3)+0.15*rNoise(s/4.2+5.5,lat/4.2+9.9)-0.5;
-  return roughA*2*n*env*tp;
+  return A*2*n*env*tp;
 }
 function looseZone(s,u){
   const z=0.5+0.5*(0.5*Math.sin(s*0.019+1.1)+0.3*Math.sin(s*0.047+u*2.6+2.3)+0.2*Math.sin(s*0.113-u*4.1+0.7));
@@ -3152,14 +3349,16 @@ function buildTrackMesh(wps,surface){
   };
   const edge=(p,side,extra)=>{const n=p.heading+Math.PI/2,o=(p.half+(extra||0))*side;return [p.x+Math.cos(n)*o,p.y+Math.sin(n)*o];};
   // griglia continua di file trasversali; sui fondi irregolari più colonne, per dare forma alle gobbe
-  const COLS=roughA>0?8:1,indices=[];
+  const COLS=roughA>0||FIELD_ZONES.length?8:1,indices=[],zone=[];
   let rows=0;
   const addRow=(p,jit,rough)=>{
-    const al=edge(p,-1,edgeJitter(p.dist,-1)*jit),ar=edge(p,1,edgeJitter(p.dist,1)*jit);
+    // (nei tratti nei campi il bordo è frastagliato come quello di uno sterrato)
+    const zw=FIELD_ZONES.length?zoneW(p.dist):0,ej=jit*(1+zw*0.8);
+    const al=edge(p,-1,edgeJitter(p.dist,-1)*ej),ar=edge(p,1,edgeJitter(p.dist,1)*ej);
     for(let c=0;c<=COLS;c++){
       const u=c/COLS,x=al[0]+(ar[0]-al[0])*u,y=al[1]+(ar[1]-al[1])*u;
       const h=0.02+p.elev+(rough?roadRough(p.dist,(u-0.5)*2*p.half,u):0);
-      positions.push(x*S3,h,y*S3);uvs.push(u,p.dist/TRACK_V);
+      positions.push(x*S3,h,y*S3);uvs.push(u,p.dist/TRACK_V);zone.push(zw);
     }
     if(rows>0){const r0=(rows-1)*(COLS+1),r1=rows*(COLS+1);for(let c=0;c<COLS;c++) indices.push(r0+c,r0+c+1,r1+c+1,r0+c,r1+c+1,r1+c);}
     rows++;
@@ -3174,8 +3373,12 @@ function buildTrackMesh(wps,surface){
   const geo=new THREE.BufferGeometry();
   geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
   geo.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));
+  geo.setAttribute('aZone',new THREE.Float32BufferAttribute(zone,1));
   geo.setIndex(indices);
   geo.computeVertexNormals();
+  // texture della strada bianca dei tratti nei campi
+  if(ZONE_U.uZoneMap.value){ZONE_U.uZoneMap.value.dispose();ZONE_U.uZoneMap.value=null;}
+  if(FIELD_ZONES.length) ZONE_U.uZoneMap.value=dirtTexture(Object.assign({},SURFACES[1]));
   // polygonOffset: l'asfalto vince sempre il confronto di profondità col terreno
   // luce per pixel: i vertici della strada stanno solo sui bordi, con la luce per vertice il cono dei fari
   // (più stretto della carreggiata vicino all'auto) sparirebbe
@@ -3226,6 +3429,798 @@ function buildShoulders(wps){
   skirtMesh=new THREE.Mesh(g,mat);
   skirtMesh.receiveShadow=true;
   scene.add(skirtMesh);
+}
+// ================= ALBERI 3D: SPECIE COSTRUITE RAMO PER RAMO =================
+// Ogni specie è costruita una volta sola (in metri) con rami veri e tante facce incrociate di fogliame: su ogni
+// faccia è disegnato un rametto con le sue foglie o i suoi aghi. Per ogni specie ci sono due varianti, ognuna in
+// versione dettagliata (alberi vicini all'auto) e leggera (lontani: meno facce ma più grandi), più quelle con la
+// neve. Le geometrie restano in memoria tra uno stage e l'altro; negli stage gli alberi sono istanze di queste.
+function treeLib(){
+  if(treeLib.L) return treeLib.L;
+  const V=(x,y,z)=>new THREE.Vector3(x,y,z),UP=V(0,1,0);
+  // ---------------- texture disegnate: rametti con foglie e aghi, cortecce ----------------
+  function canvas(w,h,draw){const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');draw(g,w,h);
+    const t=new THREE.CanvasTexture(c);t.anisotropy=4;return t;}
+  const pick=(r,a)=>a[Math.floor(r()*a.length)];
+  // una foglia: ovale appuntita o lobata (quercia), con nervatura centrale e laterali
+  function leaf(g,x,y,ang,len,wid,col,lob,r){
+    g.save();g.translate(x,y);g.rotate(ang);
+    g.beginPath();
+    const N=lob?28:16;
+    for(let s=0;s<=1;s++){
+      for(let i=0;i<=N;i++){
+        const t=s?1-i/N:i/N,side=s?-1:1;
+        let w=wid*Math.pow(Math.sin(Math.PI*Math.min(1,t*1.05)),0.75)*(1-0.25*t);
+        if(lob==='heart') w=wid*Math.pow(Math.sin(Math.PI*Math.min(1,t*1.04)),0.42)*(1-0.5*t);   // a cuore (tiglio)
+        else if(lob==='obovate') w=wid*Math.pow(Math.sin(Math.PI*Math.min(1,t*1.02)),0.9)*(0.45+0.75*t)*(t>0.85?(1-t)/0.15*0.6+0.4:1);   // più larga in punta (ippocastano)
+        else if(lob) w*=0.62+0.38*Math.abs(Math.sin(t*Math.PI*4.5));
+        const px=side*w,py=-len*t;
+        if(i===0&&s===0) g.moveTo(px,py);else g.lineTo(px,py);
+      }
+    }
+    const gr=g.createLinearGradient(-wid,0,wid,0);
+    gr.addColorStop(0,col[0]);gr.addColorStop(0.5,col[1]);gr.addColorStop(1,col[0]);
+    g.fillStyle=gr;g.fill();
+    g.strokeStyle='rgba(20,40,10,.35)';g.lineWidth=1;g.stroke();
+    // nervature
+    g.strokeStyle=col[2];g.lineWidth=1.2;g.beginPath();g.moveTo(0,0);g.lineTo(0,-len*0.95);g.stroke();
+    g.lineWidth=0.7;
+    for(let t=0.18;t<0.9;t+=0.14){for(const sd of [-1,1]){g.beginPath();g.moveTo(0,-len*t);g.lineTo(sd*wid*0.7*Math.sin(Math.PI*t),-len*(t+0.1));g.stroke();}}
+    g.restore();
+  }
+  // rametto di abete: aghi piatti su due lati, con ramificazioni laterali e punte più chiare
+  const TX={};
+  TX.fir=canvas(128,256,(g,w,h)=>{
+    const r=mulberry32(11);
+    const twig=(x0,y0,ang,len,sz)=>{
+      const ex=x0+Math.sin(ang)*len,ey=y0-Math.cos(ang)*len;
+      g.strokeStyle='#5a4630';g.lineWidth=2.4*sz;g.beginPath();g.moveTo(x0,y0);g.lineTo(ex,ey);g.stroke();
+      for(let t=0.02;t<1;t+=0.028){
+        const px=x0+(ex-x0)*t,py=y0+(ey-y0)*t,nl=(15+r()*6)*sz*(1-0.45*t);
+        for(const sd of [-1,1]){
+          const a=ang+sd*(1.05+r()*0.25);
+          g.strokeStyle=t>0.72?pick(r,['#5f8f4a','#6f9e52','#4f7f40']):pick(r,['#24452a','#2d5233','#1f3d26','#35603a']);
+          g.lineWidth=2.2*sz;g.beginPath();g.moveTo(px,py);g.lineTo(px+Math.sin(a)*nl,py-Math.cos(a)*nl);g.stroke();
+        }
+      }
+    };
+    twig(64,254,0,240,1);
+    for(const [y,sd] of [[205,1],[175,-1],[140,1],[110,-1],[80,1]]) twig(64,y,sd*0.62,70*(y/240),0.8);
+  });
+  // ramoscello intero di abete (rametto principale con 6-8 laterali): una faccia copre molto più verde,
+  // così servono molte meno facce per albero
+  function needleTwig(g,r,x0,y0,ang,len,sz,cols,tip){
+    const ex=x0+Math.sin(ang)*len,ey=y0-Math.cos(ang)*len;
+    g.strokeStyle='#5a4630';g.lineWidth=2.6*sz;g.beginPath();g.moveTo(x0,y0);g.lineTo(ex,ey);g.stroke();
+    for(let t=0.03;t<1;t+=0.03){
+      const px=x0+(ex-x0)*t,py=y0+(ey-y0)*t,nl=(14+r()*6)*sz*(1-0.4*t);
+      for(const sd of [-1,1]){
+        const a=ang+sd*(1.0+r()*0.3);
+        g.strokeStyle=t>0.75?pick(r,tip):pick(r,cols);g.lineWidth=2.3*sz;
+        g.beginPath();g.moveTo(px,py);g.lineTo(px+Math.sin(a)*nl,py-Math.cos(a)*nl);g.stroke();
+      }
+    }
+  }
+  function branchletTex(seed,cols,tip){
+    return canvas(256,256,(g,w,h)=>{
+      const r=mulberry32(seed);
+      for(let i=0;i<8;i++){const y=236-i*27,sd=i%2?1:-1,L=(118-i*9)*(0.9+r()*0.2);needleTwig(g,r,128,y,sd*(0.95-i*0.04),L,0.95-i*0.03,cols,tip);}
+      needleTwig(g,r,128,254,0,246,1.05,cols,tip);
+    });
+  }
+  TX.firBig=branchletTex(12,['#24452a','#2d5233','#1f3d26','#35603a'],['#5f8f4a','#6f9e52','#4f7f40']);
+  TX.spruce=branchletTex(13,['#1d3a26','#24462e','#18321f','#2b5034'],['#3e6a44','#4a7650']);
+  // larice: ciuffetti a rosetta di aghi corti e morbidi lungo rametti sottili, verde chiaro
+  TX.larch=canvas(256,256,(g,w,h)=>{
+    const r=mulberry32(14);
+    const twig=(x0,y0,ang,len)=>{const ex=x0+Math.sin(ang)*len,ey=y0-Math.cos(ang)*len;
+      g.strokeStyle='#7a5a3a';g.lineWidth=2;g.beginPath();g.moveTo(x0,y0);g.lineTo(ex,ey);g.stroke();
+      for(let t=0.1;t<1;t+=0.13){const px=x0+(ex-x0)*t,py=y0+(ey-y0)*t;
+        for(let k=0;k<16;k++){const a=-Math.PI/2+(k/15-0.5)*2.6,L=8+r()*6;
+          g.strokeStyle=pick(r,['#7fae4a','#94c05a','#6a9a3c','#a6cc6a']);g.lineWidth=1.6;
+          g.beginPath();g.moveTo(px,py);g.lineTo(px+Math.cos(a)*L,py+Math.sin(a)*L);g.stroke();}}};
+    twig(128,254,0,240);
+    for(let i=0;i<7;i++){const sd=i%2?1:-1;twig(128,230-i*30,sd*(0.9+r()*0.3),100-i*8);}
+  });
+  // cipresso: rametti a squame fitti, verde scuro, a ventaglio
+  TX.cypress=canvas(256,256,(g,w,h)=>{
+    const r=mulberry32(15);
+    const spray=(x0,y0,ang,len,d)=>{const ex=x0+Math.sin(ang)*len,ey=y0-Math.cos(ang)*len;
+      g.strokeStyle=pick(r,['#24402a','#2c4c30','#1f3824','#365a38']);g.lineWidth=7-d*1.8;g.lineCap='round';
+      g.beginPath();g.moveTo(x0,y0);g.lineTo(ex,ey);g.stroke();
+      if(d<3) for(let t=0.25;t<0.95;t+=0.22){const px=x0+(ex-x0)*t,py=y0+(ey-y0)*t;spray(px,py,ang+(t*10%2<1?0.6:-0.6),len*0.45,d+1);}};
+    for(let i=0;i<5;i++) spray(128+(i-2)*14,254,(i-2)*0.28,220-Math.abs(i-2)*30,0);
+  });
+  // pioppo: foglie triangolari-arrotondate, picciolo lungo
+  TX.poplar=twigTex(16,[['#3f6f2a','#6a9a42','#2e5420'],['#4a7a30','#7aa84c','#365c24'],['#557f34','#86ad52','#3d6526']],{len:40,wid:22});
+  // olivo: foglie strette e lunghe, verde-grigio argentato
+  TX.olive=twigTex(17,[['#5e6e4c','#a4ae8c','#4a5a3c'],['#68785a','#b2bb98','#52624a'],['#56664a','#97a282','#44543a']],{len:46,wid:7});
+  // tiglio: foglie a cuore, verde brillante
+  TX.linden=twigTex(20,[['#4a7f2e','#79ad4c','#365f22'],['#548a34','#86b656','#3c6626'],['#43772a','#6ea044','#30581e']],{len:48,wid:30,lob:'heart'});
+  // ippocastano: foglie palmate (7 foglioline a ventaglio) e qualche candela di fiori bianchi
+  TX.chestnut=canvas(256,256,(g,w,h)=>{
+    const r=mulberry32(21);
+    const cols=[['#2f6224','#5a8f3a','#24501c'],['#376a2a','#64983f','#2a561e'],['#2a5a20','#508534','#204a18']];
+    const palm=(x,y,base,sc)=>{for(let k=0;k<7;k++){const a=base+(k-3)*0.42,L=(k===3?78:k===2||k===4?70:k===1||k===5?58:44)*sc;
+      leaf(g,x,y,a,L,L*0.28,pick(r,cols),'obovate',r);}};
+    g.strokeStyle='#5b4632';g.lineWidth=4;g.beginPath();g.moveTo(128,256);g.lineTo(128,150);g.stroke();
+    g.lineWidth=2.5;for(const [ex,ey] of [[60,180],[196,175],[128,100]]){g.beginPath();g.moveTo(128,160);g.lineTo(ex,ey);g.stroke();}
+    palm(60,180,-0.9,0.85);palm(196,175,0.9,0.85);palm(128,110,0,0.75);palm(128,200,(r()-0.5),0.6);
+  });
+  // candela di fiori dell'ippocastano: cono di fiorellini bianchi con qualche macchia rosa (sempre dritta)
+  TX.candle=canvas(64,128,(g,w,h)=>{const r=mulberry32(22);
+    g.strokeStyle='#6a7a3a';g.lineWidth=2;g.beginPath();g.moveTo(32,128);g.lineTo(32,10);g.stroke();
+    for(let i=0;i<140;i++){const t=Math.pow(r(),0.8),yy=122-t*108,xx=32+(r()-0.5)*44*(1-t*0.85);
+      g.fillStyle=r()<0.18?'#eaa4b4':r()<0.3?'#f2e6b0':'#f8f6ee';g.beginPath();g.arc(xx,yy,3.4-t*1.2,0,7);g.fill();}});
+  // salice: lunghe frange pendenti con foglie lanceolate
+  TX.willow=canvas(128,512,(g,w,h)=>{
+    const r=mulberry32(18);
+    for(const ox of [64,44,84,30,98]){
+      g.strokeStyle='#6a7a3a';g.lineWidth=1.4;g.beginPath();g.moveTo(64,0);g.quadraticCurveTo(ox,200,ox+(r()-0.5)*16,505);g.stroke();
+      for(let t=0.05;t<0.98;t+=0.035){const y=t*505,x=64+(ox-64)*Math.min(1,t*1.6);
+        leaf(g,x,y,Math.PI+(r()-0.5)*0.9,24+r()*10,5+r()*2,pick(r,[['#7a9a3a','#a8c460','#5f7f2a'],['#86a640','#b6cc6a','#6a8a30'],['#6f8f36','#9cba56','#56762a']]),false,r);}
+    }
+  });
+  // acacia: foglie bipennate minutissime, a ciuffi piatti
+  TX.acacia=canvas(256,256,(g,w,h)=>{
+    const r=mulberry32(19);
+    const frond=(x0,y0,ang,len)=>{const ex=x0+Math.sin(ang)*len,ey=y0-Math.cos(ang)*len;
+      g.strokeStyle='#6a5a36';g.lineWidth=1.2;g.beginPath();g.moveTo(x0,y0);g.lineTo(ex,ey);g.stroke();
+      for(let t=0.1;t<1;t+=0.06){const px=x0+(ex-x0)*t,py=y0+(ey-y0)*t;
+        for(const sd of [-1,1]){g.strokeStyle=pick(r,['#6f8a36','#829c42','#5d7a2e','#94aa4c']);g.lineWidth=3.2;
+          const a=ang+sd*1.35,L=9*(1-t*0.4);g.beginPath();g.moveTo(px,py);g.lineTo(px+Math.sin(a)*L,py-Math.cos(a)*L);g.stroke();}}};
+    for(let i=0;i<14;i++){const a=(i/13-0.5)*2.6;frond(128,250,a,90+r()*90);}
+    for(let i=0;i<10;i++) frond(30+r()*200,120+r()*120,(r()-0.5)*2,60+r()*50);
+  });
+  // ciuffo di pino: aghi lunghi a pennello che partono dalla punta del rametto
+  TX.pine=canvas(256,256,(g,w,h)=>{
+    const r=mulberry32(5);
+    g.lineCap='round';
+    for(let i=0;i<260;i++){
+      const a=(r()-0.5)*1.5*(0.4+0.6*r()),L=110+r()*120,bx=128+(r()-0.5)*14,by=250-r()*30;
+      const cx=bx+Math.sin(a)*L*0.55,cy=by-Math.cos(a)*L*0.55-6,ex=bx+Math.sin(a*1.15)*L,ey=by-Math.cos(a*1.15)*L;
+      g.strokeStyle=pick(r,['#2f5a3c','#3a6a46','#2a4f36','#467650','#355f42']);g.lineWidth=1.3+r()*0.8;
+      g.beginPath();g.moveTo(bx,by);g.quadraticCurveTo(cx,cy,ex,ey);g.stroke();
+    }
+    g.strokeStyle='#6a4a2c';g.lineWidth=7;g.beginPath();g.moveTo(128,256);g.lineTo(128,214);g.stroke();
+  });
+  // rametto di faggio: foglie ovali alternate su un ramo a zig-zag
+  function twigTex(seed,cols,opt){
+    return canvas(256,256,(g,w,h)=>{
+      const r=mulberry32(seed);
+      const pts=[[128,256]];let x=128,y=256;
+      for(let i=0;i<7;i++){x+=(i%2?1:-1)*(8+r()*8);y-=30+r()*6;pts.push([x,y]);}
+      g.strokeStyle='#5b4632';g.lineWidth=4;g.beginPath();pts.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]));g.stroke();
+      // rametti laterali
+      const side=[];
+      for(let i=1;i<pts.length;i++){const [px,py]=pts[i];const sd=i%2?1:-1;
+        if(i<pts.length-1&&r()<0.75){const ex=px+sd*(40+r()*30),ey=py-30-r()*20;g.lineWidth=2.4;g.beginPath();g.moveTo(px,py);g.lineTo(ex,ey);g.stroke();side.push([ex,ey,sd]);}
+        side.push([px,py,sd]);}
+      for(const [px,py,sd] of side){
+        const n=opt.cluster?4:2;
+        for(let k=0;k<n;k++){
+          const ang=opt.cluster?(k-1.5)*0.55+sd*0.35:sd*(0.75+r()*0.5)+(k?-sd*0.6:0);
+          const len=opt.len*(0.8+r()*0.4),wid=opt.wid*(0.85+r()*0.3);
+          leaf(g,px,py,ang,len,wid,pick(r,cols),opt.lob,r);
+        }
+      }
+      leaf(g,pts[pts.length-1][0],pts[pts.length-1][1],(r()-0.5)*0.4,opt.len,opt.wid,pick(r,cols),opt.lob,r);
+    });
+  }
+  TX.beech=twigTex(21,[['#3f7a2c','#6aa448','#2c5a20'],['#4a8634','#78b052','#335f22'],['#356d27','#5c9a3e','#284f1c']],{len:62,wid:21});
+  TX.oak=twigTex(33,[['#2f5a24','#4f7f36','#22461a'],['#3a672a','#5a8a3c','#2a4f1e'],['#2a5020','#467232','#1f3f17']],{len:58,wid:20,lob:true,cluster:true});
+  // betulla: rametti sottili e penduli con foglioline triangolari, rade e chiare
+  TX.birch=canvas(128,256,(g,w,h)=>{
+    const r=mulberry32(44);
+    g.strokeStyle='#4a3a2c';g.lineWidth=1.6;
+    for(const ox of [64,40,88]){
+      g.beginPath();g.moveTo(64,0);g.quadraticCurveTo(ox+(r()-0.5)*20,120,ox,250);g.stroke();
+      for(let t=0.08;t<0.98;t+=0.075){
+        const y=t*250,x=64+(ox-64)*Math.pow(t,0.8);
+        const col=pick(r,[['#6c9e3a','#9cc858','#55802c'],['#7aa844','#a8d064','#5f8a32'],['#86a83c','#b8cc5a','#6a8a2c']]);
+        leaf(g,x,y,Math.PI+(r()-0.5)*1.4,22+r()*8,11+r()*4,col,false,r);
+      }
+    }
+  });
+  // fronda di palma: rachide al centro, foglioline che vanno verso i bordi inclinate verso la punta
+  TX.palm=canvas(256,512,(g,w,h)=>{
+    const r=mulberry32(7);
+    // foglioline strette e separate (si vede il cielo tra l'una e l'altra), che ricadono un po' verso la punta
+    g.lineCap='round';
+    for(let y=10;y<500;y+=6+r()*2){
+      const t=y/512,half=122*Math.pow(Math.sin(Math.PI*Math.min(1,t*1.1)),0.5)*(0.88+r()*0.15);
+      for(const sd of [-1,1]){
+        g.strokeStyle=pick(r,['#3f7a30','#4c8a38','#376a2a','#5a9442','#6a9a48']);g.lineWidth=5.5*(1-t*0.35);
+        const yy=512-y,dy=-(18+half*0.3);
+        g.beginPath();g.moveTo(128,yy);g.quadraticCurveTo(128+sd*half*0.55,yy+dy*0.3,128+sd*half,yy+dy+half*0.25);g.stroke();
+      }
+    }
+    g.strokeStyle='#b8a65a';g.lineWidth=5;g.beginPath();g.moveTo(128,512);g.lineTo(128,0);g.stroke();
+  });
+  TX.palm.wrapS=TX.palm.wrapT=THREE.ClampToEdgeWrapping;
+  // cortecce
+  function barkTex(seed,draw){const t=canvas(128,256,(g,w,h)=>draw(g,w,h,mulberry32(seed)));t.wrapS=t.wrapT=THREE.RepeatWrapping;return t;}
+  TX.barkFir=barkTex(1,(g,w,h,r)=>{g.fillStyle='#6d6158';g.fillRect(0,0,w,h);
+    for(let i=0;i<500;i++){g.fillStyle=`rgba(${40+r()*60|0},${35+r()*50|0},${30+r()*40|0},.35)`;g.fillRect(r()*w,r()*h,2+r()*6,1+r()*3);}
+    g.strokeStyle='rgba(30,24,20,.6)';for(let i=0;i<14;i++){g.lineWidth=1+r()*2;g.beginPath();let x=r()*w;g.moveTo(x,0);for(let y=0;y<h;y+=16){x+=(r()-0.5)*6;g.lineTo(x,y);}g.stroke();}});
+  TX.barkPineLow=barkTex(2,(g,w,h,r)=>{g.fillStyle='#4a3a2e';g.fillRect(0,0,w,h);
+    for(let i=0;i<70;i++){const x=r()*w,y=r()*h,pw=14+r()*22,ph=20+r()*40;g.fillStyle=`rgb(${90+r()*40|0},${62+r()*30|0},${44+r()*20|0})`;g.fillRect(x,y,pw,ph);g.strokeStyle='#2a1e16';g.lineWidth=2;g.strokeRect(x,y,pw,ph);}});
+  TX.barkPineHigh=barkTex(3,(g,w,h,r)=>{g.fillStyle='#c27840';g.fillRect(0,0,w,h);
+    for(let i=0;i<260;i++){g.fillStyle=pick(r,['rgba(220,150,90,.6)','rgba(160,90,50,.5)','rgba(235,185,130,.5)']);g.fillRect(r()*w,r()*h,6+r()*14,2+r()*4);}});
+  TX.barkBeech=barkTex(4,(g,w,h,r)=>{g.fillStyle='#9a9a92';g.fillRect(0,0,w,h);
+    for(let i=0;i<300;i++){const v=130+r()*50|0;g.fillStyle=`rgba(${v},${v},${v-8},.35)`;g.beginPath();g.arc(r()*w,r()*h,3+r()*10,0,7);g.fill();}
+    g.strokeStyle='rgba(60,60,55,.35)';for(let i=0;i<10;i++){const y=r()*h;g.lineWidth=1;g.beginPath();g.moveTo(r()*w,y);g.lineTo(r()*w,y+2);g.stroke();}});
+  TX.barkOak=barkTex(5,(g,w,h,r)=>{g.fillStyle='#4f4338';g.fillRect(0,0,w,h);
+    for(let i=0;i<26;i++){g.strokeStyle=`rgba(${20+r()*20|0},${16+r()*16|0},${12+r()*10|0},.9)`;g.lineWidth=3+r()*5;g.beginPath();let x=r()*w;g.moveTo(x,0);for(let y=0;y<h;y+=12){x+=(r()-0.5)*14;g.lineTo(x,y);}g.stroke();}
+    for(let i=0;i<300;i++){g.fillStyle='rgba(120,105,88,.25)';g.fillRect(r()*w,r()*h,3,6);}});
+  TX.barkBirch=barkTex(6,(g,w,h,r)=>{g.fillStyle='#e9e6de';g.fillRect(0,0,w,h);
+    for(let i=0;i<90;i++){g.fillStyle='rgba(30,28,26,.85)';g.fillRect(r()*w,r()*h,8+r()*26,1.5+r()*2.5);}
+    for(let i=0;i<8;i++){g.fillStyle='rgba(25,22,20,.9)';const x=r()*w,y=r()*h;g.beginPath();g.moveTo(x,y);g.lineTo(x+10,y+8);g.lineTo(x,y+16);g.lineTo(x-10,y+8);g.fill();}});
+  TX.barkOlive=barkTex(9,(g,w,h,r)=>{g.fillStyle='#7a7466';g.fillRect(0,0,w,h);
+    for(let i=0;i<30;i++){g.strokeStyle=`rgba(${40+r()*30|0},${38+r()*26|0},${30+r()*20|0},.7)`;g.lineWidth=2+r()*6;g.beginPath();let x=r()*w;g.moveTo(x,0);for(let y=0;y<h;y+=10){x+=(r()-0.5)*20;g.lineTo(x,y);}g.stroke();}
+    for(let i=0;i<200;i++){g.fillStyle='rgba(170,165,150,.3)';g.beginPath();g.arc(r()*w,r()*h,2+r()*5,0,7);g.fill();}});
+  TX.cactus=barkTex(10,(g,w,h,r)=>{g.fillStyle='#4e7a3e';g.fillRect(0,0,w,h);
+    for(let x=0;x<w;x+=16){const gr=g.createLinearGradient(x,0,x+16,0);gr.addColorStop(0,'#2f5428');gr.addColorStop(0.5,'#6a9a52');gr.addColorStop(1,'#2f5428');g.fillStyle=gr;g.fillRect(x,0,16,h);
+      for(let y=4;y<h;y+=14){g.fillStyle='#e8dcb0';g.fillRect(x+7,y,2,2);}}});
+  TX.barkPalm=barkTex(8,(g,w,h,r)=>{g.fillStyle='#7d6a52';g.fillRect(0,0,w,h);
+    for(let y=0;y<h;y+=18){g.fillStyle='#5a4a38';g.fillRect(0,y,w,5);g.fillStyle='rgba(170,150,120,.5)';g.fillRect(0,y+5,w,3);
+      for(let x=0;x<w;x+=10){g.fillStyle='rgba(60,48,36,.5)';g.fillRect(x+r()*4,y+8,2,8);}}});
+
+  // ---------------- costruzione: rami (tubi) e foglie (tante facce incrociate) in poche mesh ----------------
+  // BOPT: dettaglio della costruzione in corso. keep = quota di facce di fogliame tenute (versione leggera per gli
+  // alberi lontani: meno facce ma più grandi, la sagoma resta la stessa), snow = neve sulle parti rivolte in alto
+  let BOPT={keep:1,snow:false};
+  function Builder(){this.b={};this.keep=BOPT.keep;this.snow=BOPT.snow;this.rr=mulberry32(4242);this.grow=this.keep<1?0.92/Math.sqrt(this.keep):1;}
+  Builder.prototype.get=function(k){return this.b[k]||(this.b[k]={pos:[],nor:[],uv:[],col:[],idx:[],sn:[],n:0});};
+  const _a=V(0,0,0),_b=V(0,0,0),_c=V(0,0,0),_d=V(0,0,0);
+  // tronco o ramo: tubo rastremato da a a b
+  Builder.prototype.tube=function(k,a,b,r0,r1,v0){
+    const len0=a.distanceTo(b);
+    if(this.keep<1&&r0<(this.keep<0.2?0.13:0.045)) return v0+len0/1.4;   // (da lontano i rami sottili non si vedono)
+    const B=this.get(k),dir=_a.subVectors(b,a),len=dir.length();dir.divideScalar(len||1);
+    const ref=Math.abs(dir.y)<0.95?UP:V(1,0,0),u=V(0,0,0).crossVectors(dir,ref).normalize(),w=V(0,0,0).crossVectors(dir,u).normalize();
+    const R=Math.max(3,Math.min(this.keep<0.2?4:this.keep<1?5:10,Math.round(r0*40)+4)),uRep=Math.max(1,Math.round(r0*8)),v1=v0+len/1.4;
+    const s=B.n;
+    for(let i=0;i<=R;i++){
+      const an=i/R*Math.PI*2,nx=u.x*Math.cos(an)+w.x*Math.sin(an),ny=u.y*Math.cos(an)+w.y*Math.sin(an),nz=u.z*Math.cos(an)+w.z*Math.sin(an);
+      B.pos.push(a.x+nx*r0,a.y+ny*r0,a.z+nz*r0,b.x+nx*r1,b.y+ny*r1,b.z+nz*r1);
+      B.nor.push(nx,ny,nz,nx,ny,nz);B.uv.push(i/R*uRep,v0,i/R*uRep,v1);B.col.push(1,1,1,1,1,1);B.n+=2;
+      const sn=this.snow?Math.max(0,Math.min(0.8,(ny-0.25)*1.3)):0;B.sn.push(sn,sn);
+    }
+    for(let i=0;i<R;i++){const q=s+i*2;B.idx.push(q,q+2,q+1,q+1,q+2,q+3);}
+    return v1;
+  };
+  // una faccia di fogliame: base sul rametto, lunga lungo dir, larga lungo side; normali verso l'esterno (cn) e
+  // colore più scuro dentro la chioma (ombra interna)
+  Builder.prototype.card=function(k,base,dir,side,w,h,cn,ao,tint){
+    if(this.keep<1){if(this.rr()>this.keep) return;w*=this.grow;h*=this.grow;}
+    const B=this.get(k),s=B.n,snow=this.snow&&k!=='candle';
+    const p=[V(0,0,0).copy(base).addScaledVector(side,-w/2),V(0,0,0).copy(base).addScaledVector(side,w/2)];
+    p.push(p[1].clone().addScaledVector(dir,h),p[0].clone().addScaledVector(dir,h));
+    const pn=V(0,0,0).crossVectors(side,dir).normalize(),uvs=[0,0,1,0,1,1,0,1];
+    p.forEach((q,i)=>{
+      const sph=cn(q),n=pn.clone();if(n.dot(sph)<0) n.negate();
+      n.multiplyScalar(0.25).addScaledVector(sph,0.75).normalize();
+      const o=ao(q);
+      B.pos.push(q.x,q.y,q.z);B.nor.push(n.x,n.y,n.z);B.uv.push(uvs[i*2],uvs[i*2+1]);B.col.push(tint[0]*o,tint[1]*o,tint[2]*o);B.n++;
+      // neve: sui ramoscelli che guardano in su e all'esterno della chioma (dentro e sotto resta verde)
+      B.sn.push(snow?Math.max(0,Math.min(0.85,(n.y-0.15)*1.5))*Math.min(1,o*1.2)*(0.7+0.3*this.rr()):0);
+    });
+    B.idx.push(s,s+1,s+2,s,s+2,s+3);
+  };
+  // più facce incrociate attorno allo stesso asse (2 = a croce, 3 = a stella)
+  Builder.prototype.cross=function(k,base,dir,w,h,n,roll,cn,ao,tint){
+    const ref=Math.abs(dir.y)<0.95?UP:V(1,0,0),u=V(0,0,0).crossVectors(dir,ref).normalize(),v=V(0,0,0).crossVectors(dir,u).normalize();
+    for(let i=0;i<n;i++){const an=roll+i*Math.PI/n;this.card(k,base,dir,V(0,0,0).copy(u).multiplyScalar(Math.cos(an)).addScaledVector(v,Math.sin(an)),w,h,cn,ao,tint);}
+  };
+  // risultato: una geometria per materiale (corteccia, fogliame…), condivise da tutti gli alberi di quella variante
+  Builder.prototype.meshes=function(){
+    const out=[];
+    for(const k in this.b){
+      const B=this.b[k];if(!B.n) continue;
+      const geo=new THREE.BufferGeometry();
+      geo.setAttribute('position',new THREE.Float32BufferAttribute(B.pos,3));geo.setAttribute('normal',new THREE.Float32BufferAttribute(B.nor,3));
+      geo.setAttribute('uv',new THREE.Float32BufferAttribute(B.uv,2));geo.setAttribute('color',new THREE.Float32BufferAttribute(B.col,3));
+      if(this.snow){while(B.sn.length<B.n) B.sn.push(0);geo.setAttribute('aSnow',new THREE.Float32BufferAttribute(B.sn,1));}
+      geo.setIndex(B.idx);geo.computeBoundingSphere();
+      out.push({k,geo});
+    }
+    return out;
+  };
+  const rotY=(v,a)=>V(v.x*Math.cos(a)-v.z*Math.sin(a),v.y,v.x*Math.sin(a)+v.z*Math.cos(a));
+  const rnd3=r=>V(r()-0.5,r()-0.5,r()-0.5);
+  const jit=(r,base,k)=>base.map(c=>c*(1-k/2+r()*k));
+  // normali "a ellissoide" attorno a un centro della chioma, e ombra interna in base alla distanza dal centro
+  const sphN=(C,S)=>q=>V((q.x-C.x)/S.x,(q.y-C.y)/S.y,(q.z-C.z)/S.z).normalize();
+  const sphAO=(C,S,lo)=>q=>{const d=Math.hypot((q.x-C.x)/S.x,(q.y-C.y)/S.y,(q.z-C.z)/S.z);return lo+(1-lo)*Math.min(1,d*d);};
+
+  // ---- conifere a palchi (abete bianco, abete rosso, larice): ogni faccia è un ramoscello intero ----
+  // o: tex, H, gap (distanza tra i palchi), Lk (lunghezza dei rami), droop (rami che scendono), step (distanza tra i
+  // ramoscelli lungo il ramo), sz (dimensione dei ramoscelli), hang (tende di rametti appesi: abete rosso)
+  function conifera(seed,o){
+    const r=mulberry32(seed),T=new Builder(),H=o.H*(0.92+r()*0.16);
+    T.tube('barkFir',V(0,-0.2,0),V(0,0.5,0),0.42,0.27,0);
+    let v=0;for(let i=0;i<6;i++){const y0=0.5+i*(H-0.5)/6,y1=0.5+(i+1)*(H-0.5)/6;v=T.tube('barkFir',V(0,y0,0),V(0,y1,0),0.27*(1-i/6)+0.02,0.27*(1-(i+1)/6)+0.015,v);}
+    const cn=q=>V(q.x,Math.hypot(q.x,q.z)*0.45+0.25,q.z).normalize();
+    const ao=q=>{const R=(H-q.y)*o.Lk+0.3;const d=Math.hypot(q.x,q.z)/R;return 0.45+0.55*Math.min(1,d*d);};
+    for(let h=o.base;h<H-0.4;h+=o.gap*(0.9+r()*0.25)){
+      const nb=5+Math.floor(r()*3),a0=r()*6.28,L0=((H-h)*o.Lk+0.3)*(0.9+r()*0.2);
+      for(let k=0;k<nb;k++){
+        const a=a0+k*6.28/nb+(r()-0.5)*0.5,el=-o.droop*(1-h/H)+0.04+(r()-0.5)*0.1,L=L0*(0.85+r()*0.3);
+        const dir=V(Math.cos(a)*Math.cos(el),Math.sin(el),Math.sin(a)*Math.cos(el)),st=V(0,h,0),en=st.clone().addScaledVector(dir,L);
+        en.y-=L*o.sag;if(o.hang) en.y+=L*0.08;   // (abete rosso: il ramo scende e poi la punta risale)
+        T.tube('barkFir',st,en,0.02+L*0.01,0.006,0);
+        const n=Math.max(1,Math.round(L/o.step)),tint=jit(r,[1,1,1],0.12);
+        for(let j=0;j<=n;j++){
+          const t=0.15+0.85*j/n,p=st.clone().lerp(en,t),sc=o.sz*(0.7+0.5*(1-t))*(0.85+r()*0.3);
+          for(const sd of [-1,1]){
+            const d=rotY(dir,sd*(0.5+r()*0.4));d.y-=0.08+r()*0.1;d.normalize();
+            const side=V(0,0,0).crossVectors(UP,d).normalize();
+            T.card(o.tex,p,d,side.clone().addScaledVector(UP,(r()-0.5)*0.5).normalize(),sc,sc,cn,ao,tint);
+          }
+          // un ramoscello alzato a metà, per dare spessore al palco
+          if(j%2===0){const d=dir.clone();d.y+=0.15;d.normalize();T.card(o.tex,p,d,V(0,0,0).crossVectors(d,V(0,0,0).crossVectors(UP,d)).normalize(),sc*0.9,sc*0.9,cn,ao,tint);}
+          if(o.hang&&j>0&&j%2===1) T.cross(o.tex,p,V(0,-1,0).addScaledVector(dir,0.3).normalize(),sc*0.55,sc*0.9,2,r()*3,cn,ao,tint);
+        }
+      }
+    }
+    T.cross(o.tex,V(0,H-0.7,0),UP,0.6,1.1,3,0,cn,ao,[1.05,1.05,1]);
+    return T.meshes();
+  }
+  const abete=s=>conifera(s,{tex:'firBig',H:12,base:1.2,gap:0.42,Lk:0.38,droop:0.22,sag:0.1,step:0.42,sz:0.95});
+  const abeteRosso=s=>conifera(s,{tex:'spruce',H:14,base:0.8,gap:0.5,Lk:0.3,droop:0.45,sag:0.16,step:0.55,sz:1.05,hang:true});
+  const larice=s=>conifera(s,{tex:'larch',H:13,base:2.0,gap:0.5,Lk:0.4,droop:0.05,sag:0.22,step:0.45,sz:1.25});
+  // ---- Pino silvestre: fusto alto e nudo, corteccia arancio in alto, chioma a nuvole di ciuffi ----
+  function pino(seed){
+    const r=mulberry32(seed),T=new Builder(),H=13+r()*1.5,hc=7.6;
+    const trunk=[];for(let i=0;i<=8;i++){const y=i/8*H;trunk.push(V(Math.sin(i*1.3)*0.12*i/8,y,Math.cos(i*0.9)*0.1*i/8));}
+    T.tube('barkPineLow',V(0,-0.2,0),V(0,0.4,0),0.48,0.32,0);
+    for(let i=0;i<8;i++) T.tube(trunk[i].y<hc*0.75?'barkPineLow':'barkPineHigh',trunk[i],trunk[i+1],0.32*(1-i/8)+0.03,0.32*(1-(i+1)/8)+0.025,0);
+    const at=y=>{const i=Math.min(7,Math.floor(y/H*8));return trunk[i].clone().lerp(trunk[i+1],y/H*8-i);};
+    const Cc=V(0,(hc+H)/2+0.4,0),Sc=V(3.2,(H-hc)/2+0.8,3.2),ao=sphAO(Cc,Sc,0.45);
+    const nb=13;
+    for(let k=0;k<nb;k++){
+      const h=hc-0.4+k/(nb-1)*(H-hc),f=(h-hc)/(H-hc),a=k*2.4+r()*0.6,el=0.28+r()*0.35+f*0.35,L=(1.9+r()*1.3)*(1-0.5*f);
+      const dir=V(Math.cos(a)*Math.cos(el),Math.sin(el),Math.sin(a)*Math.cos(el)),st=at(h),mid=st.clone().addScaledVector(dir,L*0.5);
+      const d2=dir.clone().addScaledVector(UP,0.4).normalize(),en=mid.clone().addScaledVector(d2,L*0.5);
+      T.tube('barkPineHigh',st,mid,0.1,0.06,0);T.tube('barkPineHigh',mid,en,0.06,0.03,0);
+      const tips=[[en,d2]];
+      const ns=2+Math.floor(r()*2);
+      for(let s=0;s<ns;s++){
+        const t=0.45+r()*0.45,p=st.clone().lerp(en,t),d3=dir.clone().addScaledVector(rnd3(r),1.1).addScaledVector(UP,0.45).normalize(),e3=p.clone().addScaledVector(d3,L*(0.35+r()*0.2));
+        T.tube('barkPineHigh',p,e3,0.035,0.014,0);tips.push([e3,d3]);
+      }
+      for(const [tp,td] of tips){
+        const cc=tp.clone().addScaledVector(UP,0.25),cn=sphN(cc,V(1,0.8,1)),tint=jit(r,[1,1,1],0.15);
+        for(let q=0;q<7;q++){
+          const o=tp.clone().add(rnd3(r).multiplyScalar(0.7)),d=td.clone().multiplyScalar(0.6).addScaledVector(UP,0.7).add(rnd3(r).multiplyScalar(0.8)).normalize();
+          T.cross('pine',o.addScaledVector(d,-0.15),d,0.85,0.85,3,r()*3,cn,ao,tint);
+        }
+      }
+    }
+    return T.meshes();
+  }
+  // ---- latifoglie: rami che si dividono (ricorsione), foglie su ogni rametto finale ----
+  function latifoglia(seed,o){
+    const r=mulberry32(seed),T=new Builder();
+    T.tube(o.bark,V(0,-0.2,0),V(0,0.5,0),o.r0*1.45,o.r0,0);
+    let top=V(0,o.trunk,0);
+    if(o.twist){
+      // tronco contorto: due fusti che si attorcigliano e si allargano
+      for(const ph of [0,Math.PI]){let prev=V(0,0.3,0);
+        for(let i=1;i<=5;i++){const y=0.3+i/5*(o.trunk-0.3),q=V(Math.cos(ph+i*0.9)*0.22*(0.6+i/5),y,Math.sin(ph+i*0.9)*0.22*(0.6+i/5));
+          T.tube(o.bark,prev,q,o.r0*0.75*(1-i*0.05),o.r0*0.7*(1-i*0.06),0);prev=q;}}
+      top=V(0,o.trunk,0);
+    }else T.tube(o.bark,V(0,0.5,0),top,o.r0,o.r0*0.8,0);
+    const C=o.crownC,S=o.crownS,cn=sphN(C,S),ao=sphAO(C,S,0.4);
+    const leafPts=[];
+    const grow=(p,dir,len,rad,depth)=>{
+      const mid=p.clone().addScaledVector(dir,len*0.5);
+      const d2=dir.clone().add(rnd3(r).multiplyScalar(o.bend)).addScaledVector(UP,o.up).normalize(),en=mid.clone().addScaledVector(d2,len*0.5);
+      T.tube(o.bark,p,mid,rad,rad*0.85,0);T.tube(o.bark,mid,en,rad*0.85,rad*0.7,0);
+      if(depth<=o.leafDepth){
+        const tint=jit(r,[1,1,1],0.12);
+        for(const t of (o.pts||[0.35,0.7,1])){
+          const q=p.clone().lerp(en,t);leafPts.push(q);
+          for(let c=0;c<o.perPoint;c++){
+            const ld=d2.clone().add(rnd3(r).multiplyScalar(0.9)).normalize();
+            let side=V(0,0,0).crossVectors(ld,UP);if(side.lengthSq()<0.01) side=V(1,0,0);side.normalize();
+            // facce quasi orizzontali (le foglie di faggio e quercia stanno a strati) più una incrociata
+            T.card(o.leaf,q,ld,side,o.size,o.size,cn,ao,tint);
+            T.card(o.leaf,q,ld,side.clone().applyAxisAngle(ld,1.1+r()*0.5),o.size,o.size,cn,ao,tint);
+          }
+        }
+      }
+      if(depth>0){
+        const nc=2+(r()<o.third?1:0);
+        for(let c=0;c<nc;c++){
+          const out=V(en.x,0,en.z);if(out.lengthSq()<0.01) out.set(r()-0.5,0,r()-0.5);out.normalize();
+          const cd=d2.clone().add(rnd3(r).multiplyScalar(o.spread)).addScaledVector(out,o.outward).addScaledVector(UP,o.lift).normalize();
+          grow(en,cd,len*o.lenK*(0.85+r()*0.3),rad*0.62,depth-1);
+        }
+      }
+    };
+    for(let i=0;i<o.limbs;i++){
+      const a=i/o.limbs*6.28+r()*0.6,el=o.limbEl[0]+r()*(o.limbEl[1]-o.limbEl[0]);
+      grow(top.clone().add(V(0,-r()*0.6,0)),V(Math.cos(a)*Math.cos(el),Math.sin(el),Math.sin(a)*Math.cos(el)),o.limbLen,o.r0*0.6,o.depth);
+    }
+    // fiori dritti sulla superficie della chioma (ippocastano)
+    if(o.flowers) for(let i=0;i<o.flowers;i++){
+      const top=leafPts.filter(q=>q.y>C.y-S.y*0.2),q0=top[Math.floor(r()*top.length)];if(!q0) break;
+      const d=V(q0.x-C.x,0,q0.z-C.z).normalize(),q=q0.clone().addScaledVector(d,0.35).add(V(0,0.25,0));
+      T.cross('candle',q,V(d.x*0.2,1,d.z*0.2).normalize(),0.45,0.85,2,r()*3,cn,ao,[1.15,1.15,1.15]);
+    }
+    return T.meshes();
+  }
+  const faggio=s=>latifoglia(s,{bark:'barkBeech',leaf:'beech',trunk:3.0,r0:0.3,limbs:5,limbEl:[0.9,1.25],limbLen:1.9,depth:4,leafDepth:2,
+    bend:0.3,up:0.05,spread:0.85,outward:0.3,lift:0.18,lenK:0.8,third:0.45,perPoint:1,pts:[0.75],size:1.7,crownC:V(0,6.6,0),crownS:V(4,3.8,4)});
+  const quercia=s=>latifoglia(s,{bark:'barkOak',leaf:'oak',trunk:2.2,r0:0.45,limbs:6,limbEl:[0.5,0.9],limbLen:2.0,depth:4,leafDepth:2,
+    bend:0.45,up:0.04,spread:0.9,outward:0.4,lift:0.2,lenK:0.8,third:0.5,perPoint:1,pts:[0.75],size:1.65,crownC:V(0,5,0),crownS:V(5.2,3.2,5.2)});
+  // ---- Betulla: fusto bianco sottile e un po' inclinato, rami che salgono e rametti penduli ----
+  function betulla(seed){
+    const r=mulberry32(seed),T=new Builder(),H=11.5;
+    const at=y=>V(0.02*Math.pow(y,1.4),y,0.01*y);
+    T.tube('barkBirch',V(0,-0.2,0),V(0,0.4,0),0.26,0.17,0);
+    let v=0;for(let i=0;i<8;i++){const y0=0.4+i*(H-0.4)/8,y1=0.4+(i+1)*(H-0.4)/8;v=T.tube('barkBirch',at(y0),at(y1),0.17*(1-i/8)+0.015,0.17*(1-(i+1)/8)+0.012,v);}
+    const C=V(at(7.5).x,7.6,0),S=V(3,4.2,3),cn=sphN(C,S),ao=sphAO(C,S,0.5);
+    let a=r()*6.28;
+    for(let h=2.6;h<H-0.3;h+=0.32){
+      for(let s=0;s<3;s++){
+        a+=2.4;const el=0.45+r()*0.4,L=((H-h)*0.36+0.8)*(0.85+r()*0.3);
+        const dir=V(Math.cos(a)*Math.cos(el),Math.sin(el),Math.sin(a)*Math.cos(el)),st=at(h),en=st.clone().addScaledVector(dir,L);
+        T.tube('barkFir',st,en,0.03,0.007,0);   // (i rami della betulla sono scuri, solo il fusto è bianco)
+        const tint=jit(r,[1,1,1],0.1);
+        // rametti penduli di lunghezza e inclinazione diverse, sparsi lungo il ramo (non in fila)
+        for(let t=0.25+r()*0.1;t<=1.001;t+=0.1+r()*0.12){
+          const p=st.clone().lerp(en,t),sc=0.7+r()*0.6,hd=V(0,-1,0).addScaledVector(dir,0.2+r()*0.5).add(rnd3(r).multiplyScalar(0.7)).normalize();
+          T.cross('birch',p.add(rnd3(r).multiplyScalar(0.25)),hd,0.5*sc,1.0*sc,2,r()*3,cn,ao,tint);
+        }
+      }
+    }
+    return T.meshes();
+  }
+  // ---- Palma: fusto ricurvo ad anelli, fronde pennate che si aprono e ricadono ----
+  function palma(seed){
+    const r=mulberry32(seed),T=new Builder(),P0=V(0,-0.2,0),P1=V(0.5,4.5,0.1),P2=V(1.7,8.4,0.4);
+    const bez=t=>V(0,0,0).addScaledVector(P0,(1-t)*(1-t)).addScaledVector(P1,2*t*(1-t)).addScaledVector(P2,t*t);
+    T.tube('barkPalm',V(0,-0.2,0),V(0.03,0.6,0),0.42,0.28,0);
+    let v=0;for(let i=0;i<12;i++) v=T.tube('barkPalm',bez(i/12),bez((i+1)/12),0.28-i*0.006,0.28-(i+1)*0.006,v);
+    const top=bez(1),B=T.get('palm'),C=top.clone().add(V(0,-0.8,0));
+    for(let k=0;k<22;k++){
+      const a=k*2.4+r()*0.3,e0=k<7?1.0:k<15?0.55:0.1,L=3.4+r()*0.7,h=V(Math.cos(a),0,Math.sin(a)),side=V(-h.z,0,h.x);
+      let p=top.clone(),pts=[];
+      // rachide che sale, si piega e ricade (più pesante verso la punta)
+      for(let s=0;s<=12;s++){const t=s/12,e=e0-Math.pow(t,1.3)*(2.1+r()*0.2);pts.push(p.clone());p.addScaledVector(h,Math.cos(e)*L/12).addScaledVector(UP,Math.sin(e)*L/12);}
+      const s0=B.n,tint=jit(r,[1,1,1],0.15);
+      pts.forEach((q,s)=>{
+        const t=s/12,w=1.45*Math.pow(Math.sin(Math.PI*Math.min(1,t*1.12)),0.5)+0.05;
+        const n=V(0,1,0).addScaledVector(h,0.35).addScaledVector(V(q.x-C.x,0,q.z-C.z).normalize(),0.3).normalize();
+        const o=0.6+0.4*Math.min(1,q.distanceTo(C)/3);
+        for(const [sd,u] of [[-1,0],[0,0.5],[1,1]]){
+          const qq=q.clone().addScaledVector(side,sd*w/2);if(sd) qq.y-=w*0.28;
+          B.pos.push(qq.x,qq.y,qq.z);B.nor.push(n.x,n.y,n.z);B.uv.push(u,t);B.col.push(tint[0]*o,tint[1]*o,tint[2]*o);B.n++;
+        }
+      });
+      for(let s=0;s<12;s++){const q=s0+s*3;B.idx.push(q,q+3,q+1,q+1,q+3,q+4,q+1,q+4,q+2,q+2,q+4,q+5);}
+    }
+    return T.meshes();
+  }
+
+  // ---- Pino domestico: fusto alto che si divide in grosse branche, chioma piatta a ombrello ----
+  function pinoDomestico(seed){
+    const r=mulberry32(seed),T=new Builder(),ht=5.2,top=V(0.3,ht,0.1);
+    T.tube('barkPineLow',V(0,-0.2,0),V(0,0.5,0),0.5,0.36,0);T.tube('barkPineLow',V(0,0.5,0),top,0.36,0.28,0);
+    const Cc=V(0,9.2,0),Sc=V(5,1.4,5),ao=sphAO(Cc,Sc,0.45),ends=[];
+    for(let i=0;i<5;i++){
+      const a=i*1.26+r()*0.4,out=V(Math.cos(a),0,Math.sin(a)),e=top.clone().addScaledVector(out,1.6+r()*1.2).add(V(0,2.6+r()*0.8,0));
+      T.tube('barkPineLow',top,e,0.22,0.12,0);
+      for(let s=0;s<3;s++){const e2=e.clone().addScaledVector(rotY(out,(s-1)*0.8),1.3+r()*0.8).add(V(0,0.5+r()*0.5,0));T.tube('barkPineHigh',e,e2,0.09,0.04,0);ends.push(e2);}
+    }
+    // ciuffi distribuiti su una cupola larga e bassa, più fitti in alto
+    for(let i=0;i<330;i++){
+      const a=r()*6.28,rad=Math.sqrt(r())*4.8,q=V(Math.cos(a)*rad,8.3+1.3*(1-(rad/4.8)**2)+r()*0.9,Math.sin(a)*rad);
+      const cc=V(q.x*0.8,8.4,q.z*0.8),cn=sphN(cc,V(1.6,0.7,1.6)),d=V(q.x*0.25,1,q.z*0.25).add(rnd3(r).multiplyScalar(0.6)).normalize();
+      T.cross('pine',q.addScaledVector(d,-0.3),d,1.0,1.0,3,r()*3,cn,ao,jit(r,[1.08,1.08,1],0.1));
+    }
+    return T.meshes();
+  }
+  // ---- Cipresso: colonna stretta e scura, appuntita ----
+  function cipresso(seed){
+    const r=mulberry32(seed),T=new Builder(),H=13+r()*2;
+    T.tube('barkOak',V(0,-0.2,0),V(0,0.5,0),0.32,0.22,0);T.tube('barkOak',V(0,0.5,0),V(0,H-0.5,0),0.22,0.03,0);
+    const prof=y=>1.25*Math.pow(Math.sin(Math.PI*Math.min(1,Math.max(0,(y-0.4)/(H-0.2)))),0.75)*(1-0.35*y/H);
+    const ao=q=>{const R=prof(q.y)+0.05;return 0.4+0.6*Math.min(1,(Math.hypot(q.x,q.z)/R)**2);};
+    const cn=q=>V(q.x,Math.hypot(q.x,q.z)*0.3+0.12,q.z).normalize();
+    for(let i=0;i<14;i++){const h=1+i*(H-2)/14,a=i*2.4,d=V(Math.cos(a)*0.4,1,Math.sin(a)*0.4).normalize();T.tube('barkOak',V(0,h,0),V(0,h,0).addScaledVector(d,prof(h)*1.1),0.04,0.01,0);}
+    for(let i=0;i<420;i++){
+      const y=0.7+Math.pow(r(),0.85)*(H-0.9),R=prof(y),a=r()*6.28,rad=Math.sqrt(r())*R*0.85,p=V(Math.cos(a)*rad,y,Math.sin(a)*rad);
+      const d=V(Math.cos(a)*0.35,1,Math.sin(a)*0.35).add(rnd3(r).multiplyScalar(0.3)).normalize();
+      T.cross('cypress',p,d,0.8*(0.6+R*0.4),0.95,2,r()*3,cn,ao,jit(r,[1,1,1],0.08));
+    }
+    return T.meshes();
+  }
+  // ---- Pioppo cipressino: alto e affusolato, rami che salgono quasi verticali ----
+  function pioppo(seed){
+    const r=mulberry32(seed),T=new Builder(),H=16;
+    T.tube('barkOak',V(0,-0.2,0),V(0,0.5,0),0.4,0.28,0);
+    let v=0;for(let i=0;i<6;i++){const y0=0.5+i*(H-0.5)/6,y1=0.5+(i+1)*(H-0.5)/6;v=T.tube('barkOak',V(0,y0,0),V(0,y1,0),0.28*(1-i/6)+0.03,0.28*(1-(i+1)/6)+0.02,v);}
+    const C=V(0,9.5,0),S=V(2.2,7,2.2),cn=sphN(C,S),ao=sphAO(C,S,0.45);
+    const prof=y=>1.9*Math.pow(Math.sin(Math.PI*Math.min(1,Math.max(0,(y-2)/(H-1.8)))),0.7);
+    let a=0;
+    for(let h=2.2;h<H-0.5;h+=0.42){
+      for(let s=0;s<3;s++){
+        a+=2.4;const L=prof(h)*1.6+0.6,dir=V(Math.cos(a)*0.35,1,Math.sin(a)*0.35).normalize(),st=V(0,h,0),en=st.clone().addScaledVector(dir,L);
+        T.tube('barkOak',st,en,0.04,0.01,0);
+        const tint=jit(r,[1,1,1],0.1);
+        for(let t=0.3;t<=1.001;t+=0.35){const p=st.clone().lerp(en,t),d=dir.clone().add(rnd3(r).multiplyScalar(0.8)).normalize();
+          T.cross('poplar',p,d,0.85,0.85,2,r()*3,cn,ao,tint);}
+      }
+    }
+    return T.meshes();
+  }
+  // ---- Salice piangente: grosse branche ad arco e lunghe tende di rami che arrivano quasi a terra ----
+  function salice(seed){
+    const r=mulberry32(seed),T=new Builder();
+    T.tube('barkOak',V(0,-0.2,0),V(0,0.5,0),0.6,0.45,0);T.tube('barkOak',V(0,0.5,0),V(0,2.6,0),0.45,0.38,0);
+    const C=V(0,4.5,0),S=V(5,4,5),cn=sphN(C,S),ao=sphAO(C,S,0.45);
+    for(let i=0;i<6;i++){
+      const a=i*1.05+r()*0.4,out=V(Math.cos(a),0,Math.sin(a));
+      const p1=V(0,2.5,0),p2=p1.clone().addScaledVector(out,1.4).add(V(0,2.2,0)),p3=p2.clone().addScaledVector(out,1.8).add(V(0,1.2,0));
+      T.tube('barkOak',p1,p2,0.22,0.14,0);T.tube('barkOak',p2,p3,0.14,0.06,0);
+      for(let s=0;s<3;s++){const p4=p3.clone().addScaledVector(rotY(out,(s-1)*0.7),1.2+r()*0.8).add(V(0,-0.3,0));T.tube('barkOak',p3,p4,0.05,0.015,0);
+        // tende: lunghe frange che pendono dai rami fino a poco sopra il terreno
+        for(let t=0;t<=1.001;t+=0.25){const q=p3.clone().lerp(p4,t).add(rnd3(r).multiplyScalar(0.4)),len=Math.max(1.5,Math.min(4.2,q.y-0.6));
+          T.cross('willow',q,V(0,-1,0).add(rnd3(r).multiplyScalar(0.15)).normalize(),0.75,len,2,r()*3,cn,ao,jit(r,[1,1,1],0.1));}}
+      for(let t=0.3;t<=1;t+=0.35){const q=p2.clone().lerp(p3,t);T.cross('willow',q,V(0,-1,0),0.7,Math.min(4,q.y-0.8),2,r()*3,cn,ao,jit(r,[1,1,1],0.1));}
+    }
+    // cupola: da tutta la parte alta della chioma pendono frange, più corte al centro e lunghe ai bordi
+    for(let i=0;i<150;i++){
+      const a=r()*6.28,rad=Math.sqrt(r())*4.6,q=V(Math.cos(a)*rad,6.6-(rad/4.6)**2*2.2+r()*0.4,Math.sin(a)*rad);
+      const len=Math.max(1.2,Math.min(q.y-0.6,1.2+rad*0.75));
+      T.cross('willow',q,V(q.x*0.06,-1,q.z*0.06).normalize(),0.8,len,2,r()*3,cn,ao,jit(r,[1,1,1],0.1));
+    }
+    return T.meshes();
+  }
+  // ---- Ulivo: tronco basso e contorto, chioma irregolare argentata ----
+  const ulivo=s=>latifoglia(s,{bark:'barkOlive',leaf:'olive',trunk:1.7,r0:0.38,limbs:4,limbEl:[0.6,1.05],limbLen:1.7,depth:3,leafDepth:2,twist:true,
+    bend:0.6,up:0.02,spread:0.95,outward:0.4,lift:0.15,lenK:0.8,third:0.5,perPoint:2,pts:[0.55,1],size:1.0,crownC:V(0,3.9,0),crownS:V(3.2,2.2,3.2)});
+  // ---- Acacia della savana: rami a candelabro e chioma piatta come un tavolo ----
+  function acacia(seed){
+    const r=mulberry32(seed),T=new Builder(),top=V(0,2.4,0);
+    T.tube('barkOak',V(0,-0.2,0),V(0,0.5,0),0.36,0.26,0);T.tube('barkOak',V(0,0.5,0),top,0.26,0.22,0);
+    const C=V(0,6.4,0),S=V(5.5,0.9,5.5),ao=sphAO(C,S,0.5);
+    for(let i=0;i<4;i++){
+      const a=i*1.57+r()*0.5,out=V(Math.cos(a),0,Math.sin(a)),e=top.clone().addScaledVector(out,1.8+r()*0.8).add(V(0,2.8+r()*0.6,0));
+      T.tube('barkOak',top,e,0.16,0.09,0);
+      for(let s=0;s<3;s++){const e2=e.clone().addScaledVector(rotY(out,(s-1)*0.9),1.5+r()*0.8).add(V(0,0.9+r()*0.4,0));T.tube('barkOak',e,e2,0.07,0.025,0);}
+    }
+    // foglie: strati quasi orizzontali in un disco largo e sottile (luce dall'alto)
+    for(let i=0;i<420;i++){
+      const a=r()*6.28,rad=Math.sqrt(r())*5.3,q=V(Math.cos(a)*rad,6.0+0.6*(1-(rad/5.3)**2)+r()*0.7,Math.sin(a)*rad);
+      const d=V(Math.cos(r()*6.28),(r()-0.5)*0.5,Math.sin(r()*6.28)).normalize(),side=V(-d.z,(r()-0.5)*0.9,d.x).normalize();
+      T.card('acacia',q.addScaledVector(d,-0.7),d,side,1.5,1.5,()=>V(q.x*0.15,1,q.z*0.15).normalize(),ao,jit(r,[1,1,1],0.1));
+    }
+    return T.meshes();
+  }
+  // ---- Cactus saguaro: colonna costoluta con due o tre bracci che salgono ----
+  function cactus(seed){
+    const r=mulberry32(seed),T=new Builder(),H=6;
+    T.tube('barkCactus',V(0,-0.1,0),V(0,H,0),0.36,0.34,0);T.tube('barkCactus',V(0,H,0),V(0,H+0.25,0),0.34,0.24,0);T.tube('barkCactus',V(0,H+0.25,0),V(0,H+0.36,0),0.24,0.04,0);
+    for(let i=0;i<3;i++){
+      const a=i*2.3+r(),h=2.2+i*0.9,out=V(Math.cos(a),0,Math.sin(a)),p1=V(0,h,0).addScaledVector(out,0.25),p2=p1.clone().addScaledVector(out,0.65).add(V(0,0.15,0)),p3=p2.clone().add(V(0,1.6+r()*1.2,0));
+      T.tube('barkCactus',p1,p2,0.22,0.22,0);T.tube('barkCactus',p2.clone().addScaledVector(out,-0.1),p3,0.23,0.21,0);
+      T.tube('barkCactus',p3,p3.clone().add(V(0,0.15,0)),0.21,0.12,0);T.tube('barkCactus',p3.clone().add(V(0,0.15,0)),p3.clone().add(V(0,0.24,0)),0.12,0.03,0);
+    }
+    return T.meshes();
+  }
+
+  // ---- Tiglio: fusto dritto, chioma a uovo fitta e regolare (viali e piazze) ----
+  // (fusto centrale fino in cima e rami tutt'intorno, più lunghi a metà altezza: sagoma a uovo)
+  function tiglio(seed){
+    const r=mulberry32(seed),T=new Builder(),H=13.5,h0=2.6;
+    T.tube('barkOlive',V(0,-0.2,0),V(0,0.5,0),0.5,0.34,0);
+    let v=0;for(let i=0;i<6;i++){const y0=0.5+i*(H-0.5)/6,y1=0.5+(i+1)*(H-0.5)/6;v=T.tube('barkOlive',V(0,y0,0),V(0,y1,0),0.34*(1-i/6)+0.04,0.34*(1-(i+1)/6)+0.03,v);}
+    const C=V(0,8.2,0),S=V(3.8,5,3.8),cn=sphN(C,S),ao=sphAO(C,S,0.42);
+    const prof=h=>3.6*Math.pow(Math.sin(Math.PI*Math.min(1,Math.max(0.04,(h-h0+0.3)/(H-h0+0.3)))),0.65);
+    let a=r()*6.28;
+    for(let h=h0;h<H-0.4;h+=0.55){
+      for(let s=0;s<3;s++){
+        a+=2.4;const L=prof(h)*(0.85+r()*0.25),el=0.35+r()*0.3+(h/H)*0.35;
+        const dir=V(Math.cos(a)*Math.cos(el),Math.sin(el),Math.sin(a)*Math.cos(el)),st=V(0,h,0),en=st.clone().addScaledVector(dir,L);
+        T.tube('barkOlive',st,en,0.07,0.02,0);
+        const tint=jit(r,[1,1,1],0.1);
+        for(const t of [0.45,0.75,1]){
+          const p=st.clone().lerp(en,t);
+          for(let c=0;c<2;c++){const d=dir.clone().add(rnd3(r).multiplyScalar(1.1)).normalize();
+            T.cross('linden',p.clone().add(rnd3(r).multiplyScalar(0.4)),d,1.35,1.35,2,r()*3,cn,ao,tint);}
+        }
+      }
+    }
+    T.cross('linden',V(0,H-0.6,0),UP,1.3,1.4,3,0,cn,ao,[1,1,1]);
+    return T.meshes();
+  }
+  // ---- Ippocastano: chioma larga a cupola, foglie palmate e candele di fiori bianchi ----
+  const ippocastano=s=>latifoglia(s,{bark:'barkOak',leaf:'chestnut',trunk:2.8,r0:0.4,limbs:6,limbEl:[0.85,1.25],limbLen:2.2,depth:4,leafDepth:3,
+    bend:0.35,up:0.06,spread:0.75,outward:0.22,lift:0.25,lenK:0.8,third:0.2,perPoint:1,pts:[0.6,1],size:1.75,flowers:130,crownC:V(0,6.8,0),crownS:V(4.6,3.8,4.6)});
+  // ---- Pino mugo: arbusto basso con tanti fusti che strisciano e poi si alzano (pietraie d'alta quota) ----
+  function mugo(seed){
+    const r=mulberry32(seed),T=new Builder(),Cc=V(0,1.6,0),Sc=V(3.2,1.8,3.2),ao=sphAO(Cc,Sc,0.45);
+    for(let i=0;i<8;i++){
+      const a=i*0.8+r()*0.5,out=V(Math.cos(a),0,Math.sin(a));
+      let p=V(0,0.05,0).addScaledVector(out,r()*0.3),el=0.02+r()*0.12;const L=2.8+r()*1.4,pts=[p.clone()];
+      for(let s=0;s<4;s++){el+=0.22;const d=out.clone().multiplyScalar(Math.cos(el)).addScaledVector(UP,Math.sin(el)).add(rnd3(r).multiplyScalar(0.2)).normalize();
+        const q=p.clone().addScaledVector(d,L/4);T.tube('barkPineLow',p,q,0.11-s*0.022,0.09-s*0.02,0);p=q;pts.push(q.clone());}
+      // ciuffi sugli ultimi tratti e su qualche rametto laterale
+      for(let s=1;s<pts.length;s++){
+        const base=pts[s],cc=base.clone().addScaledVector(UP,0.2),cn=sphN(cc,V(1,0.8,1));
+        for(let q=0;q<(s>1?5:3);q++){const o=base.clone().add(rnd3(r).multiplyScalar(0.6)),d=out.clone().multiplyScalar(0.4).addScaledVector(UP,0.8).add(rnd3(r).multiplyScalar(0.7)).normalize();
+          T.cross('pine',o,d,0.75,0.75,3,r()*3,cn,ao,jit(r,[0.82,0.88,0.84],0.08));}
+      }
+    }
+    return T.meshes();
+  }
+
+  // ---------------- materiali (Lambert: luce per vertice, leggera) ----------------
+  // Ogni materiale esiste in due copie, una per livello di dettaglio (lev 0 dettagliato, 1 intermedio), ognuna
+  // con la sua fascia di distanze in cui compare e scompare a retino (treeLodPatch): così il passaggio da un
+  // livello all'altro è una dissolvenza e non uno scatto.
+  // foglie: due facce illuminate sempre dal lato esterno della chioma (le normali puntano fuori), neve opzionale
+  function leafM(tex,at,lev){
+    at=at||0.42;
+    const m=new THREE.MeshLambertMaterial({map:tex,alphaTest:at,side:THREE.DoubleSide,vertexColors:true}),U=treeLodUniform(lev);
+    m.onBeforeCompile=sh=>{
+      sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nattribute float aSnow;\nvarying float vSnow;')
+        .replace('#include <begin_vertex>','#include <begin_vertex>\nvSnow=aSnow;');
+      sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying float vSnow;')
+        .replace('#include <color_fragment>','#include <color_fragment>\ndiffuseColor.rgb=mix(diffuseColor.rgb,vec3(0.9,0.93,0.98),vSnow);')
+        .replace(/gl_FrontFacing/g,'true');
+      treeLodPatch(sh,U);treeAlphaMip(sh);
+    };
+    m.extensions={derivatives:true};
+    m.customProgramCacheKey=()=>'treeLeaf3d';
+    const dm=new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking,map:tex,alphaTest:at});
+    dm.onBeforeCompile=treeAlphaMip;dm.extensions={derivatives:true};dm.customProgramCacheKey=()=>'treeLeafDepth';
+    m.userData.depth=dm;
+    return m;
+  }
+  function barkM(tex,lev){
+    const m=new THREE.MeshLambertMaterial({map:tex,vertexColors:true}),U=treeLodUniform(lev);
+    m.onBeforeCompile=sh=>treeLodPatch(sh,U);
+    m.customProgramCacheKey=()=>'treeBark3d';
+    return m;
+  }
+  const mats=lev=>({
+    fir:leafM(TX.fir,0,lev),pine:leafM(TX.pine,0,lev),beech:leafM(TX.beech,0,lev),oak:leafM(TX.oak,0,lev),birch:leafM(TX.birch,0,lev),palm:leafM(TX.palm,0.3,lev),
+    firBig:leafM(TX.firBig,0,lev),spruce:leafM(TX.spruce,0,lev),larch:leafM(TX.larch,0,lev),cypress:leafM(TX.cypress,0,lev),poplar:leafM(TX.poplar,0,lev),
+    olive:leafM(TX.olive,0,lev),willow:leafM(TX.willow,0,lev),acacia:leafM(TX.acacia,0,lev),linden:leafM(TX.linden,0,lev),chestnut:leafM(TX.chestnut,0,lev),candle:leafM(TX.candle,0.35,lev),
+    barkFir:barkM(TX.barkFir,lev),barkPineLow:barkM(TX.barkPineLow,lev),barkPineHigh:barkM(TX.barkPineHigh,lev),barkBeech:barkM(TX.barkBeech,lev),
+    barkOak:barkM(TX.barkOak,lev),barkBirch:barkM(TX.barkBirch,lev),barkPalm:barkM(TX.barkPalm,lev),barkOlive:barkM(TX.barkOlive,lev),barkCactus:barkM(TX.cactus,lev)
+  });
+  const MATS=[mats(0),mats(1)],MAT=MATS[0];
+  // (le ombre usano lo stesso materiale di profondità per entrambi i livelli)
+  for(const k in MAT) MATS[1][k].userData.depth=MAT[k].userData.depth;
+  for(const M of MATS) for(const k in M){sharedRes.add(M[k]);if(M[k].map) sharedRes.add(M[k].map);if(M[k].userData.depth) sharedRes.add(M[k].userData.depth);}
+  const MAKE={abete,abeteRosso,larice,pino,faggio,quercia,betulla,palma,pinoDomestico,cipresso,pioppo,salice,ulivo,acacia,cactus,tiglio,ippocastano,mugo};
+  const cache={};
+  // variante v della specie sp, al livello di dettaglio lev (0 dettagliata, 1 intermedia, 2 leggera); snow = con la neve
+  const variant=(sp,v,lev,snow)=>{
+    const key=sp+'|'+v+'|'+lev+'|'+(snow?1:0);
+    if(cache[key]) return cache[key];
+    BOPT={keep:lev?({palma:1,cactus:1}[sp]||TREE_KEEP[lev]):1,snow:!!snow};
+    const parts=MAKE[sp](101+v*37+sp.length*13).map(p=>({k:p.k,geo:p.geo,mat:MATS[lev?1:0][p.k]}));
+    BOPT={keep:1,snow:false};
+    parts.forEach(p=>sharedRes.add(p.geo));
+    return cache[key]=parts;
+  };
+  // "Fotografia" dell'albero (impostore): la variante dettagliata ripresa di lato con una camera ortografica, in
+  // luce neutra, su sfondo trasparente. Da lontano l'albero è un rettangolo con questa immagine, sempre girato
+  // verso la telecamera (vedi treeBBMat): due triangoli invece di migliaia. Una foto per variante (e con la neve).
+  const imp={};
+  const impostor=(sp,v,snow)=>{
+    const key=sp+'|'+v+'|'+(snow?1:0);
+    if(imp[key]) return imp[key];
+    const parts=variant(sp,v,0,snow),box=new THREE.Box3();
+    for(const pt of parts){pt.geo.computeBoundingBox();box.union(pt.geo.boundingBox);}
+    const W=2*Math.max(-box.min.x,box.max.x,-box.min.z,box.max.z)*1.02,y0=box.min.y,y1=box.max.y+0.05;
+    const tall=(y1-y0)/W>1.4,rt=new THREE.WebGLRenderTarget(256,tall?512:256,{minFilter:THREE.LinearMipmapLinearFilter,magFilter:THREE.LinearFilter,generateMipmaps:true});
+    const sc=new THREE.Scene();
+    sc.add(new THREE.AmbientLight(0xffffff,0.82));
+    const dl=new THREE.DirectionalLight(0xffffff,0.3);dl.position.set(0.4,1,0.8);sc.add(dl);
+    for(const pt of parts) sc.add(new THREE.Mesh(pt.geo,pt.mat));
+    const cam=new THREE.OrthographicCamera(-W/2,W/2,y1,y0,0.1,400);cam.position.set(0,0,200);cam.lookAt(0,0,0);
+    // (stato del renderer salvato e ripristinato; il retino di trasparenza va spento durante la foto)
+    const prevRT=renderer.getRenderTarget(),prevC=renderer.getClearColor(new THREE.Color()),prevA=renderer.getClearAlpha(),occ=OCC_U.uOccOn.value;
+    OCC_U.uOccOn.value=0;
+    renderer.setRenderTarget(rt);renderer.setClearColor(0x35502e,0);renderer.clear();renderer.render(sc,cam);
+    renderer.setRenderTarget(prevRT);renderer.setClearColor(prevC,prevA);OCC_U.uOccOn.value=occ;
+    const geo=new THREE.PlaneGeometry(W,y1-y0);geo.translate(0,(y0+y1)/2,0);
+    const mat=treeBBMat(rt.texture);
+    [geo,mat,rt.texture,mat.userData.depth].forEach(r=>sharedRes.add(r));
+    return imp[key]={geo,mat};
+  };
+  return treeLib.L={MAT,variant,impostor};
+}
+// materiale delle foto degli alberi: il rettangolo ruota attorno al suo asse verticale per guardare sempre la
+// telecamera (nel vertex shader, così basta una sola mesh instanziata per variante); la luce arriva come su
+// una chioma (normale verso l'alto: sole, cielo, notte e nebbia come per tutto il resto)
+const TREE_BB_U={uBBCam:{value:new THREE.Vector3()},uBBSun:{value:new THREE.Vector3(1,0,0)}};
+// Dissolvenza tra i livelli: ogni albero, secondo la distanza del suo centro dalla telecamera, compare (fin) e
+// scompare (fout) dentro una fascia; i pixel si accendono e si spengono con un retino fisso sullo schermo, e il
+// livello che entra usa esattamente i pixel che quello che esce lascia liberi: niente scatti né buchi.
+// uLod = (inizio comparsa, fine comparsa, inizio scomparsa, fine scomparsa)
+function treeLodUniform(lev){
+  const B=TREE_FADE,v=lev===0?[-2,-1,TREE_LOD[0]-B,TREE_LOD[0]+B]:lev===1?[TREE_LOD[0]-B,TREE_LOD[0]+B,TREE_LOD[1]-B,TREE_LOD[1]+B]:[TREE_LOD[1]-B,TREE_LOD[1]+B,1e6,1e6+1];
+  return {value:new THREE.Vector4(...v)};
+}
+const TREE_LOD_GLSL=`float treeDither(vec2 p){return fract(52.9829189*fract(dot(p,vec2(0.06711056,0.00583715))));}`;
+// Foglie che non spariscono da lontano: rimpicciolendo, la texture (mipmap) mescola foglie e vuoti e l'opacità
+// scende sotto la soglia del test di trasparenza, così la chioma si assottiglia fino a svanire e "rinasce"
+// avvicinandosi. Si compensa alzando l'opacità in proporzione al livello di mipmap usato.
+function treeAlphaMip(sh){
+  sh.fragmentShader=sh.fragmentShader.replace('#include <map_fragment>',`#include <map_fragment>
+    #ifdef USE_MAP
+    {vec2 tq=vUv*256.0;float ml=max(0.0,0.5*log2(max(dot(dFdx(tq),dFdx(tq)),dot(dFdy(tq),dFdy(tq)))));diffuseColor.a*=1.0+ml*0.32;}
+    #endif`);
+}
+function treeLodPatch(sh,U,ctrExpr){
+  sh.uniforms.uLod=U;sh.uniforms.uLodCam=TREE_BB_U.uBBCam;
+  sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nuniform vec4 uLod;uniform vec3 uLodCam;varying vec2 vLodF;')
+    .replace('#include <begin_vertex>',`#include <begin_vertex>
+      #ifdef USE_INSTANCING
+      {vec3 lc=(modelMatrix*vec4(instanceMatrix[3].xyz,1.0)).xyz;float dd=length(lc.xz-uLodCam.xz);
+       vLodF=vec2(smoothstep(uLod.x,uLod.y,dd),1.0-smoothstep(uLod.z,uLod.w,dd));}
+      #else
+      vLodF=vec2(1.0);
+      #endif`);
+  sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying vec2 vLodF;\n'+TREE_LOD_GLSL)
+    .replace('#include <clipping_planes_fragment>','#include <clipping_planes_fragment>\n{float tb=treeDither(gl_FragCoord.xy);if(tb>=vLodF.x||tb<1.0-vLodF.y) discard;}');
+}
+// rettangolo della foto girato verso un punto (dir = 'cam': la telecamera; 'sun': il sole, per l'ombra)
+function treeBBVertex(dir){
+  return `vec4 mvPosition;
+        {
+          #ifdef USE_INSTANCING
+          mat4 im=instanceMatrix;
+          #else
+          mat4 im=mat4(1.0);
+          #endif
+          vec3 ctr=(modelMatrix*vec4(im[3].xyz,1.0)).xyz;
+          float sx=im[0].x,sy=length(im[1].xyz);
+          vec3 toC=${dir==='cam'?'uBBCam-ctr':'uBBSun'};vec3 th=vec3(toC.x,0.0,toC.z);float L=length(th);
+          vec3 R=L>0.001?vec3(th.z,0.0,-th.x)/L:vec3(1.0,0.0,0.0);
+          // (guardata dall'alto la foto si inclina in parte verso la telecamera, così non sembra una lama sottile)
+          vec3 U=${dir==='cam'?'normalize(mix(vec3(0.0,1.0,0.0),cross(normalize(toC),R),0.55))':'vec3(0.0,1.0,0.0)'};
+          vec3 wp=ctr+R*transformed.x*sx+U*transformed.y*sy;
+          ${dir==='sun'?'vLodF=vec2(step('+(TREE_LOD[1]).toFixed(1)+',length(ctr.xz-uBBCam.xz)),1.0);':''}
+          mvPosition=viewMatrix*vec4(wp,1.0);
+          gl_Position=projectionMatrix*mvPosition;
+        }`;
+}
+function treeBBMat(tex){
+  const m=new THREE.MeshLambertMaterial({map:tex,alphaTest:0.5}),U=treeLodUniform(2);
+  m.onBeforeCompile=sh=>{
+    sh.uniforms.uBBCam=TREE_BB_U.uBBCam;
+    sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nuniform vec3 uBBCam;')
+      .replace('#include <beginnormal_vertex>','vec3 objectNormal=vec3(0.0,1.0,0.0);')
+      .replace('#include <project_vertex>',treeBBVertex('cam'));
+    treeLodPatch(sh,U);treeAlphaMip(sh);
+  };
+  m.extensions={derivatives:true};
+  m.customProgramCacheKey=()=>'treeBB';
+  m.userData.occ=true;   // (la trasparenza a retino serve solo agli alberi vicini, che sono in 3D)
+  // ombra della foto: nella mappa delle ombre il rettangolo si gira verso il sole (la sagoma dell'albero cade a
+  // terra come quella vera); la proiettano solo gli alberi oltre la zona in 3D, che ha già le sue ombre
+  const d=new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking,map:tex,alphaTest:0.5});
+  d.onBeforeCompile=sh=>{
+    sh.uniforms.uBBCam=TREE_BB_U.uBBCam;sh.uniforms.uBBSun=TREE_BB_U.uBBSun;
+    sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nuniform vec3 uBBCam;uniform vec3 uBBSun;varying vec2 vLodF;')
+      .replace('#include <project_vertex>',treeBBVertex('sun'));
+    sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying vec2 vLodF;')
+      .replace('#include <clipping_planes_fragment>','#include <clipping_planes_fragment>\nif(vLodF.x<0.5) discard;');
+  };
+  d.customProgramCacheKey=()=>'treeBBDepth';
+  m.userData.depth=d;
+  return m;
 }
 // --- alberi 3D instanziati: proiettano e ricevono ombre ---
 const trunkGeo=new THREE.CylinderGeometry(0.1,0.16,1,6);trunkGeo.translate(0,0.5,0);
@@ -3327,8 +4322,54 @@ const TREE_PAL={
   palm:[0x4e8a3a,0x5a9440,0x467e34],dead:[0x8a8478],bush:[0x3f7a34,0x4a8636,0x5a8f3c],drybush:[0x8a7a4a,0x9a8650,0x7a6a40]
 };
 [treeBarkMat,leafDSMat,blob1Geo,weepGeo,frondGeo].forEach(r=>sharedRes.add(r));
+// specie del percorso (FLORA) → albero 3D della libreria; arbusti e alberi secchi restano quelli semplici
+const TREE_NEW={fir:'abete',spruce:'abeteRosso',larch:'larice',pine:'pino',umbrella:'pinoDomestico',cypress:'cipresso',oak:'quercia',poplar:'pioppo',
+  birch:'betulla',willow:'salice',olive:'ulivo',acacia:'acacia',palm:'palma',beech:'faggio',linden:'tiglio',chestnut:'ippocastano',mugo:'mugo',cactus:'cactus'};
+// specie secondo la quota sopra la strada: in montagna, salendo, le latifoglie lasciano il posto alle conifere e
+// vicino al limite del bosco restano larici e pini mughi; nei fondovalle dei boschi misti tornano i faggi
+function treeEco(sp,alt,fl,r){
+  const tl=fl.treeline||0;if(!tl) return sp;
+  if((course===3||course===6||course===9)&&alt>tl*0.7&&sp!=='mugo'&&sp!=='larice'&&r()<0.6) return course===3||r()<0.45?'mugo':'larice';
+  if((course===2||course===10)&&alt>tl*0.45&&(sp==='faggio'||sp==='quercia'||sp==='ippocastano')&&r()<0.7) return r()<0.6?'abete':'abeteRosso';
+  if((course===2||course===10)&&alt<3&&(sp==='abete'||sp==='abeteRosso')&&r()<0.35) return 'faggio';
+  return sp;
+}
+// Tecnica mista, secondo la distanza dalla telecamera: fino a TREE_LOD[0] l'albero 3D dettagliato, fino a
+// TREE_LOD[1] quello 3D intermedio (entrambi in mesh comuni a tutto lo stage, riempite di nuovo ogni pochi
+// fotogrammi con i soli alberi davanti o di fianco alla telecamera), oltre la sua "foto" sempre girata verso la
+// telecamera (una mesh per variante con tutti gli alberi). Attorno a ogni soglia c'è una fascia larga
+// 2·TREE_FADE in cui i due livelli convivono e si scambiano a retino (vedi treeLodPatch): il passaggio non si vede.
+// (la foto è specchiata a caso da un albero all'altro e ogni variante ha la sua: gli alberi lontani non si ripetono)
+let TREEX=null;
+const TREE_LOD=[70,150],TREE_FADE=10,TREE_KEEP=[1,0.25];
+function treeLodFrame(){
+  TREE_BB_U.uBBCam.value.copy(camera.position);
+  TREE_BB_U.uBBSun.value.set(sunDir.x,0,sunDir.z);
+  if(!TREEX||!TREEX.items.length) return;
+  const cx=camera.position.x,cz=camera.position.z;
+  if(++TREEX.frame%4!==0&&Math.hypot(cx-TREEX.lx,cz-TREEX.lz)<2) return;
+  TREEX.lx=cx;TREEX.lz=cz;
+  // inquadratura un po' allargata (la telecamera si sposta tra un aggiornamento e l'altro; e un albero appena
+  // fuori campo può ancora gettare la sua ombra dentro)
+  camera.updateMatrixWorld();_treeFr.setFromProjectionMatrix(_treeM4.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+  const M=TREE_FADE+4,A0=(TREE_LOD[0]+M)**2,B0=Math.max(0,TREE_LOD[0]-M)**2,A1=(TREE_LOD[1]+M)**2,LV=TREEX.lv;
+  for(const lv of LV) for(const k in lv) lv[k].n=0;
+  const put=(B,it)=>{for(const nm of B.meshes){nm.setMatrixAt(B.n,it.m);nm.setColorAt(B.n,it.c);}B.n++;};
+  for(const it of TREEX.items){
+    const dx=it.x-cx,dz=it.z-cz,d2=dx*dx+dz*dz;
+    if(d2>A1) continue;
+    _treeSph.center.set(it.x,it.y+it.r*0.8,it.z);_treeSph.radius=it.r+(d2<A0?14:4);
+    if(!_treeFr.intersectsSphere(_treeSph)) continue;
+    if(d2<A0) put(LV[0][it.key],it);
+    if(d2>B0) put(LV[1][it.key],it);
+  }
+  for(const lv of LV) for(const k in lv){const B=lv[k];for(const nm of B.meshes){nm.count=B.n;nm.instanceMatrix.needsUpdate=true;if(nm.instanceColor) nm.instanceColor.needsUpdate=true;}}
+}
+const _treeFr=new THREE.Frustum(),_treeM4=new THREE.Matrix4(),_treeSph=new THREE.Sphere();
 function buildTrees(trees,theme){
   const fl=FLORA[course]||{},snow=!!fl.snow||theme==='snow';
+  TREEX={items:[],lv:[{},{}],frame:0,lx:1e9,lz:1e9};
+  const farLists=new Map(),s3=new THREE.Vector3();
   // ogni parte va nel suo elenco, diviso a blocchi di tracciato (così si scartano quelli fuori inquadratura)
   const chunks=new Map();
   const m=new THREE.Matrix4(),q=new THREE.Quaternion(),p=new THREE.Vector3(),s=new THREE.Vector3(),eu=new THREE.Euler(0,0,0,'YXZ');
@@ -3344,12 +4385,29 @@ function buildTrees(trees,theme){
   for(const t of trees){
     let sd=Math.floor((t.seed||Math.random())*2147483646)+1;
     const r=()=>(sd=sd*16807%2147483647)/2147483647;
-    const x=t.x*S3,z=t.y*S3,y=terrainAt(t.x,t.y)-0.1,ry=r()*Math.PI*2;
+    // (niente alberi nella gola dei ponti: lì scorre il fiume)
+    const tnear=nearestTrack(t.x,t.y);if(tnear.bf>0.05&&tnear.d<480) continue;
+    const x=t.x*S3,z=t.y*S3,y=terrainAt(t.x,t.y,tnear)-0.1,ry=r()*Math.PI*2;
     // sopra il limite del bosco gli alberi si diradano (restano arbusti e qualche pianta stentata)
     let k=2.0*(t.sz||1)*(0.9+r()*0.2);
-    if(fl.treeline&&!t.bush){
+    if(fl.treeline&&!t.bush&&t.sp!=='mugo'){
       const over=y-t.elev-fl.treeline;
       if(over>0){if(r()<over/14) continue;k*=Math.max(0.5,1-over/30);}
+    }
+    // alberi 3D: un'istanza della variante (scala da metri a unità di gioco, piccola inclinazione, tinta propria)
+    if(TREE_NEW[t.sp]){
+      const sp=treeEco(TREE_NEW[t.sp],y-t.elev,fl,r),v=Math.floor(r()*2),key=sp+'|'+v;
+      const sc=k*0.28;   // (k = 2·taglia; 1 unità di gioco ≈ 1,79 m)
+      eu.set((r()-0.5)*0.07,ry,(r()-0.5)*0.07,'YXZ');q.setFromEuler(eu);p.set(x,y,z);s3.set(sc,sc*(0.9+r()*0.2),sc);
+      const l=0.86+r()*0.26,c=new THREE.Color(l*(0.95+r()*0.1),l*(0.95+r()*0.1),l*(0.93+r()*0.1));
+      if(sp==='larice'&&course===9&&r()<0.4) c.setRGB(1.5,1.18,0.5);   // larici dorati all'alba
+      const it={key,sp,v,m:m.clone().compose(p,q,s3),c,x,y,z,r:sc*8,
+        bm:new THREE.Matrix4().makeScale((r()<0.5?-1:1)*sc,s3.y,sc).setPosition(x,y,z)};   // (foto: specchiata a caso)
+      const ck=Math.floor((t.idx||0)/80);
+      let L=farLists.get(ck);if(!L) farLists.set(ck,L=new Map());
+      (L.get(key)||(L.set(key,[]),L.get(key))).push(it);
+      TREEX.items.push(it);
+      continue;
     }
     const ck=Math.floor((t.idx||0)/80);
     cur=chunks.get(ck);if(!cur){cur={};chunks.set(ck,cur);}
@@ -3387,76 +4445,6 @@ function buildTrees(trees,theme){
     };
     const P=TREE_PAL[t.sp]||TREE_PAL.oak,base=tint(pick(P,r),r);
     switch(t.sp){
-      case 'fir':case 'spruce':case 'larch':{
-        const fir=t.sp==='fir',spr=t.sp==='spruce';
-        const n=fir?4:spr?6:5,tr=trunk(fir?0.5*k:0.4*k,0.11*k,0x6a4a34);
-        let col=base;
-        if(t.sp==='larch'&&course===9&&r()<0.45) col=tint(pick([0xc8a43a,0xd4b048,0xb89236],r),r);   // larici dorati all'alba
-        for(let j=0;j<n;j++){
-          const rr=fir?(1.0-0.2*j)*0.85*k:spr?(0.62-0.085*j)*k:(0.6-0.1*j)*k,hh=fir?(1.25-0.12*j)*k:spr?0.95*k:0.8*k;
-          const yy=y+(fir?0.35*k+0.5*k*j:spr?0.3*k+0.48*k*j:0.6*k+0.45*k*j);
-          const c=col.clone().offsetHSL(0,0,0.015*j);
-          add('tier',tr[0],yy,tr[2],rr,hh,rr,ry+j*0.7,c);
-          if(snow) add('tier',tr[0],yy+hh*0.42,tr[2],rr*0.8,hh*0.5,rr*0.8,ry+j*0.7+0.22,new THREE.Color(SNOWC));
-        }
-        break;}
-      case 'pine':{
-        const tr=trunk(2.2*k,0.12*k,0x9a5a3a,(r()-0.5)*0.12);
-        blob('blob1',tr[0],tr[1]+0.05*k,tr[2],0.7*k,0.42*k,0.7*k,base);
-        for(let j=0;j<3;j++){const a=ry+j*2.1;blob('blob1',tr[0]+Math.cos(a)*0.45*k,tr[1]-0.25*k+r()*0.4*k,tr[2]+Math.sin(a)*0.45*k,0.45*k,0.3*k,0.45*k,base.clone().offsetHSL(0,0,(r()-0.5)*0.06));}
-        add('trunk',tr[0],tr[1]-0.6*k,tr[2],0.25*k,0.5*k,0.25*k,ry,bark(0x9a5a3a),1.1,0);   // ramo laterale
-        if(snow) blob('blob1',tr[0],tr[1]+0.22*k,tr[2],0.55*k,0.18*k,0.55*k,new THREE.Color(SNOWC));
-        break;}
-      case 'umbrella':{
-        const tr=trunk(2.0*k,0.13*k,0x7a5a44,0.08+r()*0.12);
-        blob('blob1',tr[0],tr[1]+0.15*k,tr[2],1.25*k,0.4*k,1.25*k,base);
-        for(let j=0;j<3;j++){const a=ry+j*2.1+r();blob('blob1',tr[0]+Math.cos(a)*0.75*k,tr[1]-0.05*k,tr[2]+Math.sin(a)*0.75*k,0.65*k,0.3*k,0.65*k,base.clone().offsetHSL(0,0,0.03));}
-        break;}
-      case 'cypress':{
-        const tr=trunk(0.35*k,0.1*k,0x5a4632);
-        blob('blob1',tr[0],y+1.75*k,tr[2],0.32*k,1.65*k,0.32*k,base);
-        add('cone',tr[0],y+3.0*k,tr[2],0.17*k,0.7*k,0.17*k,ry,base.clone().offsetHSL(0,0,0.02));
-        break;}
-      case 'oak':{
-        const tr=trunk(0.95*k,0.2*k,0x6a5040);
-        blob('blob1',tr[0],tr[1]+0.6*k,tr[2],0.85*k,0.62*k,0.85*k,base);
-        for(let j=0;j<4;j++){const a=ry+j*1.57+r()*0.5,o=0.55*k;
-          blob('blob1',tr[0]+Math.cos(a)*o,tr[1]+0.35*k+r()*0.5*k,tr[2]+Math.sin(a)*o,0.5*k,0.42*k,0.5*k,base.clone().offsetHSL(0,0,(r()-0.5)*0.08));}
-        break;}
-      case 'poplar':{
-        const tr=trunk(0.7*k,0.11*k,0x7a6a58);
-        blob('blob1',tr[0],y+2.05*k,tr[2],0.44*k,1.5*k,0.44*k,base);
-        blob('blob1',tr[0]+0.12*k,y+2.9*k,tr[2]-0.08*k,0.3*k,0.85*k,0.3*k,base.clone().offsetHSL(0,0,0.04));
-        break;}
-      case 'birch':{
-        const tr=trunk(1.9*k,0.065*k,0xe6e2d6,(r()-0.5)*0.15);
-        for(let j=0;j<3;j++){const a=ry+j*2.1;blob('blob1',tr[0]+Math.cos(a)*0.32*k,tr[1]-0.45*k+j*0.3*k,tr[2]+Math.sin(a)*0.32*k,0.42*k,0.48*k,0.42*k,base.clone().offsetHSL(0,0,(r()-0.5)*0.08));}
-        break;}
-      case 'willow':{
-        const tr=trunk(1.0*k,0.2*k,0x5e5040,(r()-0.5)*0.2);
-        blob('blob1',tr[0],tr[1]+0.65*k,tr[2],0.95*k,0.58*k,0.95*k,base);
-        add('weep',tr[0],tr[1]+0.95*k,tr[2],1.05*k,1.45*k,1.05*k,ry,base.clone().offsetHSL(0,0.05,0.05));
-        break;}
-      case 'olive':{
-        for(const sg of [-1,1]) trunk(0.75*k,0.1*k,0x6a6258,0.25,ry+sg*1.2);
-        for(let j=0;j<5;j++){const a=ry+j*1.26+r()*0.4;blob('blob0',x+Math.cos(a)*0.45*k,y+0.95*k+r()*0.3*k,z+Math.sin(a)*0.45*k,0.5*k,0.38*k,0.5*k,base.clone().offsetHSL(0,0,(r()-0.5)*0.06));}
-        break;}
-      case 'acacia':{
-        const tr=trunk(1.05*k,0.1*k,0x6a5a48,0.1+r()*0.15);
-        blob('blob1',tr[0],tr[1]+0.05*k,tr[2],1.0*k,0.22*k,1.0*k,base);
-        blob('blob1',tr[0]+0.55*k,tr[1]-0.15*k,tr[2]+0.2*k,0.6*k,0.16*k,0.6*k,base.clone().offsetHSL(0,0,0.04));
-        break;}
-      case 'palm':{
-        // tronco ricurvo a segmenti, ciuffo di foglie che ricadono
-        let px=x,py=y,pz=z;const dir=ry;
-        for(let j=0;j<5;j++){
-          const lean=0.05+0.08*j,h=0.62*k;
-          add('trunk',px,py,pz,0.85*k*(1-j*0.08),h,0.85*k*(1-j*0.08),dir,bark(0xa08060),lean,0);
-          px+=Math.sin(lean)*Math.sin(dir)*h;py+=Math.cos(lean)*h;pz+=Math.sin(lean)*Math.cos(dir)*h;
-        }
-        for(let j=0;j<9;j++) add('frond',px,py,pz,1.35*k*(0.85+r()*0.3),1.0*k,1.0*k,j*0.698+r()*0.3,base.clone().offsetHSL(0,0,(r()-0.5)*0.08),0,(r()-0.3)*0.5);
-        blob('blob0',px,py,pz,0.16*k,0.14*k,0.16*k,new THREE.Color(0x6a5030),true);
-        break;}
       case 'dead':{
         const tr=trunk(1.5*k,0.12*k,0x8a8478,(r()-0.5)*0.15);
         for(let j=0;j<4;j++) add('trunk',x,y+(0.7+j*0.22)*k,z,0.35*k,(0.75-j*0.12)*k,0.35*k,ry+j*1.9,bark(0x8a8478),0.75+r()*0.4,0);
@@ -3484,6 +4472,33 @@ function buildTrees(trees,theme){
     im.castShadow=part!=='blob0'||list.length<4000;im.receiveShadow=true;
     if(mat.userData.depth) im.customDepthMaterial=mat.userData.depth;
     grp.add(im);
+  }
+  // alberi lontani: la foto di ogni variante, una mesh con tutti gli alberi di quella variante (due triangoli
+  // ciascuno, senza ombre: la proiettano solo quelli in 3D vicini)…
+  if(TREEX.items.length){
+    const L=treeLib(),total={},byKey=new Map();
+    for(const lists of farLists.values()) for(const [key,list] of lists){if(!byKey.has(key)) byKey.set(key,[]);byKey.get(key).push(...list);}
+    for(const [key,list] of byKey){
+      const [sp,v]=key.split('|'),bb=L.impostor(sp,+v,snow);
+      const im=new THREE.InstancedMesh(bb.geo,bb.mat,list.length);
+      list.forEach((it,i)=>{im.setMatrixAt(i,it.bm);im.setColorAt(i,it.c);});
+      im.instanceMatrix.needsUpdate=true;if(im.instanceColor) im.instanceColor.needsUpdate=true;
+      im.frustumCulled=false;im.castShadow=true;im.receiveShadow=false;im.customDepthMaterial=bb.mat.userData.depth;
+      grp.add(im);
+      total[key]=list.length;
+    }
+    // …e versioni dettagliata e intermedia per quelli vicini: una mesh per variante, riempita da treeLodFrame()
+    for(const key in total) for(const lev of [0,1]){
+      const [sp,v]=key.split('|'),parts=L.variant(sp,+v,lev,snow),B={n:0,meshes:[]};
+      for(const pt of parts){
+        // (il buffer dei colori va creato prima di azzerare il conteggio: è grande quanto count)
+        const im=new THREE.InstancedMesh(pt.geo,pt.mat,total[key]);im.setColorAt(0,_treeWhite);im.count=0;im.frustumCulled=false;
+        // (le ombre le proietta solo il livello dettagliato: copre tutta la zona delle ombre, che sfuma ai bordi)
+        im.castShadow=lev===0;im.receiveShadow=true;if(pt.mat.userData.depth) im.customDepthMaterial=pt.mat.userData.depth;
+        grp.add(im);B.meshes.push(im);
+      }
+      TREEX.lv[lev][key]=B;
+    }
   }
   return grp;
 }
@@ -3704,6 +4719,7 @@ function buildGrass(wps,theme){
       const near=nearestTrack(x,y);
       if(near.d-near.half<SHOULDER-4) continue;               // mai sulla strada (neanche su un altro tratto)
       if(cliffDrop(x,y,near)>0.3) continue;
+      if(FIELD_ZONES.length){const fp=fieldPlot(x,y,near);if(fp.w>0.35&&fp.kind!==2) continue;}   // (niente ciuffi su grano e terra arata)
       const h=terrainAt(x,y,near),hx=terrainAt(x+4,y),hy=terrainAt(x,y+4);
       if(Math.hypot(hx-h,hy-h)/(4*S3)>0.45) continue;        // niente erba sulla roccia ripida
       const fl=rr()<st.flowers,sc=fl?0.24+rr()*0.12:0.2+rr()*0.22;
@@ -4204,6 +5220,17 @@ const tunnelInner=w=>{
   return p;
 };
 const tunnelOuter=w=>{
+  // gallerie di pianura: la volta esterna è la cima piatta della collina (TUN_HILL) e copre la trincea fino al
+  // punto in cui la scarpata del terreno raggiunge la stessa quota, poi scende sotto il prato
+  if(tunHillOn){
+    const H=Math.max(TUN_CROWN+0.9,TUN_HILL*tunnelHillF(w.dist)),flat=w.half+3+12+H*14,R=flat+26,p=[];
+    for(let k=0;k<=20;k++){
+      const lat=-R+2*R*k/20,a=Math.abs(lat);
+      const y=a<=flat?H+0.25*(1-a/flat):H-(H+1.2)*Math.pow((a-flat)/(R-flat),1.5);
+      p.push([lat,y]);
+    }
+    return p;
+  }
   const R=w.half+62,p=[];
   for(let k=0;k<=16;k++){
     const lat=-R+2*R*k/16,t=Math.abs(lat)/R;
@@ -4390,13 +5417,27 @@ function buildStructures(structs){
           }
         }
       }
-      // fiume sul fondo della gola, perpendicolare alla pista
-      const c=wps[Math.round((s.start+s.end)/2)];
-      const wg=new THREE.PlaneGeometry(110,(s.end-s.start)*STEP*S3*0.5);
-      wg.rotateX(-Math.PI/2);
+      // fiume sul fondo della gola, perpendicolare alla pista. Non è un piano piatto: ogni punto sta alla quota
+      // del fiume se lì la gola è più profonda, altrimenti appena sopra il terreno (dove il fondovalle scende,
+      // l'acqua scende con lui, come un torrente); dove il terreno precipita (strapiombo) il fiume finisce sul
+      // ciglio. Così l'acqua non resta mai sospesa a mezz'aria.
+      const c=wps[Math.round((s.start+s.end)/2)],wy=c.elev*0.4-RAVINE+1.6;
+      const LW=110,WW=(s.end-s.start)*STEP*S3*0.5,NX=44,NZ=6;
+      const ax=Math.cos(c.heading+Math.PI/2),az=Math.sin(c.heading+Math.PI/2),bx=Math.cos(c.heading),bz=Math.sin(c.heading);
+      const wpos=[],wh=[],widx=[];
+      for(let j=0;j<=NZ;j++) for(let i=0;i<=NX;i++){
+        const u=(i/NX-0.5)*LW,v=(j/NZ-0.5)*WW,x=c.x*S3+ax*u+bx*v,z=c.y*S3+az*u+bz*v;
+        const g=terrainAt(x/S3,z/S3);wh.push(g);
+        wpos.push(x,Math.min(wy,g+0.8),z);
+      }
+      for(let j=0;j<NZ;j++) for(let i=0;i<NX;i++){
+        const a=j*(NX+1)+i,b=a+1,d=a+NX+1,e=d+1;
+        if(Math.min(wh[a],wh[b],wh[d],wh[e])<wy-6) continue;
+        widx.push(a,b,d,b,e,d);
+      }
+      const wg=new THREE.BufferGeometry();
+      wg.setAttribute('position',new THREE.Float32BufferAttribute(wpos,3));wg.setIndex(widx);wg.computeVertexNormals();
       const water=new THREE.Mesh(wg,waterMat);
-      water.position.set(c.x*S3,c.elev*0.4-RAVINE+1.6,c.y*S3);
-      water.rotation.y=-(c.heading+Math.PI/2);
       water.receiveShadow=true;
       structGroup.add(water);
     }
@@ -4418,6 +5459,19 @@ function buildStructures(structs){
   }
   scene.add(structGroup);
 }
+// pezzo di barriera (lama del guard-rail, cordolo) tra le frazioni t0 e t1 del tratto a→b, a distanza oa/ob dal
+// centro: posizione, direzione e inclinazione seguono la strada (quota dal profilo vero, non dalla media)
+const _rpE=new THREE.Euler(0,0,0,'YXZ');
+function railPiece(out,dm,a,b,t0,t1,side,oa,ob,up,thick,tall){
+  const P=t=>{const x=a.x+(b.x-a.x)*t,y=a.y+(b.y-a.y)*t,hd=a.heading+(b.heading-a.heading)*t,o=(oa+(ob-oa)*t)*side,n=hd+Math.PI/2;
+    return [x+Math.cos(n)*o,y+Math.sin(n)*o,elevAt(a.dist+(b.dist-a.dist)*t)];};
+  const A=P(t0),B=P(t1),dx=B[0]-A[0],dy=B[1]-A[1],len=Math.hypot(dx,dy)*S3,dh=B[2]-A[2];
+  if(len<0.006) return;
+  dm.position.set((A[0]+B[0])/2*S3,up+(A[2]+B[2])/2,(A[1]+B[1])/2*S3);
+  dm.rotation.copy(_rpE.set(-Math.atan2(dh,len),Math.atan2(dx,dy),0,'YXZ'));
+  dm.scale.set(thick,tall,Math.hypot(len,dh)+0.02);dm.updateMatrix();
+  out.push(dm.matrix.clone());
+}
 function buildDecor(trees,posts,puddles,railRuns,props){
   disposeObject(decorGroup);
   disposeObject(puddleGroup);
@@ -4430,16 +5484,11 @@ function buildDecor(trees,posts,puddles,railRuns,props){
   for(const r of railRuns){
     if(r.look&&r.look!=='metal') continue;    // (parapetti in pietra e staccionate di legno: li disegnano i ponti)
     const end=Math.min(wps.length-1,r.end);
+    // (ogni tratto tra due waypoint è diviso in due e inclinato come la strada, con la quota presa dal profilo:
+    // la lama segue salite, discese e dossi senza gradini)
     for(let i=r.start;i<end;i++){
       const a=wps[i], b=wps[Math.min(end,i+1)];
-      const na=a.heading+Math.PI/2, nb=b.heading+Math.PI/2;
-      const ax=a.x+Math.cos(na)*(a.half+4)*r.side, ay=a.y+Math.sin(na)*(a.half+4)*r.side;
-      const bx=b.x+Math.cos(nb)*(b.half+4)*r.side, by=b.y+Math.sin(nb)*(b.half+4)*r.side;
-      const dx=bx-ax,dy=by-ay,len=Math.sqrt(dx*dx+dy*dy);
-      if(len<0.05) continue;
-      dm.position.set((ax+bx)/2*S3,0.55+(a.elev+b.elev)/2,(ay+by)/2*S3);
-      dm.rotation.set(0,Math.atan2(dx,dy),0);dm.scale.set(0.22,0.45,len*S3+0.02);dm.updateMatrix();
-      railM.push(dm.matrix.clone());
+      for(let h=0;h<2;h++) railPiece(railM,dm,a,b,h/2,(h+1)/2,r.side,a.half+4,b.half+4,0.55,0.22,0.45);
     }
     for(let i=r.start;i<=end;i+=2){
       const w=wps[i],n=w.heading+Math.PI/2;
@@ -4454,15 +5503,7 @@ function buildDecor(trees,posts,puddles,railRuns,props){
   // città: cordoli di pietra lungo i marciapiedi
   if(surface.town){
     const curbM=[];
-    for(const side of [-1,1]) for(let i=0;i<wps.length-1;i++){
-      const a=wps[i],b=wps[i+1],na=a.heading+Math.PI/2,nb=b.heading+Math.PI/2;
-      const ax=a.x+Math.cos(na)*(a.half+0.9)*side,ay=a.y+Math.sin(na)*(a.half+0.9)*side;
-      const bx=b.x+Math.cos(nb)*(b.half+0.9)*side,by=b.y+Math.sin(nb)*(b.half+0.9)*side;
-      const dx=bx-ax,dy=by-ay,len=Math.hypot(dx,dy);
-      dm.position.set((ax+bx)/2*S3,0.06+(a.elev+b.elev)/2,(ay+by)/2*S3);
-      dm.rotation.set(0,Math.atan2(dx,dy),0);dm.scale.set(0.22,0.16,len*S3+0.02);dm.updateMatrix();
-      curbM.push(dm.matrix.clone());
-    }
+    for(const side of [-1,1]) for(let i=0;i<wps.length-1;i++) railPiece(curbM,dm,wps[i],wps[i+1],0,1,side,wps[i].half+0.9,wps[i+1].half+0.9,0.06,0.22,0.16);
     inst(railUnitGeo,standConcrete,curbM,false);
   }
   inst(railPostGeo,railPostMat,postM,false);
@@ -5102,7 +6143,10 @@ function cabin(B,o){
       }
       // volante che gira con lo sterzo, con le razze, il riferimento a ore 12 e i guanti del pilota sopra
       // (inclinato come quello vero: la parte alta più lontana dal pilota, perpendicolare al piantone)
-      const piv=new THREE.Group();piv.position.set(x,H-0.13,Z+0.35);piv.rotation.x=0.43;B.add(piv);
+      // (sempre staccato dal cruscotto: la corona, anche girata, e i guanti restano davanti alla palpebra
+      // degli strumenti, che sporge di ~3 cm dalla faccia della plancia)
+      const pz=Math.min(Z+0.35,o.dashZ-0.225);
+      const piv=new THREE.Group();piv.position.set(x,H-0.13,pz);piv.rotation.x=0.43;B.add(piv);
       const spin=new THREE.Group();piv.add(spin);
       part(spin,new THREE.TorusGeometry(0.1,0.013,8,24),CM.black,0,0,0);
       part(spin,new THREE.CylinderGeometry(0.026,0.026,0.03,14).rotateX(Math.PI/2),CM.darkMetal,0,0,0);
@@ -5111,7 +6155,7 @@ function cabin(B,o){
       const glove=stdMat({color:0xb9b2a4,roughness:0.85});   // guanti chiari: si distinguono sul volante nero
       for(const a of arms){const gl=part(spin,new THREE.SphereGeometry(0.032,10,8),glove,a.k*0.098,0.0,0.012);gl.scale.set(0.9,1.25,0.85);
         a.gl=gl;part(gl,new THREE.CylinderGeometry(0.03,0.028,0.03,10),glove,0,-0.006,-0.03,Math.PI/2);}   // polsino
-      tube(B,CM.darkMetal,[x,H-0.13,Z+0.35],[x,H-0.21,Z+0.52],0.014);
+      tube(B,CM.darkMetal,[x,H-0.13,pz],[x,H-0.13-0.08*(o.dashZ-pz)/0.17,o.dashZ],0.014);   // piantone fino dentro la plancia
       B.userData.cock={eye:[x,H+0.01,Z+0.11],spin,piv,arms};
       cockArms(B.userData.cock);
     }else{
@@ -7982,6 +9026,9 @@ function loadStage(n,c){
   // fiumi sotto i ponti (stessa quota dell'acqua disegnata in buildStructures)
   bridgesList=built.structs.filter(s=>s.type==='bridge').map(s=>{const c=wps[Math.round((s.start+s.end)/2)];return {start:s.start,end:s.end,waterY:c.elev*0.4-RAVINE+1.6};});treesList=built.trees.filter(t=>!t.bush);railsList=built.railPoints;surface=built.surface;
   trackBumps=built.bumps;
+  // tratti nei campi (strada bianca): la superficie attiva cambia mentre si guida (vedi update), qui le due
+  FIELD_ZONES=built.fields||[];CUT_BUMPS=built.cuts||[];stageSurface=surface;
+  zoneSurface=FIELD_ZONES.length?Object.assign({},SURFACES[1],{name:SURFACES[1].name,scene:surface.scene}):null;
   const W=weatherOf(course);
   applyLighting(weatherLight(LIGHTS[STAGE_LIGHT[(course-1)%STAGE_LIGHT.length]],W),surface.scene);
   applySurfaceLook(surface,curLight);
@@ -8516,6 +9563,8 @@ function collide(nx,ny,bounce,keep){
 
 function update(dt){
   hitCd-=dt;hitKickT-=dt;postHitT=Math.max(0,postHitT-dt);
+  // tratti nei campi: lì si guida sulla strada bianca (aderenza, frenata, gomme, polvere e suono dello sterrato)
+  if(zoneSurface&&stageSurface&&wps[lastIdx]) surface=zoneW(wps[lastIdx].dist)>0.5?zoneSurface:stageSurface;
   const P=CAR_PHYS[curCarId]||CAR_PHYS.hatch;
   // aderenza: superficie, auto, erba fuori pista, pozzanghere
   const OR=offroad();
@@ -9918,7 +10967,8 @@ function updateScene(){
   // il sole ha una direzione fissa per lo stage; la "scatola" delle ombre segue l'auto
   // agganciata alla griglia dei texel per evitare che i bordi delle ombre tremolino
   const texel=SHADOW_BOX*2/sun.shadow.mapSize.x;
-  sun.target.position.set(Math.round(cx/texel)*texel,carVisElev,Math.round(cz/texel)*texel);
+  const shx=cx+dirX*SHADOW_BOX*0.4,shz=cz+dirZ*SHADOW_BOX*0.4;
+  sun.target.position.set(Math.round(shx/texel)*texel,carVisElev,Math.round(shz/texel)*texel);
   sun.position.copy(sun.target.position).addScaledVector(sunDir,150);
   sun.target.updateMatrixWorld();
 
@@ -10002,8 +11052,12 @@ function updateScene(){
   }
   if(onboard&&camMode==='cockpit'&&!demoMode&&!replayMode) camera.up.copy(_cockUp);else camera.up.set(0,1,0);
   camera.lookAt(camTarget);
+  treeLodFrame();   // alberi vicini dettagliati, lontani leggeri
   if(!replayMode) camera.fov=demoMode?50:onboard?(camMode==='bumper'?74:camMode==='cockpit'?COCK_CFG.fov:68):camMode==='heli'?48:60+Math.min(4,carAirY*1.8)-jumpAnticipation*4;
   if(!onboard&&tunCamS>0) camera.fov+=(64-camera.fov)*tunCamS;   // in galleria un'inquadratura un po' più ampia
+  // piano di taglio vicino: in abitacolo montanti, portiere e roll-bar stanno a pochi centimetri dagli occhi
+  // (con 0,1 unità ≈ 18 cm venivano tagliati ai bordi dello schermo)
+  camera.near=onboard&&camMode==='cockpit'&&!replayMode&&!demoMode?0.012:0.1;
   camera.updateProjectionMatrix();
   skyMesh.position.copy(camera.position);panoMesh.position.copy(camera.position);
   sunDisc.position.copy(camera.position).addScaledVector(sunDir,360);
