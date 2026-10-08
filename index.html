@@ -1091,8 +1091,11 @@ function buildProps(wps,stage,theme,trees,nearStruct,railPoints){
   const at=(i,side,lat,along)=>{const w=wps[i],n=w.heading+Math.PI/2,o=(w.half+lat)*side,a=along||0;
     return [w.x+Math.cos(n)*o+Math.cos(w.heading)*a,w.y+Math.sin(n)*o+Math.sin(w.heading)*a];};
   const BUILDING={farm:1,barn:1,chalet:1,shack:1,house:1};
+  // (sopra e accanto alle gallerie c'è la collina o il riempimento del paravalanghe: lì niente oggetti)
+  const tunW=wps.filter((w,k)=>w.tunnel&&k%2===0);
   const add=(p,margin)=>{
     if(!offRoad(p.x,p.y,margin===undefined?4:margin)) return false;
+    for(const w of tunW){const dx=w.x-p.x,dy=w.y-p.y,l=w.half+76;if(dx*dx+dy*dy<l*l) return false;}
     const fr=Math.max(3,p.fp||p.r||3),bld=!!BUILDING[p.type];
     if(!free(p.x,p.y,fr,bld)) return false;
     if(bld) clearTrees(p.x,p.y,fr+8);   // (il cortile attorno resta libero)
@@ -1195,23 +1198,23 @@ function buildProps(wps,stage,theme,trees,nearStruct,railPoints){
   for(let i=4;i<N-4;i++){
     if(!wps[i].field||skip(i)) continue;
     for(const side of [-1,1]){
-      if(i%2===0&&((i>>3)+(side>0?1:0))%5!==0){const [x,y]=at(i,side,16);add({type:'fence',x,y,rot:wps[i].heading,r:0,fp:1},8);}
+      if(i%2===0&&((i>>3)+(side>0?1:0))%5!==0){const [x,y]=at(i,side,16);add({type:'fence',x,y,rot:wps[i].heading,r:1.2,fp:1},8);}
       if(rng()<0.07){const [x,y]=at(i,side,40+rng()*160,(rng()-0.5)*20);add({type:'bale',x,y,rot:rng()*6.28,s:0.9+rng()*0.25,r:5},20);}
     }
   }
   if(theme==='city'){
     runs(Math.round(N/160),[30,40],(i,side,k)=>{if(k%4===0&&!wps[i].field){const [x,y]=at(i,side,7);add({type:'lamp',x,y,rot:wps[i].heading,side,r:2.5},3);}});
-    runs(Math.round(N/200),[20,30],(i,side,k)=>{const [x,y]=at(i,side,20);add({type:'fence',x,y,rot:wps[i].heading,white:true,r:0,fp:1},10);});
+    runs(Math.round(N/200),[20,30],(i,side,k)=>{const [x,y]=at(i,side,20);add({type:'fence',x,y,rot:wps[i].heading,white:true,r:1.2,fp:1},10);});
   }
   if(theme==='mountain'||theme==='snow'){
-    runs(Math.round(N/170),[16,30],(i,side,k)=>{const [x,y]=at(i,side,18);add({type:'fence',x,y,rot:wps[i].heading,r:0,fp:1},10);});
+    runs(Math.round(N/170),[16,30],(i,side,k)=>{const [x,y]=at(i,side,18);add({type:'fence',x,y,rot:wps[i].heading,r:1.2,fp:1},10);});
   }
   if(theme==='snow'){
     for(let i=4;i<N-4;i+=2){
       if(wps[i].struct) continue;
       for(const side of [-1,1]){
         if(rng()<0.8){const [x,y]=at(i,side,5+rng()*2);add({type:'snowbank',x,y,rot:wps[i].heading+(rng()-0.5)*0.2,s:0.7+rng()*0.5,r:0,fp:1},2);}
-        if(i%6===0&&!wps[i].noTree){const [x,y]=at(i,side,3);add({type:'snowpole',x,y,rot:0,r:0,fp:1},1);}
+        if(i%6===0&&!wps[i].noTree){const [x,y]=at(i,side,3);add({type:'snowpole',x,y,rot:0,r:0.8,fp:1},1);}
       }
     }
   }
@@ -1334,7 +1337,8 @@ const TREE_GAP={oak:9,beech:8,chestnut:9,linden:7,willow:10,umbrella:10,acacia:1
 // un albero sta ad almeno ~2 m dal ciglio di qualunque tratto di strada (larghezza reale del tratto)
 function treeFits(cx,cy,wps){
   for(let k=0;k<wps.length;k+=2){
-    const dx=wps[k].x-cx,dy=wps[k].y-cy,m=(wps[k].half||BASE_HALF)+16;
+    // (sopra e accanto alle gallerie c'è la collina o il riempimento del paravalanghe: niente alberi che lo bucano)
+    const dx=wps[k].x-cx,dy=wps[k].y-cy,m=(wps[k].half||BASE_HALF)+(wps[k].tunnel?76:16);
     if(dx*dx+dy*dy<m*m) return false;
   }
   return true;
@@ -1699,23 +1703,31 @@ function buildTrack(stage){
       };
       const at=(i,lat)=>{const w=wps[i],n=w.heading+Math.PI/2;return {x:w.x+Math.cos(n)*lat,y:w.y+Math.sin(n)*lat};};
       let brk=true;   // il primo punto di ogni tratto non si collega al precedente; dopo un buco si riparte staccati
-      const push=p=>{if(near(p.x,p.y)){brk=true;return;}railPoints.push({x:p.x,y:p.y,k:'stone',brk});brk=false;};
+      // (top = quota della struttura in quel punto: dopo aver costruito il terreno, i punti dove la montagna
+      // copre la galleria si tolgono, vedi loadStage: lì l'auto sale sul pendio invece di urtare un muro invisibile)
+      const push=(p,top)=>{if(near(p.x,p.y)){brk=true;return;}railPoints.push({x:p.x,y:p.y,k:'stone',brk,top});brk=false;};
+      const shelter=s.style==='shelter';
+      const outerY=(w,lat)=>[w,lat];   // (calcolata dopo: il profilo della collina dipende dallo scenario)
       const portalLine=(i,side,outward)=>{
-        const w=wps[i],a=w.half+4,b=(w.half+62)*OUT,n=Math.max(2,Math.ceil((b-a)/8));
-        for(let q=0;q<=n;q++){const f=outward?q/n:1-q/n;push(at(i,(a+(b-a)*f)*side));}
+        // paravalanghe: il muro di testa in calcestruzzo chiude il riempimento a monte fino a dove entra nel pendio
+        const w=wps[i],a=w.half+4,b=shelter?w.half+SHELTER_FILL:(w.half+62)*OUT,n=Math.max(2,Math.ceil((b-a)/8));
+        for(let q=0;q<=n;q++){const f=outward?q/n:1-q/n,lat=(a+(b-a)*f)*side;push(at(i,lat),shelter?undefined:outerY(w,Math.abs(lat)));}
       };
-      const openSide=s.style==='shelter'?(surf.cliff?CLIFF_SIDE:1):0;
+      const openSide=shelter?(surf.cliff?CLIFF_SIDE:1):0;
       for(const side of [-1,1]){
         if(side===openSide) continue;   // paravalanghe: dal lato aperto bastano pilastri e parapetto
         brk=true;
         portalLine(s.start,side,true);
-        for(let i=s.start;i<=s.end;i++){
-          push(at(i,(wps[i].half+62)*OUT*side));
+        // (fianco esterno lungo la galleria: il paravalanghe è addossato al monte, lì non serve)
+        if(!shelter) for(let i=s.start;i<=s.end;i++){
+          const L0=(wps[i].half+62)*OUT;
+          push(at(i,L0*side),outerY(wps[i],L0));
           if(i<s.end){   // punto intermedio: sul lato esterno delle curve i punti si allontanano
-            const p=at(i,(wps[i].half+62)*OUT*side),q=at(i+1,(wps[i+1].half+62)*OUT*side);
-            push({x:(p.x+q.x)/2,y:(p.y+q.y)/2});
+            const L1=(wps[i+1].half+62)*OUT,p=at(i,L0*side),q=at(i+1,L1*side);
+            push({x:(p.x+q.x)/2,y:(p.y+q.y)/2},outerY(wps[i],L0));
           }
         }
+        brk=true;
         portalLine(s.end,side,false);
       }
     }
@@ -1776,12 +1788,15 @@ function buildTrack(stage){
   // cumuli di neve fresca (solo quando nevica): accumuli spinti dal vento lungo i bordi, lingue di neve che
   // attraversano la strada di sbieco e mucchietti sparsi. Sono gobbe vere (vedi driftAt in groundAt).
   const drifts=[];
-  if(weatherOf(stage).snow){
-    const dr=mulberry32(7300+stage*17),nDr=22;
-    const okDr=i=>i>=25&&i<N-40&&!inBump(i)&&!nearStruct(i,i,6)&&drifts.every(d=>Math.abs(d.idx-i)>=9);
+  // (sulla strada innevata ci sono sempre: a gruppi, nei tratti esposti al vento, più qualcuno isolato)
+  const snowRoad=surface.fx==='snow'&&!surface.town;
+  if(weatherOf(stage).snow||snowRoad){
+    const dr=mulberry32(7300+stage*17),nDr=snowRoad?(weatherOf(stage).snow?60:46):22;
+    const centers=[];if(snowRoad) for(let c=0;c<9;c++) centers.push(30+Math.floor(dr()*(N-80)));
+    const okDr=(i,g)=>i>=25&&i<N-40&&!inBump(i)&&!nearStruct(i,i,6)&&drifts.every(d=>Math.abs(d.idx-i)>=g);
     for(let k=0;k<nDr*8&&drifts.length<nDr;k++){
-      const idx=25+Math.floor(dr()*(N-65));
-      if(!okDr(idx)) continue;
+      const inCl=centers.length&&dr()<0.75,idx=inCl?centers[Math.floor(dr()*centers.length)]+Math.round((dr()-0.5)*44):25+Math.floor(dr()*(N-65));
+      if(!okDr(idx,inCl?3:9)) continue;
       const w=wps[idx],n=w.heading+Math.PI/2,t=dr();
       let R,ax,h,off,hd=w.heading;
       if(t<0.45){         // lungo il bordo: lungo e alto, sporge un po' nella carreggiata
@@ -2866,6 +2881,24 @@ function mountainAdd(wx,wy,near){
   const H=mountAmp*(0.28+0.72*(0.55*ridge+0.3*ridge2+0.15*n2))*(0.82+0.3*crag);
   return H*m*m*(3-2*m)*f*f*(3-2*f)*(1-near.bf)*sideK;
 }
+// Gallerie paravalanghe: sono addossate al monte. Dal lato del monte il pendio scende fin sopra la soletta
+// (il riempimento di terra copre il tetto, così le valanghe ci scivolano sopra) e il terreno vero lo
+// prosegue verso l'alto: nessuna collina finta sospesa che ricade verso l'esterno.
+let shelterRanges=[],shelterMt=-1;
+const SHELTER_FILL=66;   // fin dove (oltre il ciglio) arriva il riempimento disegnato; poi è terreno
+// quota del pendio (sopra la strada, mondo) a distanza dO dal bordo esterno della soletta, lato valle
+function shelterCover(dO){return TUN_CROWN+0.67+12*(1-Math.exp(-Math.max(0,dO)/200));}
+function shelterF(dist){
+  let f=0;
+  for(const [a,b] of shelterRanges){const d=dist<a?a-dist:dist>b?dist-b:0;f=Math.max(f,1-Math.min(1,d/110));}
+  return f*f*(3-2*f);
+}
+// (dietro il muro, sotto il riempimento, il terreno resta basso; fuori dagli imbocchi il pendio parte subito dal ciglio)
+function shelterShelf(dist){
+  let f=0;
+  for(const [a,b] of shelterRanges){const d=dist<a?a-dist:dist>b?dist-b:0;f=Math.max(f,1-Math.min(1,Math.max(0,d-6)/26));}
+  return f;
+}
 const RAVINE=7.5; // profondità della gola sotto i ponti (unità mondo)
 // altezza del terreno (in unità mondo) nel punto wx,wy (coordinate pista).
 // Il terreno arriva esattamente alla quota della strada sul bordo e poi scende (o sale) verso il suolo
@@ -2881,8 +2914,14 @@ function terrainAt(wx,wy,near){
   // passaggio tra le dune: ai lati il terreno resta al livello di prima (la strada è scesa), con pareti di
   // sabbia ripide quasi quanto l'angolo di riposo della sabbia
   if(CUT_BUMPS.length){const cd=cutDepth(near.dist);if(cd>0.05){natural=Math.max(natural,road+cd*1.12+0.7+Math.max(0,hillHeight(wx,wy))*0.35);embK=9;}}
-  const emb=(embK===9?8:12)+Math.abs(road-natural)*embK;            // lunghezza della scarpata (unità pista)
-  const u=Math.max(0,Math.min(1,(edge-3)/emb)),k=u*u*(3-2*u);
+  // paravalanghe: dal lato del monte il terreno resta basso dietro il muro (lo copre il riempimento) e poi
+  // sale appena sotto il pendio disegnato, fino a diventare la montagna
+  let sf=0;
+  if(shelterRanges.length&&near.side===shelterMt){sf=shelterF(near.dist);if(sf>0) natural=Math.max(natural,road+sf*(shelterCover(near.d+near.half+4.6)-0.4));}
+  let emb=(embK===9?8:12)+Math.abs(road-natural)*embK;            // lunghezza della scarpata (unità pista)
+  if(sf>0) emb+=(30-emb)*sf;
+  const e0=sf>0?3+19*shelterShelf(near.dist):3;
+  const u=Math.max(0,Math.min(1,(edge-e0)/emb)),k=u*u*(3-2*u);
   let h=road+(natural-road)*k;
   // sotto l'asfalto il terreno sta appena più in basso (niente prato che affiora sulla strada)
   const s=Math.max(0,Math.min(1,(3-edge)/5));
@@ -2923,7 +2962,8 @@ function buildGround(wps,surface){
   // (Colline di campagna: colline vere attorno alla strada; deserto: dune)
   hillAmp=course===1?10:HILL_AMP[surface.scene]||6;
   duneOn=surface.scene==='desert';
-  tunHillOn=surface.scene==='city';
+  // (anche in montagna e sulla neve: la galleria buca un costone vero, non una cupola appoggiata sul prato)
+  tunHillOn=surface.scene==='city'||((surface.scene==='snow'||surface.scene==='mountain')&&!surface.cliff);
   hillSeed=Math.imul(course,2654435761)|0;
   // montagne solo tra la partenza e il tratto prima dell'arrivo (wps qui include i prolungamenti)
   mountAmp=MOUNT_AMP[surface.scene]||0;
@@ -2932,6 +2972,8 @@ function buildGround(wps,surface){
   tunnelRanges=[];
   // (il paravalanghe resta aperto sul vuoto: lì niente montagna dal lato dello strapiombo)
   {let a=null;for(const w of wps){const t=w.tunnel&&w.sstyle!=='shelter';if(t&&a===null) a=w.dist;if(!t&&a!==null){tunnelRanges.push([a,w.dist]);a=null;}}}
+  shelterRanges=[];shelterMt=-(surface.cliff?CLIFF_SIDE:1);
+  {let a=null;for(const w of wps){const t=w.tunnel&&w.sstyle==='shelter';if(t&&a===null) a=w.dist;if(!t&&a!==null){shelterRanges.push([a,w.dist]);a=null;}}}
   if(cliffStage) mountAmp=40;   // parete più alta sopra la strada a strapiombo
   {const real=wps.filter(w=>w.struct!==undefined),fin=real[Math.max(0,real.length-1-FINISH_RUNOFF-18)];
    mountFrom=real[0].dist+160;mountTo=fin.dist-60;}
@@ -3027,7 +3069,7 @@ const MIX_LOOK={
   fine:  {a:[0.88,0.8,0.68],peb:0.7,grass:0.35,gc:[0.34,0.42,0.2],dark:0.25,berm:[1.12,1.1,1.05],ice:0},
   sand:  {a:[0.8,0.7,0.58],peb:0.2,grass:0.18,gc:[0.5,0.45,0.26],dark:0.05,berm:[1.12,1.07,0.97],ice:0},
   mud:   {a:[0.68,0.64,0.58],peb:0.35,grass:0.6,gc:[0.26,0.34,0.14],dark:0.7,berm:[1.1,1.04,0.95],ice:0},
-  snow:  {a:[0.84,0.9,1.06],peb:0.15,grass:0,gc:[0.3,0.3,0.3],dark:0.18,berm:[1.1,1.1,1.13],ice:1},
+  snow:  {a:[1.08,1.08,1.1],peb:0.15,grass:0,gc:[0.3,0.3,0.3],dark:0.18,berm:[1.1,1.1,1.13],ice:1},
   mixed: {a:[1.1,1.04,0.95],peb:0.65,grass:0.5,gc:[0.3,0.4,0.17],dark:0.4,berm:[1.12,1.08,1.0],ice:0}
 };
 // gloss: lucentezza di base; rut: corsie lisciate dal passaggio delle gomme; wet/wetPatch: bagnato ovunque /
@@ -3142,15 +3184,22 @@ function patchRoadMat(m){
   m.onBeforeCompile=sh=>{
     Object.assign(sh.uniforms,SURF_U,ZONE_U);
     sh.vertexShader=sh.vertexShader
-      .replace('#include <common>','#include <common>\nvarying vec3 vSWP;attribute float aZone;varying float vZone;')
-      .replace('#include <begin_vertex>','#include <begin_vertex>\nvSWP=(modelMatrix*vec4(transformed,1.0)).xyz;vZone=aZone;');
+      .replace('#include <common>','#include <common>\nvarying vec3 vSWP;attribute float aZone;varying float vZone;attribute float aStr;varying float vStr;')
+      .replace('#include <begin_vertex>','#include <begin_vertex>\nvSWP=(modelMatrix*vec4(transformed,1.0)).xyz;vZone=aZone;vStr=aStr;');
     sh.fragmentShader=sh.fragmentShader
-      .replace('#include <common>','#include <common>\nvarying vec3 vSWP;varying float vZone;uniform sampler2D uZoneMap;\nuniform float uGloss;uniform float uRut;uniform float uWet;uniform float uWetPatch;uniform float uReflI;uniform float uSpecMax;uniform float uRain;uniform float uTrackV;uniform float uAsph;uniform float uLines;\n'+
+      .replace('#include <common>','#include <common>\nvarying vec3 vSWP;varying float vZone;varying float vStr;uniform sampler2D uZoneMap;\nuniform float uGloss;uniform float uRut;uniform float uWet;uniform float uWetPatch;uniform float uReflI;uniform float uSpecMax;uniform float uRain;uniform float uTrackV;uniform float uAsph;uniform float uLines;\n'+
         'uniform float uMix;uniform vec3 uMixA;uniform float uMixPeb;uniform float uMixGrass;uniform vec3 uMixGrassCol;uniform float uMixDark;uniform vec3 uMixBerm;uniform float uMixIce;\n'+SURF_GLSL+`
         // zone di fondo smosso (stessa formula di looseZone() nella fisica: lì l'auto ha un po' meno tenuta)
         float looseZoneG(float s,float u){
           float z=0.5+0.5*(0.5*sin(s*0.019+1.1)+0.3*sin(s*0.047+u*2.6+2.3)+0.2*sin(s*0.113-u*4.1+0.7));
           return smoothstep(0.58,0.78,z);
+        }
+        // lastre di ghiaccio sulla neve: stessa formula di iceZone() nella fisica
+        float iceZoneG(float s,float u){
+          float env=0.5+0.5*(0.6*sin(s*0.0052+0.7)+0.4*sin(s*0.0131+2.9));
+          float thr=0.8-0.28*smoothstep(0.5,0.72,env);
+          float b=0.5+0.5*(0.42*sin(s*0.067+u*3.3+0.3)+0.33*sin(s*0.151-u*6.1+1.9)+0.25*sin(s*0.317+u*10.7+4.4));
+          return smoothstep(thr,thr+0.07,b);
         }`+`
         // zone bagnate dalla pioggia: stessa formula di rainZone() (s = distanza lungo la pista, u = attraverso)
         float rainZoneG(float s,float u){
@@ -3212,7 +3261,7 @@ function patchRoadMat(m){
         // fondi naturali: un mix di materiali come per l'asfalto. Zone di fondo diverso (ghiaia sulla terra, terra
         // sulla ghiaia, sabbia compatta, fango più bagnato, ghiaccio sulla neve), sassi sparsi, erba che invade i
         // bordi e a tratti la mezzeria, cordolo di materiale smosso ai lati, buche e chiazze scure.
-        float sMixL=0.0;
+        float sMixL=0.0,sIce=0.0;
         if(uMix>0.0){
           float s=vUv.y*uTrackV,u=vUv.x,ed=min(u,1.0-u);
           sMixL=clamp(looseZoneG(s,u)+(sNoise(vec2(s*0.3,u*12.0))-0.5)*0.35,0.0,1.0);
@@ -3243,6 +3292,22 @@ function patchRoadMat(m){
               diffuseColor.rgb*=1.0-0.42*smoothstep(1.0,0.55,d);
             }
           }
+          // ghiaccio: lastra liscia grigio-azzurra e scura (trasparente sopra il fondo), bordo sfrangiato con un
+          // velo di neve, graffi chiari lasciati dalle gomme e qualche crepa; molto lucida (vedi sGl)
+          if(uMixIce>0.0){
+            float s=vUv.y*uTrackV,u=vUv.x;
+            float ib=iceZoneG(s,u)+(sNoise(vSWP.xz*1.6)-0.5)*0.22*(1.0-abs(2.0*iceZoneG(s,u)-1.0));
+            sIce=smoothstep(0.35,0.65,ib)*(1.0-vStr)*uMixIce;
+            if(sIce>0.0){
+              vec3 ic=vec3(0.5,0.6,0.7)*(0.85+0.3*sNoise(vSWP.xz*0.9))+vec3(0.08,0.1,0.12)*sNoise(vSWP.xz*6.0);
+              float scr=smoothstep(0.93,0.99,sNoise(vec2(s*0.9,u*140.0)))*0.6;          // graffi lungo la marcia
+              float crk=smoothstep(0.02,0.0,abs(sNoise(vSWP.xz*2.3)-0.5))*0.5;        // crepe
+              ic=mix(ic,vec3(0.86,0.9,0.95),scr+crk*0.6);
+              float rim=smoothstep(0.35,0.5,ib)*smoothstep(0.75,0.5,ib);              // velo di neve sul bordo
+              ic=mix(ic,diffuseColor.rgb*1.08,rim*0.6);
+              diffuseColor.rgb=mix(diffuseColor.rgb,ic,sIce);
+            }
+          }
         }
         // tratti nei campi: strada bianca (terra battuta e ghiaietto) con l'erba in mezzeria e ai bordi; il
         // passaggio dall'asfalto è sfrangiato (l'asfalto finisce a pezzi, la terra lo invade)
@@ -3261,7 +3326,7 @@ function patchRoadMat(m){
         // pioggia: tutto umido, e zone dove l'acqua scorre e ristagna (solchi, bordi, tratti bassi) quasi a specchio
         float sRainZ=0.0;
         if(uRain>0.0){sRainZ=rainZoneG(vUv.y*uTrackV,vUv.x);sWet=max(sWet,clamp(uRain*(0.45+0.55*sRainZ),0.0,1.0));}
-        float sGl=clamp(uGloss*(0.7+0.6*sN2)+sTr*uRut+sWet*0.6+uMixIce*sMixL*0.55,0.0,1.0)*(1.0-0.85*vZone);
+        float sGl=clamp(uGloss*(0.7+0.6*sN2)+sTr*uRut+sWet*0.6+sIce*0.9,0.0,1.0)*(1.0-0.85*vZone);
         diffuseColor.rgb*=1.0-0.4*sWet;                       // il bagnato scurisce il fondo`)
       .replace('#include <lights_phong_fragment>',`#include <lights_phong_fragment>
         // più lucido = riflessi di sole, fari e lampade più stretti e intensi
@@ -3275,7 +3340,7 @@ function patchRoadMat(m){
         vec3 Rv=reflect(-V,vec3(0.0,1.0,0.0));
         vec3 sky=mix(uSkyHor,uSkyTop,pow(clamp(Rv.y,0.0,1.0),0.5));
         outgoingLight+=sky*fr*sGl*sGl*uReflI*(1.0-0.8*uTunnel);
-        outgoingLight+=sparkleAt(vSWP,V,uSparkle*(1.0-sWet));
+        outgoingLight+=sparkleAt(vSWP,V,uSparkle*(1.0-sWet)*(1.0-0.8*sIce));
         // gocce che cadono sul velo d'acqua: piccoli cerchi che si allargano e riflettono il cielo
         if(uRain>0.0&&sRainZ>0.05){
           float fadeR=smoothstep(28.0,6.0,length(cameraPosition-vSWP));
@@ -3337,8 +3402,19 @@ function looseZone(s,u){
   const z=0.5+0.5*(0.5*Math.sin(s*0.019+1.1)+0.3*Math.sin(s*0.047+u*2.6+2.3)+0.2*Math.sin(s*0.113-u*4.1+0.7));
   const t=Math.max(0,Math.min(1,(z-0.58)/0.2));return t*t*(3-2*t);
 }
+// lastre di ghiaccio sulla neve battuta: chiazze irregolari, rare e piccole lungo tutta la strada, larghe e
+// fitte nei tratti gelati (all'ombra, dove l'acqua è rigelata). Stessa formula nel disegno (iceZoneG) e
+// nella fisica: sulle ruote che ci passano sopra la tenuta crolla.
+let iceK=0;
+function iceZone(s,u){
+  const env=0.5+0.5*(0.6*Math.sin(s*0.0052+0.7)+0.4*Math.sin(s*0.0131+2.9));
+  const sec=Math.max(0,Math.min(1,(env-0.5)/0.22)),thr=0.8-0.28*sec*sec*(3-2*sec);
+  const b=0.5+0.5*(0.42*Math.sin(s*0.067+u*3.3+0.3)+0.33*Math.sin(s*0.151-u*6.1+1.9)+0.25*Math.sin(s*0.317+u*10.7+4.4));
+  const t=Math.max(0,Math.min(1,(b-thr)/0.07));return t*t*(3-2*t);
+}
 function buildTrackMesh(wps,surface){
   disposeMesh(trackMesh);
+  iceK=surface.fx==='snow'&&!surface.town?1:0;
   [edgeAmp,edgeRough]=EDGE_LOOK[surface.fx]||[2.2,0.4];
   roughA=surface.town?0:ROUGH_A[surface.fx]||0;looseK=surface.town?0:LOOSE_K[surface.fx]||0;
   const positions=[],uvs=[];
@@ -3349,7 +3425,7 @@ function buildTrackMesh(wps,surface){
   };
   const edge=(p,side,extra)=>{const n=p.heading+Math.PI/2,o=(p.half+(extra||0))*side;return [p.x+Math.cos(n)*o,p.y+Math.sin(n)*o];};
   // griglia continua di file trasversali; sui fondi irregolari più colonne, per dare forma alle gobbe
-  const COLS=roughA>0||FIELD_ZONES.length?8:1,indices=[],zone=[];
+  const COLS=roughA>0||FIELD_ZONES.length?8:1,indices=[],zone=[],strA=[];   // (strA: 1 su ponti e in galleria)
   let rows=0;
   const addRow=(p,jit,rough)=>{
     // (nei tratti nei campi il bordo è frastagliato come quello di uno sterrato)
@@ -3358,7 +3434,7 @@ function buildTrackMesh(wps,surface){
     for(let c=0;c<=COLS;c++){
       const u=c/COLS,x=al[0]+(ar[0]-al[0])*u,y=al[1]+(ar[1]-al[1])*u;
       const h=0.02+p.elev+(rough?roadRough(p.dist,(u-0.5)*2*p.half,u):0);
-      positions.push(x*S3,h,y*S3);uvs.push(u,p.dist/TRACK_V);zone.push(zw);
+      positions.push(x*S3,h,y*S3);uvs.push(u,p.dist/TRACK_V);zone.push(zw);strA.push(jit?0:1);
     }
     if(rows>0){const r0=(rows-1)*(COLS+1),r1=rows*(COLS+1);for(let c=0;c<COLS;c++) indices.push(r0+c,r0+c+1,r1+c+1,r0+c,r1+c+1,r1+c);}
     rows++;
@@ -3374,6 +3450,7 @@ function buildTrackMesh(wps,surface){
   geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
   geo.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));
   geo.setAttribute('aZone',new THREE.Float32BufferAttribute(zone,1));
+  geo.setAttribute('aStr',new THREE.Float32BufferAttribute(strA,1));
   geo.setIndex(indices);
   geo.computeVertexNormals();
   // texture della strada bianca dei tratti nei campi
@@ -4853,10 +4930,13 @@ function buildHouse(p,part,ch,sh,Y){
 function buildPropMeshes(props,theme){
   const grp=new THREE.Group(),dummy=new THREE.Object3D();dummy.rotation.order='YXZ';
   const lists=new Map();
+  let curP=null;   // (elemento rompibile in costruzione: si annotano le sue istanze per poterlo staccare)
   const push=(geo,mat,x,y,z,rx,ry,rz,sx,sy,sz,col)=>{
     const k=geo.uuid+mat.uuid;if(!lists.has(k)) lists.set(k,{geo,mat,items:[]});
     dummy.position.set(x,y,z);dummy.rotation.set(rx,ry,rz);dummy.scale.set(sx,sy,sz);dummy.updateMatrix();
-    lists.get(k).items.push({m:dummy.matrix.clone(),c:col!==undefined?new THREE.Color(col):null});
+    const L=lists.get(k);
+    if(curP) curP._inst.push({list:L,i:L.items.length});
+    L.items.push({m:dummy.matrix.clone(),c:col!==undefined?new THREE.Color(col):null});
   };
   const pick=a=>a[Math.floor(Math.random()*a.length)];
   const fencePrev={},town={},bunt={pos:[],col:[]};
@@ -4869,6 +4949,8 @@ function buildPropMeshes(props,theme){
     // dalla parte a monte affondano un poco nel terreno, come succede davvero)
     const gR={rock:4.5*s,crag:6*s,bale:7,logs:9,tyres:5,cactus:2,bush:3*s,drybush:2.5*s,adcol:4,snowbank:6*s}[p.type];
     if(gR){for(let k=0;k<6;k++){const a=k/6*Math.PI*2;Y=Math.min(Y,terrainAt(p.x+Math.cos(a)*gR,p.y+Math.sin(a)*gR));}Y-=0.04;}
+    curP=BREAKABLE[p.type]&&p.r>0?p:null;
+    if(curP){p._inst=[];p._base=[X,Y,Z];p.broken=false;}
     // punto locale (lx lungo la strada, lz verso destra) → mondo
     const L=(lx,ly,lz)=>[X+lx*ch-lz*sh,Y+ly,Z+lx*sh+lz*ch];
     const part=(geo,mat,lx,ly,lz,rx,ryAdd,rz,sx,sy,sz,col)=>{const w=L(lx,ly,lz);push(geo,mat,w[0],w[1],w[2],rx,yaw+ryAdd,rz,sx,sy,sz,col);};
@@ -5041,8 +5123,9 @@ function buildPropMeshes(props,theme){
     im.castShadow=true;im.receiveShadow=true;im.frustumCulled=false;grp.add(im);
     st.mats[4].emissiveIntensity=lampsOn?0.9:0;
   }
-  for(const {geo,mat,items} of lists.values()){
-    const im=new THREE.InstancedMesh(geo,mat,items.length);
+  curP=null;
+  for(const L of lists.values()){
+    const {geo,mat,items}=L,im=new THREE.InstancedMesh(geo,mat,items.length);L.im=im;
     items.forEach((it,i)=>{im.setMatrixAt(i,it.m);if(it.c) im.setColorAt(i,it.c);});
     im.instanceMatrix.needsUpdate=true;if(im.instanceColor) im.instanceColor.needsUpdate=true;
     im.castShadow=true;im.receiveShadow=true;im.frustumCulled=false;
@@ -5256,6 +5339,21 @@ function portal(w,faceSign){
   g.computeVertexNormals();
   return g;
 }
+// faccia piana (poligono laterale/quota) nel piano trasversale del waypoint, appena spostata verso l'esterno
+function sectionFace(w,pts,faceSign,off){
+  off=off===undefined?0.04:off;
+  const shape=new THREE.Shape();
+  pts.forEach((q,i)=>i?shape.lineTo(q[0]*S3,q[1]):shape.moveTo(q[0]*S3,q[1]));
+  shape.closePath();
+  const g=new THREE.ShapeGeometry(shape);
+  const n=w.heading+Math.PI/2,nx=Math.cos(n),nz=Math.sin(n),p=g.attributes.position;
+  for(let i=0;i<p.count;i++){
+    const sx=p.getX(i),sy=p.getY(i);
+    p.setXYZ(i,w.x*S3+nx*sx+Math.cos(w.heading)*faceSign*off,w.elev+sy,w.y*S3+nz*sx+Math.sin(w.heading)*faceSign*off);
+  }
+  g.computeVertexNormals();
+  return g;
+}
 // materiali delle strutture: pietra squadrata (ponti ad archi, parapetti), legno (ponti di tavole e
 // cavalletti), acciaio verniciato (travature), roccia viva (gallerie scavate)
 const stoneMat=new THREE.MeshLambertMaterial({color:0xc9b79c,map:TEX.rock,side:THREE.DoubleSide});
@@ -5279,11 +5377,20 @@ function shelterProfiles(open){
   const roof=w=>{const a=-open*(w.half+3.2),b=open*(w.half+4.6);return [[a,TUN_CROWN],[b,TUN_CROWN],[b,TUN_CROWN+0.55],[a,TUN_CROWN+0.55],[a,TUN_CROWN]];};
   const wall=w=>{const a=-open*(w.half+3);return [[a,-0.2],[a,TUN_CROWN]];};
   const parapet=w=>{const a=open*(w.half+3.8);return [[a,-0.05],[a,0.75]];};
-  // la montagna sopra e dietro il muro (solo da quel lato)
-  const slope=w=>{const R=w.half+62,p=[[open*(w.half+4.6),TUN_CROWN+0.55]];
-    for(let k=0;k<=8;k++){const t=k/8,lat=-open*((w.half+3.2)+(R-(w.half+3.2))*t);p.push([lat,TUN_CROWN+0.55+(6.9-TUN_CROWN)*Math.pow(1-t,0.6)*(1-t*0.15)-t*1.2]);}
+  // il riempimento di terra (e neve) sopra la soletta: sale dal bordo verso valle fino al muro e prosegue
+  // sul fianco del monte, sempre appena sopra il terreno; in fondo entra nel terreno (niente bordi sospesi)
+  const T=(w,lat)=>{const n=w.heading+Math.PI/2;return terrainAt(w.x+Math.cos(n)*lat,w.y+Math.sin(n)*lat)-w.elev;};
+  const slope=w=>{const h=w.half,E=h+4.6,p=[[open*E,TUN_CROWN+0.55]];
+    for(let k=1;k<=6;k++){const lat=E-(E+h+3.2)*k/6;p.push([open*lat,shelterCover(E-lat)]);}   // sopra la soletta
+    for(let e=10;e<SHELTER_FILL;e+=8){const lat=h+e;p.push([-open*lat,Math.max(shelterCover(E+lat),T(w,-open*lat)+0.2)]);}
+    p.push([-open*(h+SHELTER_FILL),T(w,-open*(h+SHELTER_FILL))-1.2]);
     return p;};
-  return {roof,wall,parapet,slope};
+  // muro di testa agli imbocchi: chiude la sezione del riempimento (dalla volta in su e dietro il muro)
+  const head=w=>{const h=w.half,top=slope(w),p=top.slice();
+    for(let e=SHELTER_FILL-8;e>3;e-=8) p.push([-open*(h+e),Math.min(T(w,-open*(h+e)),shelterCover(h+4.6+h+e))-0.3]);
+    p.push([-open*(h+3),-0.2],[-open*(h+3),TUN_CROWN],[open*(h+4.6),TUN_CROWN]);
+    return p;};
+  return {roof,wall,parapet,slope,head};
 }
 function buildStructures(structs){
   disposeObject(structGroup);
@@ -5307,7 +5414,15 @@ function buildStructures(structs){
         shadowy(new THREE.Mesh(extrude(s.start,s.end,pr.roof,24),concreteMat));
         shadowy(new THREE.Mesh(extrude(s.start,s.end,pr.wall,24),tunnelInnerMat));
         shadowy(new THREE.Mesh(extrude(s.start,s.end,pr.parapet,24),concreteMat));
-        shadowy(new THREE.Mesh(extrude(s.start,s.end,pr.slope,GROUND_UV),domeMat)).receiveShadow=false;
+        shadowy(new THREE.Mesh(extrude(s.start,s.end,w=>pr.slope(w).reverse(),GROUND_UV),domeMat));
+        // imbocchi: fronte del riempimento (roccia/terra, come il pendio) e cornice in calcestruzzo
+        // attorno all'apertura (testata della soletta e del muro)
+        const headMat=domeMat.clone();headMat.side=THREE.DoubleSide;headMat.userData.sharedMap=true;
+        for(const [i,f] of [[s.start,-1],[s.end,1]]){
+          const w=wps[i],h=w.half,c=TUN_CROWN+0.85;
+          shadowy(new THREE.Mesh(sectionFace(w,pr.head(w),f,0.04),headMat));
+          shadowy(new THREE.Mesh(sectionFace(w,[[open*(h+4.7),TUN_CROWN-0.08],[open*(h+4.7),c],[-open*(h+3.5),c],[-open*(h+3.5),-0.2],[-open*(h+2.7),-0.2],[-open*(h+2.7),TUN_CROWN-0.08]],f,0.1),concreteMat));
+        }
         for(let i=s.start;i<=s.end;i+=2){const w=wps[i];beam(concreteMat,P(w,open*(w.half+3.9),-0.05),P(w,open*(w.half+3.9),TUN_CROWN),0.45,0.6);}
         for(let i=s.start+2;i<s.end-1;i+=4){const w=wps[i],p=P(w,0,TUN_CROWN-0.07);
           lampMatrices.push(new THREE.Matrix4().makeRotationY(Math.atan2(Math.cos(w.heading),Math.sin(w.heading))).setPosition(p[0],p[1],p[2]));
@@ -5829,7 +5944,9 @@ function tube(grp,mat,p1,p2,r){
   return m;
 }
 // ruota: gomma dal profilo arrotondato, cerchio con razze, disco freno e pinza
+let TYRE_TXT=null,SPRING_MAT=null;
 function makeWheel(r,w,rimMat,spokes,side){
+  if(!TYRE_TXT){TYRE_TXT=stdMat({color:0xd8d8d0,roughness:0.8});SPRING_MAT=stdMat({color:0xe8c020,metalness:0.4,roughness:0.4});}
   const pivot=new THREE.Group(),spin=new THREE.Group();pivot.add(spin);
   const ri=r*0.64,pts=[];
   pts.push(new THREE.Vector2(ri,-w/2));
@@ -5847,8 +5964,18 @@ function makeWheel(r,w,rimMat,spokes,side){
     const a=k/spokes*Math.PI*2,sp=part(spin,new THREE.BoxGeometry(0.035,ri*0.82,r*0.13),rimMat,face,Math.cos(a)*ri*0.5,Math.sin(a)*ri*0.5);
     sp.rotation.x=a; // razza orientata lungo il raggio
   }
+  // battistrada da sterrato: tasselli sfalsati su due file più quelli di spalla, in un'unica geometria
+  {const n=Math.round(Math.PI*2*r/0.05),tg=[];
+   for(let k=0;k<n;k++) for(const [x,bw,ph,hh] of [[-w*0.2,w*0.3,0,0.014],[w*0.2,w*0.3,0.5,0.014],[-w*0.43,w*0.12,0.25,0.01],[w*0.43,w*0.12,0.75,0.01]]){
+     const a=(k+ph)/n*Math.PI*2,g=new THREE.BoxGeometry(bw,hh,0.028);g.rotateX(a);g.translate(x,Math.cos(a)*(r-0.004),Math.sin(a)*(r-0.004));tg.push(g);}
+   part(spin,mergeGeos(tg),CM.tyre,0,0,0);tg.forEach(g=>g.dispose());}
+  // bulloni sul mozzo e scritta in rilievo sul fianco esterno della gomma
+  for(let k=0;k<5;k++){const a=k/5*Math.PI*2;part(spin,new THREE.CylinderGeometry(0.011,0.011,0.022,6).rotateZ(Math.PI/2),CM.chrome,face+side*0.026,Math.cos(a)*r*0.11,Math.sin(a)*r*0.11);}
+  part(spin,new THREE.CylinderGeometry(r*0.07,r*0.07,0.03,10).rotateZ(Math.PI/2),CM.darkMetal,face+side*0.03,0,0);
+  for(let k=0;k<2;k++){const t=new THREE.TorusGeometry(r*0.83,0.0035,4,18,Math.PI*0.42);t.rotateY(Math.PI/2);t.rotateX(k*Math.PI+0.5);part(spin,t,TYRE_TXT,side*(w/2+0.001),0,0);}
   // disco e pinza non ruotano con il cerchio
   part(pivot,new THREE.CylinderGeometry(ri*0.72,ri*0.72,0.025,20).rotateZ(Math.PI/2),CM.disc,side*w*0.05,0,0);
+  part(pivot,new THREE.CylinderGeometry(ri*0.3,ri*0.3,0.04,14).rotateZ(Math.PI/2),CM.darkMetal,side*w*0.08,0,0);   // campana del disco
   part(pivot,new THREE.BoxGeometry(0.06,ri*0.4,ri*0.3),CM.caliper,side*w*0.12,ri*0.55,-ri*0.15);
   return {pivot,spin,r};
 }
@@ -5856,6 +5983,12 @@ function addWheels(model,list){
   for(const wd of list){
     const wh=makeWheel(wd.r,wd.w,wd.rim,wd.spokes,Math.sign(wd.x));
     wh.pivot.position.set(wd.x,wd.r,wd.z);
+    // ammortizzatore con la molla elicoidale, all'interno della ruota (si vede nel passaruota e da dietro)
+    {const sd=Math.sign(wd.x),x0=-sd*(wd.w*0.5+0.045),h0=0.02,h1=wd.r*1.35,pts=[];
+     for(let k=0;k<=72;k++){const t=k/72,a=t*Math.PI*2*6;pts.push(new THREE.Vector3(x0+Math.cos(a)*0.032,h0+0.03+(h1-h0-0.06)*t,Math.sin(a)*0.032));}
+     part(wh.pivot,new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),144,0.006,5),SPRING_MAT,0,0,0);
+     part(wh.pivot,new THREE.CylinderGeometry(0.016,0.016,h1-h0,8),CM.darkMetal,x0,(h0+h1)/2,0);
+     part(wh.pivot,new THREE.CylinderGeometry(0.04,0.04,0.012,12),CM.darkMetal,x0,h1-0.02,0);}
     wh.rest={x:wd.x,z:wd.z};wh.tw=wd.w;
     wh.front=wd.z>0;
     model.root.add(wh.pivot);model.wheels.push(wh);
@@ -6095,8 +6228,13 @@ function dashboard(B,X,y,z,w,cock,mono){
   // console centrale in carbonio con il pannello interruttori, leva del cambio sequenziale
   part(B,new THREE.BoxGeometry(0.16,0.2,0.06),D.carbon,0,y-0.1,face+0.01);
   const sw=part(B,new THREE.PlaneGeometry(0.15,0.075),D.switches,0,y-0.03,face-0.022,0.1,Math.PI,0);sw.castShadow=false;
-  tube(B,CM.chrome,[0,y-0.28,face-0.05],[-0.02,y-0.12,face-0.1],0.008);
-  part(B,new THREE.SphereGeometry(0.018,10,8),D.carbon,-0.02,y-0.115,face-0.1);
+  // leva del cambio sequenziale: imperniata in basso, si muove davvero (indietro per salire, avanti per scalare)
+  const lever=new THREE.Group();lever.position.set(-0.02,y-0.27,face-0.055);B.add(lever);
+  part(B,new THREE.CylinderGeometry(0.022,0.03,0.03,10),CM.black,-0.02,y-0.265,face-0.055);   // cuffia in gomma
+  tube(lever,CM.chrome,[0,0,0],[0,0.15,-0.042],0.008);
+  part(lever,new THREE.SphereGeometry(0.018,10,8),D.carbon,0,0.155,-0.044);
+  const knob=new THREE.Object3D();knob.position.set(0,0.155,-0.044);lever.add(knob);
+  if(cock){cock.lever=lever;cock.knob=knob;}
   // bocchette d'aria ai lati
   for(const k of [-1,1]){
     part(B,new THREE.CylinderGeometry(0.028,0.028,0.02,16).rotateX(Math.PI/2),CM.black,k*(w-0.07),y+0.01,face-0.006);
@@ -6108,15 +6246,77 @@ function dashboard(B,X,y,z,w,cock,mono){
   if(cock){cock.tach=tach;cock.speedo=speedo;}
   return {tach,speedo};
 }
-// braccia del pilota: spalla → gomito → guanto (che gira con il volante), con la stessa cinematica inversa del buggy
+// ---- mano del pilota: palmo, quattro dita in due falangi, pollice, polsino ----
+// Coordinate della mano: polso nell'origine, dita verso -y, palmo verso +z. side = +1 mano sinistra, -1 destra.
+function makeHand(mat,side){
+  const g=new THREE.Group(),fingers=[];
+  part(g,new THREE.BoxGeometry(0.044,0.05,0.021),mat,0,-0.027,0);                       // palmo
+  part(g,new THREE.CylinderGeometry(0.027,0.025,0.04,10),mat,0,0.014,0);                // polsino del guanto
+  const L=[0.023,0.026,0.025,0.02];
+  for(let k=0;k<4;k++){
+    const x=side*(0.0165-k*0.011);
+    const f1=new THREE.Group();f1.position.set(x,-0.051,0.002);g.add(f1);
+    part(f1,new THREE.CylinderGeometry(0.0055,0.006,L[k],6).translate(0,-L[k]/2,0),mat,0,0,0);
+    part(f1,new THREE.SphereGeometry(0.0062,6,4),mat,0,0,0);                              // nocca
+    const f2=new THREE.Group();f2.position.set(0,-L[k],0);f1.add(f2);
+    part(f2,new THREE.CylinderGeometry(0.0049,0.0055,L[k]*0.85,6).translate(0,-L[k]*0.425,0),mat,0,0,0);
+    part(f2,new THREE.SphereGeometry(0.0052,6,4),mat,0,-L[k]*0.85,0);                     // polpastrello
+    fingers.push([f1,f2]);
+  }
+  // pollice: parte dal lato dell'indice, in avanti verso il palmo
+  const t1=new THREE.Group();t1.position.set(side*0.022,-0.014,0.008);t1.rotation.z=side*0.75;g.add(t1);
+  part(t1,new THREE.CylinderGeometry(0.0065,0.007,0.022,6).translate(0,-0.011,0),mat,0,0,0);
+  const t2=new THREE.Group();t2.position.set(0,-0.022,0);t1.add(t2);
+  part(t2,new THREE.CylinderGeometry(0.0056,0.0064,0.019,6).translate(0,-0.0095,0),mat,0,0,0);
+  part(t2,new THREE.SphereGeometry(0.0058,6,4),mat,0,-0.019,0);
+  g.userData={fingers,t1,t2};
+  return g;
+}
+// posa della mano: polso in w, dita verso fd, palmo verso pn, dita chiuse di "curl" (0 aperte, ~1,5 a pugno)
+const _phA=new THREE.Quaternion(),_phB=new THREE.Quaternion(),_phN=new THREE.Vector3(),_phP=new THREE.Vector3(),_phY=new THREE.Vector3(0,-1,0);
+function poseHand(h,w,fd,pn,curl){
+  h.position.copy(w);
+  _phA.setFromUnitVectors(_phY,fd);
+  _phN.set(0,0,1).applyQuaternion(_phA);
+  _phP.copy(pn).addScaledVector(fd,-pn.dot(fd)).normalize();
+  const ang=Math.atan2(_v4.crossVectors(_phN,_phP).dot(fd),_phN.dot(_phP));
+  _phB.setFromAxisAngle(fd,ang);h.quaternion.copy(_phB).multiply(_phA);
+  const u=h.userData;
+  for(const [f1,f2] of u.fingers){f1.rotation.x=-curl*0.9;f2.rotation.x=-curl*1.0;}
+  u.t1.rotation.x=-curl*0.5;u.t2.rotation.x=-curl*0.55;
+}
+// braccia del pilota: spalla → gomito → polso, con la stessa cinematica inversa del buggy. Le mani impugnano la
+// corona del volante (girano con lui); quando si cambia marcia la destra va sulla leva e la muove (shiftW 0..1)
+const _ckG=new THREE.Vector3(),_ckC=new THREE.Vector3(),_ckF=new THREE.Vector3(),_ckP=new THREE.Vector3(),_ckW=new THREE.Vector3(),
+  _ckK=new THREE.Vector3(),_ckLW=new THREE.Vector3(),_ckLF=new THREE.Vector3(),_ckLP=new THREE.Vector3(),_ckFd=new THREE.Vector3(),_ckPn=new THREE.Vector3();
 function cockArms(ck){
   if(!ck||!ck.arms) return;
   ck.piv.updateMatrix();ck.spin.updateMatrix();
+  // centro del volante e asse (verso la plancia) nelle coordinate dell'abitacolo
+  _ckC.set(0,0,0).applyMatrix4(ck.spin.matrix).applyMatrix4(ck.piv.matrix);
+  _ckF.set(0,0,1).applyQuaternion(ck.piv.quaternion);
+  const sw=ck.shiftW||0;
   for(const a of ck.arms){
-    a.Hp.copy(a.gl.position).applyMatrix4(ck.spin.matrix).applyMatrix4(ck.piv.matrix);
-    a.Hp.addScaledVector(_v3.subVectors(a.sh,a.Hp).normalize(),0.025);   // (il polso entra nel guanto)
-    solveArm(a.sh,a.Hp,a.E,a.k,0.2,0.2);
-    setLimb(a.up,a.sh,a.E);setLimb(a.fa,a.E,a.Hp);a.el.position.copy(a.E);
+    // presa sulla corona: palmo verso il mozzo, polso appena fuori dalla corona e verso il pilota, dita che la
+    // avvolgono passando davanti
+    _ckG.copy(a.grip.position).applyMatrix4(ck.spin.matrix).applyMatrix4(ck.piv.matrix);
+    _ckP.subVectors(_ckC,_ckG).normalize();
+    _ckW.copy(_ckG).addScaledVector(_ckP,-0.03).addScaledVector(_ckF,-0.032);
+    _ckFd.copy(_ckF).multiplyScalar(0.75).addScaledVector(_ckP,0.55).normalize();
+    _ckPn.copy(_ckP);
+    let curl=1.45;
+    if(a.k<0&&sw>0&&ck.knob){
+      // mano destra sul pomello della leva: polso dietro e sopra, palmo che lo avvolge dall'alto
+      ck.lever.updateMatrix();_ckK.copy(ck.knob.position).applyMatrix4(ck.lever.matrix);
+      _ckLW.copy(_ckK).add(_v2.set(0.006,0.05,-0.035));
+      _ckLF.subVectors(_ckK,_ckLW).normalize();_ckLP.set(0,-1,0.35).normalize();
+      _ckW.lerp(_ckLW,sw);_ckFd.lerp(_ckLF,sw).normalize();_ckPn.lerp(_ckLP,sw).normalize();
+      curl=1.45-0.35*sw-0.9*Math.sin(Math.PI*Math.min(1,sw*1.25))*(sw<0.8?1:0);   // (si apre mentre si sposta)
+    }
+    a.Hp.copy(_ckW);
+    solveArm(a.sh,a.Hp,a.E,a.k,0.215,0.205);
+    setLimb(a.up,a.sh,a.E);setLimb(a.fa,a.E,a.Hp);a.el.position.copy(a.E);a.wr.position.copy(a.Hp);
+    poseHand(a.hand,a.Hp,_ckFd,_ckPn,Math.max(0.25,curl));
   }
 }
 function cabin(B,o){
@@ -6134,12 +6334,15 @@ function cabin(B,o){
     if(s>0){
       // braccia complete: omero dalla spalla, gomito e avambraccio fino al guanto sul volante, ricalcolati a ogni
       // fotogramma (cinematica inversa: girando il volante i gomiti si piegano e si aprono come quelli veri)
-      const arms=[];
+      const arms=[],glove=stdMat({color:0xb9b2a4,roughness:0.85});   // guanti chiari: si distinguono sul volante nero
       for(const k of [-1,1]){
-        const up=part(B,new THREE.CylinderGeometry(0.03,0.034,1,10),suit,0,0,0);
-        const fa=part(B,new THREE.CylinderGeometry(0.026,0.03,1,10),suit,0,0,0);
-        const el=part(B,new THREE.SphereGeometry(0.031,10,8),suit,0,0,0);
-        arms.push({k,sh:new THREE.Vector3(x+k*0.125,H-0.1,Z-0.02),up,fa,el,E:new THREE.Vector3(),Hp:new THREE.Vector3()});
+        // braccio (più grosso verso la spalla), avambraccio che si assottiglia verso il polso, gomito, polso
+        const up=part(B,new THREE.CylinderGeometry(0.029,0.035,1,12),suit,0,0,0);
+        const fa=part(B,new THREE.CylinderGeometry(0.022,0.03,1,12),suit,0,0,0);
+        const el=part(B,new THREE.SphereGeometry(0.031,12,8),suit,0,0,0);
+        const wr=part(B,new THREE.SphereGeometry(0.023,10,8),suit,0,0,0);
+        const hand=makeHand(glove,k);B.add(hand);
+        arms.push({k,sh:new THREE.Vector3(x+k*0.125,H-0.1,Z-0.02),up,fa,el,wr,hand,E:new THREE.Vector3(),Hp:new THREE.Vector3()});
       }
       // volante che gira con lo sterzo, con le razze, il riferimento a ore 12 e i guanti del pilota sopra
       // (inclinato come quello vero: la parte alta più lontana dal pilota, perpendicolare al piantone)
@@ -6152,18 +6355,17 @@ function cabin(B,o){
       part(spin,new THREE.CylinderGeometry(0.026,0.026,0.03,14).rotateX(Math.PI/2),CM.darkMetal,0,0,0);
       for(const a of [0,Math.PI,-Math.PI/2]){const sp=part(spin,new THREE.BoxGeometry(0.09,0.016,0.01),CM.darkMetal,Math.cos(a)*0.05,Math.sin(a)*0.05,0);sp.rotation.z=a;}
       part(spin,new THREE.BoxGeometry(0.02,0.012,0.016),CM.caliper,0,0.1,0.002);
-      const glove=stdMat({color:0xb9b2a4,roughness:0.85});   // guanti chiari: si distinguono sul volante nero
-      for(const a of arms){const gl=part(spin,new THREE.SphereGeometry(0.032,10,8),glove,a.k*0.098,0.0,0.012);gl.scale.set(0.9,1.25,0.85);
-        a.gl=gl;part(gl,new THREE.CylinderGeometry(0.03,0.028,0.03,10),glove,0,-0.006,-0.03,Math.PI/2);}   // polsino
+      // punti di presa sulla corona (a "nove e un quarto"), che girano con il volante
+      for(const a of arms){a.grip=new THREE.Object3D();a.grip.position.set(a.k*0.1,0.012,0);spin.add(a.grip);}
       tube(B,CM.darkMetal,[x,H-0.13,pz],[x,H-0.13-0.08*(o.dashZ-pz)/0.17,o.dashZ],0.014);   // piantone fino dentro la plancia
       B.userData.cock={eye:[x,H+0.01,Z+0.11],spin,piv,arms};
-      cockArms(B.userData.cock);
     }else{
       for(const k of [-1,1]) tube(B,suit,[x+k*0.11,H-0.1,Z],[x+k*0.05,H-0.27,Z+0.2],0.03);
       part(B,new THREE.BoxGeometry(0.17,0.012,0.12),notes,x,H-0.27,Z+0.23,-0.55);
     }
   }
   dashboard(B,X,o.dashY,o.dashZ,o.inW,B.userData.cock);
+  cockArms(B.userData.cock);   // (dopo il cruscotto: serve la leva del cambio)
   // gabbia interna: arco dietro ai sedili, montanti lungo il parabrezza fino all'arco, barre porta
   const W=o.inW,cg=o.cage;
   bentTube(B,cg,[[-W,o.floorY,o.hoopZ],[-W,o.roofY-0.1,o.hoopZ],[-W+0.08,o.roofY-0.03,o.hoopZ],[W-0.08,o.roofY-0.03,o.hoopZ],[W,o.roofY-0.1,o.hoopZ],[W,o.floorY,o.hoopZ]],0.022);
@@ -6460,7 +6662,8 @@ function buildBuggyDriver(B){
   // braccia: cilindri di lunghezza unitaria, riposizionati ogni fotogramma
   const limb=(r0,r1,mat)=>{const g=new THREE.CylinderGeometry(r1,r0,1,10);const mm=part(B,g,mat,0,0,0);return mm;};
   const arms={uL:limb(0.045,0.038,suit),fL:limb(0.038,0.032,suit),uR:limb(0.045,0.038,suit),fR:limb(0.038,0.032,suit)};
-  const handL=part(B,new THREE.SphereGeometry(0.036,10,8),glove,0,0,0),handR=part(B,new THREE.SphereGeometry(0.036,10,8),glove,0,0,0);
+  // mani articolate (dita e pollice) come quelle delle auto chiuse
+  const handL=makeHand(glove,1),handR=makeHand(glove,-1);handL.scale.setScalar(1.08);handR.scale.setScalar(1.08);B.add(handL);B.add(handR);
   const elbowL=part(B,new THREE.SphereGeometry(0.04,10,8),suit,0,0,0),elbowR=part(B,new THREE.SphereGeometry(0.04,10,8),suit,0,0,0);
   torso.updateMatrix();head.updateMatrix();
   const rest=(x,y,z)=>new THREE.Vector3(x,y,z).applyMatrix4(head.matrix).applyMatrix4(torso.matrix).toArray();
@@ -6489,7 +6692,7 @@ function solveArm(S,H,E,side,a=0.24,b=0.25){   // (a, b: braccio e avambraccio)
   const reach=Math.min(_v3.subVectors(H,S).length(),a+b-0.002);
   H.copy(S).addScaledVector(dir,reach);
 }
-const _S=new THREE.Vector3(),_H=new THREE.Vector3(),_E=new THREE.Vector3(),_K=new THREE.Vector3();
+const _S=new THREE.Vector3(),_H=new THREE.Vector3(),_E=new THREE.Vector3(),_K=new THREE.Vector3(),_bHub=new THREE.Vector3(),_bFd=new THREE.Vector3(),_bPn=new THREE.Vector3();
 function localPos(obj,body,out){obj.getWorldPosition(out);return body.worldToLocal(out);}
 function animateBuggyDriver(r,dt){
   const B=r.body;
@@ -6524,12 +6727,18 @@ function animateBuggyDriver(r,dt){
   // braccio sinistro: sempre sul volante
   localPos(r.shL,B,_S);localPos(r.hL,B,_H);
   solveArm(_S,_H,_E,1);
-  setLimb(r.arms.uL,_S,_E);setLimb(r.arms.fL,_E,_H);r.elbowL.position.copy(_E);r.handL.position.copy(_H);
+  setLimb(r.arms.uL,_S,_E);setLimb(r.arms.fL,_E,_H);r.elbowL.position.copy(_E);
+  // mano: dita che proseguono l'avambraccio e avvolgono la corona, palmo verso il centro del volante
+  localPos(r.wheelSpin,B,_bHub);
+  _bFd.subVectors(_H,_E).normalize();_bPn.subVectors(_bHub,_H).normalize();
+  poseHand(r.handL,_H,_bFd,_bPn,1.45);
   // braccio destro: tra volante e leva del cambio
   localPos(r.shR,B,_S);localPos(r.hR,B,_H);localPos(r.knob,B,_K);
   _H.lerp(_K,w);
   solveArm(_S,_H,_E,-1);
-  setLimb(r.arms.uR,_S,_E);setLimb(r.arms.fR,_E,_H);r.elbowR.position.copy(_E);r.handR.position.copy(_H);
+  setLimb(r.arms.uR,_S,_E);setLimb(r.arms.fR,_E,_H);r.elbowR.position.copy(_E);
+  _bFd.subVectors(_H,_E).normalize();_bPn.subVectors(_bHub,_H).normalize().lerp(_v1.set(0,-1,0.3).normalize(),w).normalize();
+  poseHand(r.handR,_H,_bFd,_bPn,1.45-0.9*Math.sin(Math.PI*Math.min(1,w*1.25))*(w<0.8?1:0));
 }
 // tubo curvato e liscio che passa per i punti dati (curva morbida, sezione tonda)
 function bentTube(grp,mat,pts,r,closed){
@@ -6839,6 +7048,19 @@ function animateCar(dt){
   // rollio e beccheggio ora vengono dalla dinamica verticale reale (carRoll resta per il busto del pilota)
   m.body.rotation.z=0;m.body.rotation.x=0;
   if(m.rig) animateBuggyDriver(m.rig,dt);
+  // cambiata (auto chiuse): la mano destra lascia il volante, va sul pomello, tira la leva indietro (marcia su) o
+  // la spinge avanti (scalata) e torna sul volante; la leva si muove solo mentre la mano la tiene
+  {const ck=m.body.userData.cock;
+   if(ck&&ck.arms&&ck.lever){
+     if(ck.lastGear===undefined) ck.lastGear=gear;
+     if(gear!==ck.lastGear){ck.shiftDir=gear>ck.lastGear?1:-1;ck.lastGear=gear;if(!(ck.shiftT>0)) ck.shiftT=0.5;}
+     let w=0,lw=0;
+     if(ck.shiftT>0){
+       ck.shiftT-=dt;const p=Math.min(1,1-Math.max(0,ck.shiftT)/0.5),cl=v=>Math.max(0,Math.min(1,v));
+       w=Math.min(1,Math.sin(Math.PI*p)*1.35);lw=cl((p-0.32)/0.16)*(1-cl((p-0.62)/0.16));
+     }
+     ck.shiftW=w;ck.lever.rotation.x=-(ck.shiftDir||1)*0.3*lw;
+   }}
   updateFlames(dt);
   const ground=carAirY<=0.001;
   for(const w of m.wheels){
@@ -6943,32 +7165,118 @@ function randomLook(rng,female){
   return {female,skin:pick(SKIN),hair:pick(HAIR),top,sleeve:rng()<0.8?top:pick(CLOTH),pants:pick(PANTS),
     shoes:rng()<0.5?'#f2f2f2':pick(['#222','#5a3d24','#333a44']),longHair:female&&rng()<0.7,
     hat:hr<0.22?'cap':hr<0.32?'beanie':null,hatCol:pick(CLOTH),stripe:rng()<0.25?pick(CLOTH):null,
-    short:rng()<0.3,build:(female?0.9:1)*(0.94+rng()*0.16)};
+    short:rng()<0.3,shorts:rng()<0.18,build:(female?0.9:1)*(0.94+rng()*0.16),
+    // volto (0..3 uomini, 4..7 donne), barba, occhiali da vista o da sole, statura
+    face:(female?4:0)+Math.floor(rng()*4),beard:!female&&rng()<0.28,glasses:rng()<0.16,sun:rng()<0.5,tall:0.94+rng()*0.12};
 }
 // commissari e cronometristi: gilet arancione con banda riflettente, berretto
 const officialLook=f=>({female:false,skin:SKIN[f%SKIN.length],hair:'#2a2018',top:'#ff7a00',sleeve:'#f4f4f4',pants:'#1f2a38',
-  shoes:'#222',vest:true,stripe:'#e8eef2',hat:'cap',hatCol:'#ff7a00',short:false,build:1.04});
+  shoes:'#222',vest:true,stripe:'#e8eef2',hat:'cap',hatCol:'#ff7a00',short:false,build:1.04,face:f%4,tall:1});
 // geometrie (piedi a y=0, la persona guarda verso +z, la sua sinistra è +x); ogni parte ha il perno in alto
+// unione di più geometrie (con indici) in una sola: una parte instanziata fatta di più pezzi
+function mergeGeos(list){
+  const pos=[],nor=[],uv=[],idx=[];let off=0;
+  for(const g of list){
+    const p=g.attributes.position,n=g.attributes.normal,u=g.attributes.uv;
+    for(let i=0;i<p.count;i++){pos.push(p.getX(i),p.getY(i),p.getZ(i));nor.push(n.getX(i),n.getY(i),n.getZ(i));uv.push(u?u.getX(i):0,u?u.getY(i):0);}
+    if(g.index) for(let i=0;i<g.index.count;i++) idx.push(g.index.getX(i)+off);else for(let i=0;i<p.count;i++) idx.push(i+off);
+    off+=p.count;
+  }
+  const m=new THREE.BufferGeometry();
+  m.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));m.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));
+  m.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));m.setIndex(idx);return m;
+}
 const HG=(()=>{
   const cyl=(rt,rb,h,seg,dy)=>{const g=new THREE.CylinderGeometry(rt,rb,h,seg);g.translate(0,dy,0);return g;};
-  const shoe=new THREE.BoxGeometry(0.072,0.05,0.135);shoe.translate(0,-0.005,0.028);
+  const tr=(g,x,y,z)=>{g.translate(x,y,z);return g;};
+  // scarpa: tomaia e punta arrotondata, suola piatta
+  const shoeA=new THREE.BoxGeometry(0.07,0.045,0.11);shoeA.translate(0,-0.006,0.018);
+  const shoeB=new THREE.SphereGeometry(0.036,8,6,0,Math.PI*2,0,Math.PI*0.55);shoeB.scale(1,0.85,1.15);shoeB.translate(0,-0.026,0.072);
+  const shoe=mergeGeos([shoeA,shoeB]);
   // busto sagomato: vita stretta, petto, spalle arrotondate
-  const torso=new THREE.LatheGeometry([[0.001,-0.15],[0.084,-0.15],[0.088,-0.06],[0.1,0.05],[0.106,0.105],[0.097,0.142],[0.06,0.162],[0.001,0.166]].map(p=>new THREE.Vector2(p[0],p[1])),10);
+  const torso=new THREE.LatheGeometry([[0.001,-0.15],[0.084,-0.15],[0.088,-0.06],[0.1,0.05],[0.106,0.105],[0.097,0.142],[0.06,0.162],[0.001,0.166]].map(p=>new THREE.Vector2(p[0],p[1])),12);
   torso.scale(1,1,0.62);
   const stripe=new THREE.CylinderGeometry(0.103,0.1,0.045,8,1,true);stripe.scale(1,1,0.66);
-  const head=new THREE.SphereGeometry(0.066,9,7);head.scale(0.9,1.08,1);
-  const hair=new THREE.SphereGeometry(0.071,9,4,0,Math.PI*2,0,Math.PI*0.52);hair.scale(0.92,1.06,1.03);hair.translate(0,0.004,-0.006);
+  // testa più tonda e dettagliata (il volto è disegnato sulla texture, vedi faceAtlas)
+  const head=new THREE.SphereGeometry(0.066,18,14);head.scale(0.9,1.08,1);
+  // capelli: calotta che sul davanti risale fino all'attaccatura sulla fronte (non copre più gli occhi)
+  const hair=new THREE.SphereGeometry(0.071,16,8,0,Math.PI*2,0,Math.PI*0.6);
+  {const p=hair.attributes.position,r=0.071;for(let i=0;i<p.count;i++){const y=p.getY(i),z=p.getZ(i),fz=Math.max(0,z/r),lim=-0.34*r*(1-fz)+0.46*r*fz*fz;if(y<lim) p.setY(i,lim);}hair.computeVertexNormals();}
+  hair.scale(0.92,1.06,1.03);hair.translate(0,0.004,-0.006);
   const longHair=new THREE.BoxGeometry(0.125,0.15,0.035);longHair.translate(0,-0.055,-0.05);
   const visor=new THREE.BoxGeometry(0.115,0.012,0.08);visor.translate(0,0.024,0.088);
-  const hand=new THREE.SphereGeometry(0.031,6,4);hand.scale(0.85,1.2,0.75);
+  // orecchie, naso, barba, occhiali (tutti attaccati alla testa)
+  const ear=s=>{const g=new THREE.SphereGeometry(0.017,7,6);g.scale(0.42,1,0.68);g.translate(s*0.058,-0.002,-0.004);return g;};
+  const ears=mergeGeos([ear(1),ear(-1)]);
+  const nose=new THREE.SphereGeometry(0.012,7,6);nose.scale(0.75,1.05,1.25);nose.translate(0,-0.007,0.066);
+  const beard=new THREE.SphereGeometry(0.069,12,6,Math.PI/2-1.15,2.3,Math.PI*0.55,Math.PI*0.36);beard.scale(0.92,1.08,1.05);
+  const lens=s=>{const g=new THREE.TorusGeometry(0.0125,0.0028,4,12);g.translate(s*0.021,0.009,0.064);return g;};
+  const glasses=mergeGeos([lens(1),lens(-1),tr(new THREE.BoxGeometry(0.016,0.003,0.003),0,0.011,0.067),
+    tr(new THREE.BoxGeometry(0.003,0.003,0.06),0.034,0.011,0.036),tr(new THREE.BoxGeometry(0.003,0.003,0.06),-0.034,0.011,0.036)]);
+  // mano: palmo, dita leggermente piegate e pollice in avanti (perno al polso, la mano scende lungo -y)
+  const palm=new THREE.BoxGeometry(0.048,0.054,0.024);palm.translate(0,-0.03,0);
+  const fing=new THREE.BoxGeometry(0.045,0.046,0.019);fing.rotateX(0.38);fing.translate(0,-0.075,0.009);
+  const thumb=new THREE.BoxGeometry(0.015,0.036,0.015);thumb.rotateX(-0.45);thumb.translate(0,-0.03,0.02);
+  const hand=mergeGeos([palm,fing,thumb]);
   const cloth=new THREE.PlaneGeometry(0.44,0.29,4,1);cloth.translate(0.22,-0.145,0);
   const hips=new THREE.CylinderGeometry(0.086,0.082,0.11,8);hips.scale(1,1,0.68);
-  const joint=new THREE.SphereGeometry(0.036,7,5);
-  return {leg:cyl(0.041,0.031,0.44,7,-0.22),shoe,hips,torso,stripe,joint,
-    neck:cyl(0.027,0.03,0.07,6,0),head,hair,longHair,visor,upper:cyl(0.032,0.027,0.24,7,-0.12),
-    fore:cyl(0.027,0.021,0.215,7,-0.1075),hand,pole:cyl(0.009,0.009,0.95,5,0.415),cloth,
+  const joint=new THREE.SphereGeometry(0.036,8,6);
+  return {thigh:cyl(0.05,0.041,0.235,8,-0.1175),shin:cyl(0.039,0.03,0.215,8,-0.1075),knee:new THREE.SphereGeometry(0.041,8,6),
+    shoe,hips,torso,stripe,joint,elbow:new THREE.SphereGeometry(0.028,7,5),
+    neck:cyl(0.027,0.03,0.07,6,0),head,hair,longHair,visor,ears,nose,beard,glasses,upper:cyl(0.032,0.027,0.24,8,-0.12),
+    fore:cyl(0.027,0.021,0.215,8,-0.1075),hand,pole:cyl(0.009,0.009,0.95,5,0.415),cloth,
     phone:new THREE.BoxGeometry(0.045,0.085,0.012),clip:new THREE.BoxGeometry(0.17,0.23,0.015)};
 })();
+// Volti: otto facce diverse disegnate su un'unica texture (4×2), una per persona. Sulla sfera della testa il
+// davanti è a u=0,25: occhi con iride e pupilla, sopracciglia, naso, bocca; poi ciglia e rossetto, baffi,
+// barba sfatta, lentiggini, rughe, sorriso o bocca aperta. Il bianco prende il colore della pelle (colore
+// per istanza), il resto la scurisce.
+const faceAtlas=(()=>{
+  const c=document.createElement('canvas');c.width=1024;c.height=512;const g=c.getContext('2d');
+  g.fillStyle='#fff';g.fillRect(0,0,1024,512);
+  const FACES=[
+    {iris:'#5a3b22',brow:2.6,mouth:'smile',stub:false},{iris:'#3a5f8a',brow:3.2,mouth:'flat',stub:true},
+    {iris:'#4a3020',brow:2.8,mouth:'open',must:true},{iris:'#556b3a',brow:2.2,mouth:'smile',wr:true,stub:true},
+    {iris:'#5a3b22',brow:1.5,mouth:'smile',fem:true},{iris:'#2f6a9a',brow:1.3,mouth:'open',fem:true,blush:true},
+    {iris:'#3f6a3a',brow:1.6,mouth:'smile',fem:true,freck:true},{iris:'#4a2e1c',brow:1.4,mouth:'flat',fem:true,blush:true}];
+  FACES.forEach((F,k)=>{
+    const x0=(k%4)*256,y0=k<4?256:0,cx=x0+64,R=mulberry32(900+k);
+    const ey=y0+115;
+    for(const s of [-1,1]){
+      const ex=cx+s*11;
+      g.fillStyle='#ffffff';g.beginPath();g.ellipse(ex,ey,5.2,F.fem?3.2:2.8,0,0,7);g.fill();
+      g.fillStyle=F.iris;g.beginPath();g.arc(ex,ey,2.3,0,7);g.fill();
+      g.fillStyle='#111';g.beginPath();g.arc(ex,ey,1.1,0,7);g.fill();
+      g.fillStyle='rgba(255,255,255,0.9)';g.fillRect(ex+0.6,ey-1.4,0.9,0.9);
+      g.strokeStyle='#2a1c14';g.lineWidth=F.fem?1.6:1;g.beginPath();g.ellipse(ex,ey,5.4,F.fem?3.4:3,0,Math.PI*1.05,Math.PI*1.95);g.stroke();
+      if(F.fem){g.lineWidth=1;for(let q=0;q<3;q++){g.beginPath();g.moveTo(ex+s*(2+q*1.4),ey-3.2);g.lineTo(ex+s*(3+q*1.8),ey-5);g.stroke();}}
+      g.strokeStyle='#3a271a';g.lineWidth=F.brow;g.beginPath();g.moveTo(ex-s*5,ey-8);g.quadraticCurveTo(ex,ey-11.5,ex+s*6,ey-8.5);g.stroke();
+      if(F.wr){g.strokeStyle='rgba(120,80,60,0.6)';g.lineWidth=0.8;for(let q=0;q<2;q++){g.beginPath();g.moveTo(ex+s*6.5,ey-1+q*2.5);g.lineTo(ex+s*9,ey-2+q*3.5);g.stroke();}}
+    }
+    // naso: ombra laterale e narici
+    g.strokeStyle='rgba(150,100,80,0.55)';g.lineWidth=1.1;g.beginPath();g.moveTo(cx-2.5,ey+5);g.quadraticCurveTo(cx-4,ey+17,cx-1,ey+20);g.stroke();
+    g.fillStyle='rgba(90,55,40,0.7)';for(const s of [-1,1]){g.beginPath();g.ellipse(cx+s*2.6,y0+136,1.3,0.9,0,0,7);g.fill();}
+    // bocca
+    const my=y0+157;
+    if(F.mouth==='open'){g.fillStyle='#5a1e1a';g.beginPath();g.ellipse(cx,my,6.5,4.2,0,0,7);g.fill();g.fillStyle='#f4efe8';g.fillRect(cx-5,my-3.6,10,2);}
+    else{g.strokeStyle=F.fem?'#b23a48':'#8a4a42';g.lineWidth=F.fem?2.8:1.8;g.beginPath();g.moveTo(cx-8,my-(F.mouth==='smile'?1.5:0));
+      g.quadraticCurveTo(cx,my+(F.mouth==='smile'?4:0.5),cx+8,my-(F.mouth==='smile'?1.5:0));g.stroke();}
+    if(F.fem){g.fillStyle='rgba(178,58,72,0.55)';g.beginPath();g.ellipse(cx,my-2,6,1.6,0,0,7);g.fill();}
+    if(F.must){g.fillStyle='#3a271a';g.beginPath();g.ellipse(cx,my-6,9,2.4,0,0,7);g.fill();}
+    if(F.stub){g.fillStyle='rgba(70,60,55,0.45)';for(let q=0;q<420;q++){const a=R()*Math.PI,rr=14+R()*12;const x=cx+Math.cos(a)*rr*0.95,y=y0+150+Math.sin(a)*rr*0.75;g.fillRect(x,y,1,1);}}
+    if(F.freck){g.fillStyle='rgba(150,90,60,0.6)';for(let q=0;q<40;q++){g.beginPath();g.arc(cx+(R()-0.5)*30,ey+7+R()*8,0.7,0,7);g.fill();}}
+    if(F.blush){for(const s of [-1,1]){const gr=g.createRadialGradient(cx+s*13,ey+14,0,cx+s*13,ey+14,8);gr.addColorStop(0,'rgba(230,110,110,0.35)');gr.addColorStop(1,'rgba(230,110,110,0)');g.fillStyle=gr;g.fillRect(cx+s*13-8,ey+6,16,16);}}
+  });
+  const t=new THREE.CanvasTexture(c);t.anisotropy=4;sharedRes.add(t);return t;
+})();
+// testa: la texture dei volti, con la faccia scelta per persona (attributo aFace: 0..7)
+const faceMat=new THREE.MeshLambertMaterial({color:0xffffff,map:faceAtlas});
+faceMat.onBeforeCompile=sh=>{
+  sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nattribute float aFace;')
+    .replace('#include <uv_vertex>','#include <uv_vertex>\n#ifdef USE_UV\nvUv=vec2((vUv.x+mod(aFace,4.0))/4.0,(vUv.y+floor(aFace/4.0))/2.0);\n#endif');
+};
+faceMat.customProgramCacheKey=()=>'humFace';
+sharedRes.add(faceMat);
 Object.values(HG).forEach(g=>sharedRes.add(g));
 // bandiere: tricolore, a scacchi, D&M, bianco-blu, rosso-giallo, verde dello starter
 const FLAG_N=6;
@@ -6989,8 +7297,10 @@ function flagTexture(d){
 const humanMat=new THREE.MeshLambertMaterial({color:0xffffff});
 const flagMats=[];for(let d=0;d<FLAG_N;d++) flagMats.push(new THREE.MeshLambertMaterial({map:flagTexture(d),side:THREE.DoubleSide}));
 sharedRes.add(humanMat);flagMats.forEach(m=>sharedRes.add(m));
-const HUM_PARTS=[['legL','leg'],['legR','leg'],['shoeL','shoe'],['shoeR','shoe'],['hips','hips'],['torso','torso'],['stripe','stripe'],
-  ['neck','neck'],['head','head'],['hair','hair'],['longHair','longHair'],['visor','visor'],['upL','upper'],['upR','upper'],
+const HUM_PARTS=[['thighL','thigh'],['thighR','thigh'],['kneeL','knee'],['kneeR','knee'],['shinL','shin'],['shinR','shin'],
+  ['shoeL','shoe'],['shoeR','shoe'],['hips','hips'],['torso','torso'],['stripe','stripe'],
+  ['neck','neck'],['head','head'],['hair','hair'],['longHair','longHair'],['visor','visor'],['ears','ears'],['nose','nose'],
+  ['beard','beard'],['glasses','glasses'],['upL','upper'],['upR','upper'],['elL','elbow'],['elR','elbow'],
   ['foL','fore'],['foR','fore'],['handL','hand'],['handR','hand'],['shL','joint'],['shR','joint'],['pole','pole'],['phone','phone'],['clip','clip']];
 // Il pubblico è diviso in blocchi (partenza, arrivo, tratti del centro storico, soccorritori): ogni blocco ha le
 // sue mesh e una sfera d'ingombro, e non si disegna quando è fuori inquadratura o troppo lontano.
@@ -7000,7 +7310,10 @@ const RESCUE_SLOTS=5;
 function humAlloc(n,parent,sphere){
   const b={m:{},cloth:[],group:new THREE.Group(),sphere,vis:true,force:false,dirty:false};
   for(const [name,geo] of HUM_PARTS){
-    const im=new THREE.InstancedMesh(HG[geo],humanMat,n);
+    // (la testa ha la texture dei volti e il suo attributo per istanza: quale faccia)
+    let g=HG[geo],mat=humanMat;
+    if(name==='head'){g=HG.head.clone();g.setAttribute('aFace',new THREE.InstancedBufferAttribute(new Float32Array(n),1));mat=faceMat;}
+    const im=new THREE.InstancedMesh(g,mat,n);
     for(let i=0;i<n;i++){im.setMatrixAt(i,H_ZERO);im.setColorAt(i,_hc.set(0xffffff));}
     im.frustumCulled=false;im.receiveShadow=true;b.group.add(im);b.m[name]=im;
   }
@@ -7014,12 +7327,18 @@ function humAlloc(n,parent,sphere){
 }
 function humColors(p){
   const o=p.look,M=p.bank.m,i=p.i,c=(k,col)=>M[k].setColorAt(i,_hc.set(col));
-  c('legL',o.pants);c('legR',o.pants);c('hips',shade(o.pants,-0.25));c('shoeL',o.shoes);c('shoeR',o.shoes);
+  for(const k of ['thighL','thighR','kneeL','kneeR']) c(k,o.pants);
+  // (pantaloncini: stinco nudo)
+  for(const k of ['shinL','shinR']) c(k,o.shorts?o.skin:o.pants);
+  c('hips',shade(o.pants,-0.25));c('shoeL',o.shoes);c('shoeR',o.shoes);
   c('torso',o.top);c('stripe',o.stripe||o.top);
-  for(const k of ['neck','head','handL','handR']) c(k,o.skin);
+  for(const k of ['neck','head','handL','handR','ears','nose']) c(k,o.skin);
   c('hair',o.hat?o.hatCol:o.hair);c('longHair',o.hair);c('visor',o.hatCol?shade(o.hatCol,-0.3):'#333');
-  c('upL',o.sleeve);c('upR',o.sleeve);c('shL',o.vest?o.top:o.sleeve);c('shR',o.vest?o.top:o.sleeve);c('foL',o.short?o.skin:o.sleeve);c('foR',o.short?o.skin:o.sleeve);
+  c('beard',o.hair);c('glasses',o.sun?'#141414':'#3a3330');
+  c('upL',o.sleeve);c('upR',o.sleeve);c('shL',o.vest?o.top:o.sleeve);c('shR',o.vest?o.top:o.sleeve);
+  c('elL',o.short?o.skin:o.sleeve);c('elR',o.short?o.skin:o.sleeve);c('foL',o.short?o.skin:o.sleeve);c('foR',o.short?o.skin:o.sleeve);
   c('pole','#d6d6d6');c('phone','#15171b');c('clip','#8a6a3a');
+  const fa=M.head.geometry.attributes.aFace;if(fa){fa.setX(i,o.face||0);fa.needsUpdate=true;}
 }
 function humFlushColors(b){for(const k in b.m) if(b.m[k].instanceColor) b.m[k].instanceColor.needsUpdate=true;}
 function humFlush(){
@@ -7027,17 +7346,19 @@ function humFlush(){
 }
 function humHide(b,i){for(const k in b.m) b.m[k].setMatrixAt(i,H_ZERO);for(const c of b.cloth) c.setMatrixAt(i,H_ZERO);b.dirty=true;}
 // ---- pose: braccio = [alzata in avanti, apertura laterale, piega del gomito, chiusura verso il petto] ----
-const J={la:[0,0,0,0],ra:[0,0,0,0],legL:0,legR:0,lean:0,jump:0,head:0,item:null,grip:Math.PI,wave:0,flagD:0,ps:1,fs:1};
+const J={la:[0,0,0,0],ra:[0,0,0,0],legL:0,legR:0,kneeL:0,kneeR:0,lean:0,jump:0,head:0,item:null,grip:Math.PI,wave:0,flagD:0,ps:1,fs:1};
 const armSet=(a,pitch,abd,elbow,h)=>{a[0]=pitch;a[1]=abd;a[2]=elbow;a[3]=h||0;};
 function humPose(p,t){
   const j=J,tt=t+p.phase,bounce=w=>Math.abs(Math.sin(tt*w));
   armSet(j.la,0.06,0.1,0.22);armSet(j.ra,0.06,0.1,0.22);
-  j.legL=j.legR=0;j.lean=0;j.jump=0;j.head=Math.sin(tt*0.37)*0.3;
+  j.legL=j.legR=0;j.kneeL=j.kneeR=0.06;j.lean=0;j.jump=0;j.head=Math.sin(tt*0.37)*0.3;
   j.item=p.item;j.grip=Math.PI;j.wave=Math.sin(tt*2.3)*0.25;j.flagD=p.flagD||0;j.ps=1;j.fs=1;
   // corsa e camminata: gambe e braccia alternate, busto in avanti
   if(p.mv){
     const run=p.mv==='run',f=run?14:8,A=run?0.7:0.38,w=Math.sin(tt*f);
     j.legL=w*A;j.legR=-w*A;
+    // ginocchio: si piega quando la gamba torna avanti (fase di volo del passo), quasi dritto in appoggio
+    const c=Math.cos(tt*f);j.kneeL=0.08+Math.max(0,c)*A*(run?1.9:1.2);j.kneeR=0.08+Math.max(0,-c)*A*(run?1.9:1.2);
     armSet(j.la,-w*A*0.9,0.1,run?1.35:0.3);armSet(j.ra,w*A*0.9,0.1,run?1.35:0.3);
     j.lean=run?0.2:0.04;j.jump=Math.abs(Math.cos(tt*f))*(run?0.05:0.015);j.head=0;
     if(j.item==='flag'){armSet(j.ra,2.3,0.3,0.35);j.wave=Math.sin(tt*9)*0.5;}
@@ -7048,7 +7369,7 @@ function humPose(p,t){
   if(p.rpose){
     const lift=p.rpose==='lift',k=Math.sin(tt*5)*0.12;
     armSet(j.la,(lift?2.1:1.45)+k,0.08,0.35,0.12);armSet(j.ra,(lift?2.1:1.45)-k,0.08,0.35,0.12);
-    j.lean=lift?0.25:0.5;j.legL=-0.35;j.legR=0.3;j.head=0;return;
+    j.lean=lift?0.25:0.5;j.legL=-0.35;j.legR=0.3;j.kneeL=0.25;j.kneeR=0.55;j.head=0;return;
   }
   const party=p.state==='party',ex=party||p.ex;
   if(p.official==='starter'){        // bandiera verde abbassata, alzata al VIA
@@ -7096,12 +7417,15 @@ function humWrite(p){
   const M=p.bank.m,CL=p.bank.cloth,i=p.i,j=J,o=p.look,bd=o.build||1,sc=p.sc;
   p.bank.dirty=true;
   const put=(k,m)=>M[k].setMatrixAt(i,m),T=(x,y,z)=>_hT.makeTranslation(x,y,z);
-  _hv.set(p.wx,p.wy+j.jump,p.wz);_hq.setFromAxisAngle(_hY,p.yaw);_hs.set(sc,sc,sc);_hB.compose(_hv,_hq,_hs);
-  // gambe (perno all'anca) e scarpe che restano quasi piatte
+  const st=sc*(o.tall||1);
+  _hv.set(p.wx,p.wy+j.jump,p.wz);_hq.setFromAxisAngle(_hY,p.yaw);_hs.set(st,st,st);_hB.compose(_hv,_hq,_hs);
+  // gambe: coscia dall'anca, ginocchio, stinco che si piega all'indietro, scarpa che resta piatta
   for(const s of [1,-1]){
-    const sw=s>0?j.legL:j.legR;
-    _hX.multiplyMatrices(_hB,T(s*0.05,0.47,0)).multiply(_hK.makeRotationX(sw));put(s>0?'legL':'legR',_hX);
-    _hX.multiply(T(0,-0.44,0)).multiply(_hK.makeRotationX(-sw*0.8));put(s>0?'shoeL':'shoeR',_hX);
+    const sw=s>0?j.legL:j.legR,kn=s>0?j.kneeL:j.kneeR;
+    _hX.multiplyMatrices(_hB,T(s*0.052,0.47,0)).multiply(_hK.makeRotationX(sw));put(s>0?'thighL':'thighR',_hX);
+    _hX.multiply(T(0,-0.235,0));put(s>0?'kneeL':'kneeR',_hX);
+    _hX.multiply(_hK.makeRotationX(kn));put(s>0?'shinL':'shinR',_hX);
+    _hX.multiply(T(0,-0.215,0)).multiply(_hK.makeRotationX(-(sw+kn)*0.92));put(s>0?'shoeL':'shoeR',_hX);
   }
   put('hips',_hX.multiplyMatrices(_hB,T(0,0.49,0)));
   // busto: si piega in avanti dalla vita
@@ -7114,6 +7438,8 @@ function humWrite(p){
   if(o.hat==='beanie') put('hair',_hX.copy(_hH).multiply(_hK.makeScale(1.08,1.12,1.08)));else put('hair',_hH);
   put('longHair',o.longHair?_hH:H_ZERO);
   put('visor',o.hat==='cap'?_hH:H_ZERO);
+  put('ears',o.hat==='beanie'?H_ZERO:_hH);put('nose',_hH);
+  put('beard',o.beard?_hH:H_ZERO);put('glasses',o.glasses?_hH:H_ZERO);
   // braccia: spalla (chiusura, apertura, alzata), gomito, mano
   for(const s of [1,-1]){
     const a=s>0?j.la:j.ra;
@@ -7121,7 +7447,8 @@ function humWrite(p){
     if(a[3]) _hA.multiply(_hK.makeRotationY(-s*a[3]));
     _hA.multiply(_hK.makeRotationZ(s*a[1])).multiply(_hK.makeRotationX(-a[0]));
     put(s>0?'upL':'upR',_hA);put(s>0?'shL':'shR',_hA);
-    _hA.multiply(T(0,-0.24,0)).multiply(_hK.makeRotationX(-a[2]));
+    _hA.multiply(T(0,-0.24,0));put(s>0?'elL':'elR',_hA);
+    _hA.multiply(_hK.makeRotationX(-a[2]));
     put(s>0?'foL':'foR',_hA);
     _hA.multiply(T(0,-0.21,0));
     put(s>0?'handL':'handR',_hA);
@@ -9041,9 +9368,20 @@ function loadStage(n,c){
   for(let i=1;i<=post;i++) visWps.push({x:last.x+Math.cos(last.heading)*STEP*i,y:last.y+Math.sin(last.heading)*STEP*i,heading:last.heading,dist:last.dist+STEP*i,half:last.half,elev:last.elev});
   buildTrackMesh(visWps,surface);
   buildGround(visWps,surface);
+  // fianchi delle gallerie: la barriera conta solo dove la struttura sporge davvero dal terreno; dove la
+  // montagna la ricopre (o la collina arriva alla stessa quota) si sale sul pendio, niente muri invisibili
+  {let cut=false;
+   railsList=railsList.filter(p=>{
+     if(p.top){const [w,lat]=p.top,pr=tunnelOuter(w);let y=pr[0][1];
+       for(let k=0;k<pr.length-1;k++){const a=pr[k],b=pr[k+1];if(lat>=Math.min(a[0],b[0])&&lat<=Math.max(a[0],b[0])){y=a[1]+(b[1]-a[1])*((lat-a[0])/((b[0]-a[0])||1));break;}}
+       delete p.top;
+       if(w.elev+y<terrainAt(p.x,p.y)+0.35){cut=true;return false;}}
+     if(cut){p.brk=true;cut=false;}
+     return true;});}
   buildShoulders(visWps);
   LAMPS.length=0;   // (lampioni, gallerie, torri faro e cartelloni si registrano mentre si costruiscono)
   buildDecor(built.trees,built.posts,built.puddles,built.railRuns,built.props);
+  clearDebris();
   propsList=built.props.filter(p=>p.r>0);
   buildStructures(built.structs);
   disposeObject(finishGate);
@@ -9370,10 +9708,13 @@ let wetRumbleT=0;
 const SNOWD={n:0,kick:0,t:0};
 function updateWet(dt,airborne){
   const m=carModels[curCarId];
-  let fN=0,rN=0,lN=0,rtN=0,sF=0,sR=0,sL=0,sRt=0;
+  let fN=0,rN=0,lN=0,rtN=0,sF=0,sR=0,sL=0,sRt=0,iF=0,iR=0,iL=0,iRt=0,soft=0;
   if(m&&!airborne) for(const w of m.wheels){
-    w.wet=false;w.snowD=0;
+    w.wet=false;w.snowD=0;w.ice=0;
     if(w.gx===undefined) continue;
+    // ghiaccio e neve smossa sotto questa ruota (stesse zone disegnate sulla strada)
+    if(iceK){const su=roadSU(w.gx,w.gy);if(su){w.ice=iceZone(su[0],su[1]);soft+=looseZone(su[0],su[1])*(1-w.ice);
+      if(w.front) iF+=w.ice;else iR+=w.ice;if(w.rest.x>0) iL+=w.ice;else iRt+=w.ice;}}
     for(const p of puddles){
       const dx=w.gx-p.x,dy=w.gy-p.y;
       if(dx*dx+dy*dy<p.r*p.r&&puddleEdge(p,w.gx,w.gy)<1){w.wet=true;break;}
@@ -9419,7 +9760,21 @@ function updateWet(dt,airborne){
     if(!SNOWD.n&&spd>30){sfxImpact(Math.min(0.6,0.15+spd/300),'soft');}
   }
   SNOWD.n=sN;
+  // --- ghiaccio: la tenuta crolla (circa un terzo di quella della neve battuta) sia in curva sia in frenata e
+  // in trazione; si scorre di più (meno resistenza al rotolamento). Con il ghiaccio solo da un lato le forze
+  // sono diverse sulle due fiancate: l'auto tende a girarsi verso il lato che tiene.
+  const iN=iF+iR;
+  if(iN>0){
+    WET.gF*=1-0.64*iF/2;WET.gR*=1-0.64*iR/2;
+    WET.drag-=iN/4*rollBase*0.45;
+    WET.yaw+=(iRt-iL)/2*1.4*vs*Math.min(1,Math.abs(car.speed)/60);
+  }
+  // neve smossa (le chiazze più chiare e soffici): frena un poco e affonda
+  if(soft>0) WET.drag+=soft/4*(6+0.18*spd);
+  // (i freni mordono solo quanto la gomma tiene: sul ghiaccio la frenata si allunga di molto)
+  ICE.n=iN;ICE.soft=soft;ICE.brk=1-0.62*iN/4;
 }
+const ICE={n:0,soft:0,brk:1};
 // terreno ai lati della pista per scenario: aderenza, resistenza al rotolamento, suono delle gomme
 const OFFROAD={
   city:    {grip:0.58,roll:22,snd:'grass'},   // prato curato: scivoloso ma scorrevole
@@ -9500,7 +9855,7 @@ function physicsStep(h,P,mu,drive,brake,hb,airborne){
     // spinta, freni (ripartiti 62/38) e freno a mano (blocca il posteriore)
     const sg=Math.abs(vx)>0.5?dir:0;
     // (dopo il traguardo il pilota automatico frena come prima: deve fermarsi nel rettilineo finale)
-    const BK=finishing?BRAKE:BRAKE*0.46*brakeK;
+    const BK=finishing?BRAKE:BRAKE*0.46*brakeK*ICE.brk;
     let Fxf=drive*(1-P.rear)-brake*BK*0.62*sg,Fxr=drive*P.rear-brake*BK*0.38*sg;
     const capF=Wf*G_ACC*muF,capR=Wr*G_ACC*muR*(hb?0.72:1);
     if(hb){Fxr-=BRAKE*0.9*sg;Fyr*=0.55;}
@@ -9559,6 +9914,96 @@ function collide(nx,ny,bounce,keep){
   car.speed=wx*c+wy*s;car.vy=-wx*s+wy*c;
   car.r*=1-0.4*Math.max(0,Math.min(1,(-vn-3)/30));   // un urto vero smorza l'imbardata, un appoggio leggero no
   return -vn;
+}
+// ---- elementi di contorno che si rompono ----
+// m = massa "efficace" (quanta velocità tolgono all'auto nell'urto, kg); kmh = velocità d'urto con cui cedono
+// sotto un'auto di 1230 kg: la Rally Raid (più pesante) li abbatte più piano, il buggy leggero deve andare più
+// forte. Sotto la soglia fermano l'auto come prima. I pezzi volano via, ricadono e restano a terra: urtarli di
+// nuovo li sposta e rallenta un poco l'auto. h = altezza (mondo) per il pezzo steso a terra.
+const BREAKABLE={chevron:{m:60,kmh:14,h:1.3,snd:'metal'},snowpole:{m:8,kmh:3,h:1.7,snd:'wood'},fence:{m:45,kmh:16,h:1.05,snd:'wood'},
+  cactus:{m:80,kmh:18,h:2.2,snd:'wood'},adcol:{m:450,kmh:70,h:2.9,snd:'metal'}};
+const CAR_MASS={hatch:1230,classic:1050,raid:1900,buggy:750};
+let wreck=[],debrisGroup=null;
+const _dbQ=new THREE.Quaternion(),_dbQ2=new THREE.Quaternion(),_dbV=new THREE.Vector3(),_dbUp=new THREE.Vector3(0,1,0),_dbZero=new THREE.Matrix4().makeScale(0,0,0);
+function clearDebris(){
+  if(debrisGroup) scene.remove(debrisGroup);   // (geometrie e materiali sono quelli condivisi degli elementi: non si liberano)
+  debrisGroup=new THREE.Group();scene.add(debrisGroup);wreck=[];
+}
+function setCarWorldVel(wx,wy){const c=Math.cos(car.angle),s=Math.sin(car.angle);car.speed=wx*c+wy*s;car.vy=-wx*s+wy*c;}
+function tryBreakProp(p,cp,capR){
+  const B=BREAKABLE[p.type],dx=cp[0]-p.x,dy=cp[1]-p.y,d=Math.hypot(dx,dy);
+  if(d>=capR+p.r*0.8) return false;
+  const [wx,wy]=carWorldVel(),nx=d>1e-6?dx/d:-Math.cos(car.angle),ny=d>1e-6?dy/d:-Math.sin(car.angle);
+  const vn=-(wx*nx+wy*ny),mc=CAR_MASS[curCarId]||1230;
+  if(vn*KMH*mc/1230<B.kmh) return false;
+  // l'auto cede all'oggetto parte della velocità verso di esso (urto anelastico)
+  const f=B.m/(mc+B.m);
+  setCarWorldVel(wx+f*vn*nx,wy+f*vn*ny);
+  breakProp(p,wx,wy,vn);
+  if(hitCd<=0){const s=Math.min(1,vn/150)*(0.4+Math.min(0.6,B.m/300));sfxImpact(s,B.snd);rumble(0.25+0.5*s,0.4,200);hitCd=0.2;}
+  camShake=Math.max(camShake,Math.min(0.5,B.m/500+vn/400));
+  return true;
+}
+function breakProp(p,wx,wy,vn){
+  p.broken=true;
+  const B=BREAKABLE[p.type],[X,Y,Z]=p._base,body=new THREE.Group();
+  body.position.set(X,Y,Z);
+  for(const e of p._inst){
+    const it=e.list.items[e.i];
+    e.list.im.setMatrixAt(e.i,_dbZero);e.list.im.instanceMatrix.needsUpdate=true;
+    const m=new THREE.InstancedMesh(e.list.geo,e.list.mat,1),loc=it.m.clone();
+    loc.elements[12]-=X;loc.elements[13]-=Y;loc.elements[14]-=Z;
+    m.setMatrixAt(0,loc);if(it.c) m.setColorAt(0,it.c);
+    m.castShadow=true;m.receiveShadow=true;m.frustumCulled=false;body.add(m);
+  }
+  debrisGroup.add(body);
+  // vola nella direzione dell'auto (un po' più piano, con un po' di dispersione) e cade in avanti
+  const sp=Math.hypot(wx,wy)||1,dxw=wx/sp,dzw=wy/sp,k=(0.75+Math.random()*0.4)*Math.min(1,(CAR_MASS[curCarId]||1230)/(B.m*3));
+  const lat=(Math.random()-0.5)*0.5;
+  const vel=[(wx*k-dzw*lat*sp*0.5)*S3,1+Math.random()*1.5+Math.min(3,vn*S3*0.12),(wy*k+dxw*lat*sp*0.5)*S3];
+  const fx=vel[0],fz=vel[2],fl=Math.hypot(fx,fz)||1;
+  wreck.push({body,vel,axis:new THREE.Vector3(fz/fl,0,-fx/fl),th:0,thW:3+Math.random()*4+Math.min(6,vn*0.05),thMax:Math.PI/2-0.04,
+    yaw:0,yawW:(Math.random()-0.5)*7,rest:false,cd:0.25,m:B.m,h:(p.type==='cactus'?(p.s||1):1)*B.h,snd:B.snd});
+  if(wreck.length>60){const o=wreck.shift();debrisGroup.remove(o.body);}
+}
+function debrisFrame(dt){
+  for(const d of wreck){
+    d.cd-=dt;
+    if(d.rest) continue;
+    const P=d.body.position,v=d.vel;
+    v[1]-=9*dt;
+    P.x+=v[0]*dt;P.y+=v[1]*dt;P.z+=v[2]*dt;
+    d.th=Math.min(d.thMax,d.th+d.thW*dt);d.yaw+=d.yawW*dt;
+    // (steso, il palo poggia sul fianco: un filo sopra il terreno)
+    const gy=groundAt(P.x/S3,P.z/S3)+0.05*Math.sin(d.th);
+    if(P.y<=gy){
+      P.y=gy;if(v[1]<0) v[1]*=-0.22;
+      const fr=Math.max(0,1-7*dt);v[0]*=fr;v[2]*=fr;d.yawW*=fr;
+      if(d.th<d.thMax) d.thW=Math.max(d.thW,4);
+      if(Math.hypot(v[0],v[2])<0.15&&Math.abs(v[1])<0.4&&d.th>=d.thMax) d.rest=true;
+    }
+    _dbQ.setFromAxisAngle(_dbUp,d.yaw);_dbQ2.setFromAxisAngle(d.axis,d.th);
+    d.body.quaternion.copy(_dbQ).multiply(_dbQ2);
+  }
+}
+// i pezzi a terra si urtano ancora: l'auto li spinge via e perde un poco di velocità
+function debrisHits(cap){
+  for(const d of wreck){
+    const P=d.body.position,bx=P.x/S3,by=P.z/S3;
+    if(d.cd>0||Math.abs(car.x-bx)>45||Math.abs(car.y-by)>45) continue;
+    if(P.y>VB.y+1.2) continue;   // ancora in volo sopra l'auto
+    _dbV.set(0,d.h,0).applyQuaternion(d.body.quaternion);
+    const seg={ax:bx,ay:by,bx:bx+_dbV.x/S3,by:by+_dbV.z/S3},[p,q]=segSeg(cap,seg);
+    const dx=p[0]-q[0],dy=p[1]-q[1],dist=Math.hypot(dx,dy);
+    if(dist>cap.r+0.8) continue;
+    const [wx,wy]=carWorldVel(),nx=dist>1e-6?dx/dist:Math.cos(car.angle),ny=dist>1e-6?dy/dist:Math.sin(car.angle);
+    const vn=-(wx*nx+wy*ny);if(vn<3) continue;
+    const mc=CAR_MASS[curCarId]||1230,f=Math.min(0.3,d.m/(mc+d.m)*0.8);
+    setCarWorldVel(wx+f*vn*nx,wy+f*vn*ny);
+    d.rest=false;d.cd=0.35;
+    d.vel=[(wx*0.7-nx*vn*0.3)*S3,0.6+Math.random()*1.2,(wy*0.7-ny*vn*0.3)*S3];d.yawW=(Math.random()-0.5)*9;
+    if(hitCd<=0){sfxImpact(Math.min(0.5,vn/200),d.snd);hitCd=0.2;}
+  }
 }
 
 function update(dt){
@@ -9677,14 +10122,18 @@ function update(dt){
   // elementi di contorno: massi ed edifici fermano l'auto, balle di fieno e gomme assorbono l'urto
   {const cap=carCapsule(),reach=cap.r+40;
   for(const p of propsList){
-    if(Math.abs(car.x-p.x)>p.r+reach||Math.abs(car.y-p.y)>p.r+reach) continue;
+    if(p.broken||Math.abs(car.x-p.x)>p.r+reach||Math.abs(car.y-p.y)>p.r+reach) continue;
     const cp=closestOnSeg(cap.ax,cap.ay,cap.bx,cap.by,p.x,p.y);
+    // cartelli, paline, staccionate…: se l'urto è abbastanza forte per il peso dell'auto si spezzano e volano
+    // via (l'auto perde la velocità che cede all'oggetto), altrimenti fermano l'auto come un ostacolo fisso
+    if(p._inst&&!p.broken&&tryBreakProp(p,cp,cap.r)) continue;
     const soft=p.type==='bale'||p.type==='tyres';
     const vn=resolveHit(cp,[p.x,p.y],p.r*0.8,soft?0.35:0.2,soft?0.78:0.5);
     if(vn<0) continue;
     if(hitCd<=0&&vn>8){const s=Math.min(1,vn/150)*(soft?0.6:1);sfxImpact(s,PROP_HIT[p.type]||'stone');rumble(0.3+0.6*s,0.5,soft?180:260);hitCd=0.35;}
     camShake=Math.max(camShake,Math.min(soft?0.35:0.7,vn/110));
-  }}
+  }
+  debrisHits(cap);}
   // barriere (guard-rail, parapetti, pareti delle gallerie, transenne, facciate): segmenti continui
   {const gx=Math.floor(car.x/RG),gy=Math.floor(car.y/RG),seen=new Set();
   for(let a=-1;a<=1;a++) for(let b=-1;b<=1;b++){
@@ -9992,13 +10441,18 @@ const ROLLOVER={hatch:{h:0.34},classic:{h:0.34},raid:{h:0.45},buggy:{h:0.3}};
 // traverso, non quella di marcia: sotto ~17 km/h di scivolata non succede niente, poi cresce in fretta.
 // Valori: g in più per ogni "unità" di scivolata oltre la soglia. Sabbia, erba e neve fresca fanno affondare la
 // gomma; l'asfalto asciutto un poco (spalla della gomma, cerchio); bagnato e ghiaia lasciano scivolare.
-const TRIP={asphalt:0.24,wet:0.08,dirt:0.42,hard:0.36,gravel:0.3,fine:0.34,mixed:0.42,sand:0.7,mud:0.45,
-  snow:0.28,grass:0.65,redsand:0.72,powder:0.6};
+// (con la curva ridimensionata, ROLL_GS, l'inciampo è un po' più forte: è lui a rendere possibile il ribaltamento
+// quando si esagera, scivolando di traverso a forte velocità)
+const TRIP={asphalt:0.3,wet:0.1,dirt:0.52,hard:0.45,gravel:0.38,fine:0.42,mixed:0.52,sand:0.88,mud:0.56,
+  snow:0.35,grass:0.81,redsand:0.9,powder:0.75};
 let TRIP_V0=16,TRIP_V1=18,TRIP_P=1.5;   // soglia (≈12 km/h di scivolata laterale), scala (unità pista/s), crescita
 // ROLL_GS: la spinta laterale del gioco riportata in g "veri" (le gomme del gioco arrivano a ~0,7: un'auto vera
 // a ~1 g); ROLL_HOOK: quanto pesa il rilancio della cassa nei cambi di direzione; ROLL_LAG: rapidità con cui la
 // cassa segue la spinta (più basso = più ritardo, più rilancio)
-let ROLL_GS=1.5,ROLL_HOOK=0.85,ROLL_LAG=4;
+// (con 1,5 una curva costante al limite su asfalto bastava a superare la stabilità statica della Hatch:
+// ora la curva da sola alza al massimo un poco le ruote; per ribaltarsi serve inciampare scivolando di
+// traverso, un rilancio violento nei cambi di direzione o un'auto alta come il Rally Raid)
+let ROLL_GS=1.15,ROLL_HOOK=0.6,ROLL_LAG=4;
 // ROLL_I: inerzia di rollio (× il momento di un punto): un picco brevissimo alza appena le ruote, una spinta che
 // dura le alza davvero; ROLL_D: smorzamento (le sospensioni riportano giù la cassa)
 let ROLL_I=1.25,ROLL_D=1.3;
@@ -10021,7 +10475,7 @@ function tipStep(h){
   const Vt=Math.hypot(car.speed,car.vy);
   let ac=(car.speed*car.r+TIP.dvy)/G_ACC*Math.min(1,Vt/45);
   // la spinta delle gomme non può superare la loro aderenza: sul fondo che scivola l'auto scivola, non si ribalta
-  const cap=(offTrack?offroad().grip:surface.grip||1)*1.15;ac=Math.max(-cap,Math.min(cap,ac));
+  const cap=(offTrack?offroad().grip:surface.grip||1)*1.05;ac=Math.max(-cap,Math.min(cap,ac));
   // 2) Effetto "gancio" (fishhook): in un sinistra-destra veloce la cassa, che stava rollando da una parte, viene
   //    rilanciata dall'altra mentre la spinta cambia lato: per un attimo il carico sulle ruote esterne supera
   //    quello di una curva costante (quanto la spinta attuale supera quella di poco fa, dallo stesso lato).
@@ -10201,7 +10655,7 @@ function crashCollide(){
   }
   for(const t of treesList){if(Math.abs(px-t.x)>20||Math.abs(py-t.y)>20) continue;push(t.x,t.y,TRUNK_R,0.2,0.55,'wood');}
   for(const p of propsList){
-    if(Math.abs(px-p.x)>p.r+20||Math.abs(py-p.y)>p.r+20) continue;
+    if(p.broken||Math.abs(px-p.x)>p.r+20||Math.abs(py-p.y)>p.r+20) continue;
     const soft=p.type==='bale'||p.type==='tyres';push(p.x,p.y,p.r*0.8,soft?0.3:0.15,soft?0.75:0.55,PROP_HIT[p.type]||'stone');
   }
   CRASH.p.x=px*S3;CRASH.p.z=py*S3;
@@ -10776,7 +11230,8 @@ function updateTyreFX(dt,active){
       // fondi naturali: la traccia del rotolamento è più profonda e scura nelle zone smosse, nel fango e
       // sul terreno bagnato; sull'asfalto restano solo le sgommate (nere, col disegno del battistrada)
       const depth=hard?1:0.55+0.9*loose+(fxk==='mud'?0.35:0)+water*0.35+(off?0.15:0);
-      const a=onGround&&!w.wet?Math.min(0.94,fx.roll*Math.min(1,spd/25)*depth+fx.slide*slip*(hard?1.2:0.75+0.45*loose)):0;
+      // (sul ghiaccio la gomma non scava: resta solo un velo di graffi)
+      const a=onGround&&!w.wet?Math.min(0.94,fx.roll*Math.min(1,spd/25)*depth+fx.slide*slip*(hard?1.2:0.75+0.45*loose))*(1-0.75*(w.ice||0)):0;
       // (fuori strada la griglia del terreno è più rada della quota calcolata: il segno sta un po' più su)
       const gx=w.gx,gy=w.gy,h=w.gh+(off?0.1:0.03);
       let col=fx.mark;
@@ -10850,7 +11305,7 @@ function updateTyreFX(dt,active){
       // granelli e zolle lanciati dalle ruote che slittano o pattinano (più in alto con più velocità)
       const gcol=TYRE_FX.grain[inSnow?'powder':fxk]?(inSnow?TYRE_FX.grain.powder:tyreGrainColor(fxk,off)):null;
       if(gcol&&!w.wet&&water<0.6){
-        const gr=(w.front?0.4:1)*(60*slip+70*spinW)*(off&&fxk==='grass'?0.6:1)*(0.6+0.8*loose+(hard?0:0.3));
+        const gr=(w.front?0.4:1)*(60*slip+70*spinW)*(off&&fxk==='grass'?0.6:1)*(0.6+0.8*loose+(hard?0:0.3))*(1-0.85*(w.ice||0));
         w.grainAcc=(w.grainAcc||0)+gr*dt;
         while(w.grainAcc>=1){
           w.grainAcc-=1;
@@ -11664,7 +12119,7 @@ function loop(now){
   else{car.speed*=0.9;slipAmt=0;updateEngine(dt,false);}
   tachFill.style.width=(rpm/RED_RPM*100).toFixed(1)+'%';
   syncSfxState();
-  if(!paused){animateCar(dt);updateSpectators(dt);rescueFrame(dt);updateTyreFX(dt,(running||replayMode)&&!demoMode);}
+  if(!paused){animateCar(dt);updateSpectators(dt);debrisFrame(dt);rescueFrame(dt);updateTyreFX(dt,(running||replayMode)&&!demoMode);}
   audioFrame(dt,{speed:paused?0:car.speed,throttle:replayMode?throttleS>0.1:running&&engThr>0.1,airborne:carAirY>0.001,offTrack,surface,running:running||replayMode});
   updateScene();
   requestAnimationFrame(loop);
